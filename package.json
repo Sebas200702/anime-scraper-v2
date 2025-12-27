@@ -1,0 +1,33 @@
+{
+  "name": "anime-scraper-v2",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "keywords": [
+    "anime",
+    "scraper",
+    "jikan"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.json && tsc-alias --project tsconfig.json ",
+    "start": "node dist/src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.15.15",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.1",
+    "tsx": "^4.21.0",
+    "undici": "^7.16.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@types/bun": "latest",
+    "prettier": "^3.5.3",
+    "tsc-alias": "^1.8.16",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
