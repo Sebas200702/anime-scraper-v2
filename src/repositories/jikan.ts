@@ -1,4 +1,4 @@
-import { anime } from '../schemas/anime.js'
+import { anime, animeTitleSynonym } from '../schemas/anime.js'
 import { unique } from '../utils/deduplicate.js'
 import { demographic, genre, theme } from '../schemas/animeTaxonomy.js'
 import { normalizeText } from '../utils/normalize.js'
@@ -21,8 +21,11 @@ import type {
   NewProducer,
   NewProducerTitle,
   ProducerProcessorResult,
+  NewAnimeTitleSynonym,
+  NewMedia,
 } from '../types/index.js'
 import { producer, producerTitle } from '../schemas/producer.js'
+import { media } from '@schemas/media.js'
 
 export const jikanRepository = {
   async upsertAnimeBatch(animes: NewAnime[]): Promise<number> {
@@ -47,6 +50,24 @@ export const jikanRepository = {
       return newAnimes.length
     } catch (e) {
       console.error('Failed to upsert anime batch:', e)
+      return 0
+    }
+  },
+  async upsertAnimeTitleSynonymBatch(
+    titleSynonyms: NewAnimeTitleSynonym[]
+  ): Promise<number> {
+    try {
+      if (!titleSynonyms || titleSynonyms.length === 0) {
+        console.log('No anime title synonyms to upsert in this batch.')
+        return 0
+      }
+      await db
+        .insert(animeTitleSynonym)
+        .values(titleSynonyms)
+        .onConflictDoNothing()
+      return titleSynonyms.length
+    } catch (e) {
+      console.error('Failed to upsert anime title synonym batch:', e)
       return 0
     }
   },
@@ -308,6 +329,69 @@ export const jikanRepository = {
       return 0
     }
   },
+  async upsertAnimeMediaBatch(relations: NewMedia[]): Promise<number> {
+    const exixtingMedia = await db
+      .select({
+        entityId: media.entityId,
+        mediaType: media.mediaType,
+        size: media.size,
+        src: media.src,
+      })
+      .from(media)
+      .where(
+        inArray(
+          media.entityId,
+          relations.map((r) => r.entityId)
+        )
+      )
+    const existingSet = new Set(
+      exixtingMedia.map(
+        (em) => `${em.entityId}:${em.mediaType}:${em.size}:${em.src}`
+      )
+    )
+    const newRelations = relations.filter(
+      (r) => !existingSet.has(`${r.entityId}:${r.mediaType}:${r.size}:${r.src}`)
+    )
+    try {
+      await db.insert(media).values(newRelations).onConflictDoNothing()
+      return newRelations.length
+    } catch (e) {
+      console.error('Failed to upsert anime media batch:', e)
+      return 0
+    }
+  },
+  async upsertCharacterMediaBatch(relations: NewMedia[]): Promise<number> {
+    const existingCharactersMedia = await db
+      .select({
+        entityId: media.entityId,
+        mediaType: media.mediaType,
+        size: media.size,
+        src: media.src,
+      })
+      .from(media)
+      .where(
+        inArray(
+          media.entityId,
+          relations.map((r) => r.entityId)
+        )
+      )
+    const existingSet = new Set(
+      existingCharactersMedia.map(
+        (em) => `${em.entityId}:${em.mediaType}:${em.size}:${em.src}`
+      )
+    )
+    const newRelations = relations.filter(
+      (r) => !existingSet.has(`${r.entityId}:${r.mediaType}:${r.size}:${r.src}`)
+    )
+
+    try {
+      await db.insert(media).values(newRelations).onConflictDoNothing()
+      return newRelations.length
+    } catch (e) {
+      console.error('Failed to upsert character media batch:', e)
+      return 0
+    }
+  },
   async upsertProducerTitlesBatch(
     producerTitles: NewProducerTitle[]
   ): Promise<number> {
@@ -350,12 +434,17 @@ export const jikanRepository = {
     const genres: NewGenre[] = []
     const demographics: NewDemographic[] = []
     const themes: NewTheme[] = []
+    const titleSynonyms: NewAnimeTitleSynonym[] = []
+    const animeMedia: NewMedia[] = []
 
     for (const result of animeResults) {
       if (result.anime) animes.push(result.anime)
       if (result.genres?.length) genres.push(...result.genres)
       if (result.demographics?.length) demographics.push(...result.demographics)
       if (result.themes?.length) themes.push(...result.themes)
+      if (result.titleSynonyms?.length)
+        titleSynonyms.push(...result.titleSynonyms)
+      if (result.animeMedias?.length) animeMedia.push(...result.animeMedias)
     }
 
     // 🔑 DEDUPLICACIÓN
@@ -363,6 +452,14 @@ export const jikanRepository = {
     const uniqueGenres = unique(genres, (g) => g.malId)
     const uniqueDemographics = unique(demographics, (d) => d.malId)
     const uniqueThemes = unique(themes, (t) => t.malId)
+    const uniqueTitleSynonyms = unique(
+      titleSynonyms,
+      (s) => `${s.animeId}:${normalizeText(s.title)}`
+    )
+    const uniqueAnimeMedia = unique(
+      animeMedia,
+      (m) => m.entityId + ':' + m.mediaType + ':' + m.size + ':' + m.src
+    )
 
     console.log(
       `Animes received: ${animeResults.length}, Animes processed: ${animes.length}, unique: ${uniqueAnimes.length}`
@@ -372,16 +469,21 @@ export const jikanRepository = {
     await this.upsertGenreBatch(uniqueGenres)
     await this.upsertDemographicBatch(uniqueDemographics)
     await this.upsertThemeBatch(uniqueThemes)
+    await this.upsertAnimeTitleSynonymBatch(uniqueTitleSynonyms)
+    await this.upsertAnimeMediaBatch(uniqueAnimeMedia)
 
     return uniqueAnimes.length
   },
   async saveCharacter(characterResults: CharacterProcessorResult[]) {
     const characters: NewCharacter[] = []
     const nicknames: NewCharacterNickname[] = []
+    const characterMedia: NewMedia[] = []
 
     for (const result of characterResults) {
       if (result.character) characters.push(result.character)
       if (result.nicknames?.length) nicknames.push(...result.nicknames)
+      if (result.characterMedia?.length)
+        characterMedia.push(...result.characterMedia)
     }
 
     // 🔑 DEDUPLICACIÓN
@@ -390,7 +492,10 @@ export const jikanRepository = {
       nicknames,
       (n) => `${n.characterId}:${normalizeText(n.nickname)}`
     )
-
+    const uniqueCharacterMedia = unique(
+      characterMedia,
+      (m) => m.entityId + ':' + m.mediaType + ':' + m.size + ':' + m.src
+    )
 
     console.log(
       `Characters received: ${characterResults.length}, CharacterProcessed:${characters.length} unique: ${uniqueCharacters.length}`
@@ -398,6 +503,7 @@ export const jikanRepository = {
 
     await this.upsertCharacterBatch(uniqueCharacters)
     await this.upsertCharacterNicknamesBatch(uniqueNicknames)
+    await this.upsertCharacterMediaBatch(uniqueCharacterMedia)
     console.log(
       `Saved ${uniqueCharacters.length} characters of ${characterResults.length} results`
     )
