@@ -1,3 +1,4 @@
+import { animeStaff } from './../schemas/animeRelations'
 import { InferSelectModel, InferInsertModel } from 'drizzle-orm'
 import { anime, animeTitleSynonym } from '../schemas/anime.js'
 import { producer, producerTitle } from '../schemas/producer.js'
@@ -170,11 +171,13 @@ export interface AnimeProcessorResult {
   genres: NewGenre[]
   demographics: NewDemographic[]
   themes: NewTheme[]
+  animeMedias: NewMedia[]
 }
 
 export interface CharacterProcessorResult {
   character: NewCharacter
   nicknames: NewCharacterNickname[]
+  characterMedia: NewMedia[]
 }
 export interface StaffProcessorResult {
   staff: NewStaff
@@ -182,9 +185,9 @@ export interface StaffProcessorResult {
 }
 export interface ProducerProcessorResult {
   producer: NewProducer
+  producerMedia: NewMedia[]
   titles: NewProducerTitle[]
 }
-
 
 export interface AnimeRelationsProcessorResult {
   animeGenres: NewAnimeGenre[]
@@ -192,12 +195,11 @@ export interface AnimeRelationsProcessorResult {
   animeThemes: NewAnimeTheme[]
   animeRelatedAnime: NewAnimeRelatedAnime[]
   animeProducers: NewAnimeProducer[]
-  animeMedias: NewMedia[]
 }
 
 export interface AnimeCharactersProcessorResult {
   animeCharacters: NewAnimeCharacter[]
-    characterMedia: NewMedia[]
+  characterVoiceActors: NewCharacterVoiceActor[]
 }
 
 export interface AnimeStaffProcessorResult {
@@ -219,7 +221,14 @@ export interface AnimeMusicProcessorResult {
 
 export interface AnimeArtistProcessorResult {
   artist: NewArtist
-
+  artistMedias: {
+    entityType: string
+    artistName: string
+    mediaType: string
+    src: string
+    id?: number | undefined
+    size?: string | null | undefined
+  }[]
 }
 
 export interface AnimeExternalIdsProcessorResult {
