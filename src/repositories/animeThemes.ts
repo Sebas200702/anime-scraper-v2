@@ -9,6 +9,7 @@ import type {
   NewMusicResolution,
   AnimeArtistProcessorResult,
   AnimeMusicProcessorResult,
+  NewMedia,
 } from '../types/index.js'
 import { artist } from '../schemas/artist.js'
 import { animeMusic } from '../schemas/animeRelations.js'
@@ -16,6 +17,7 @@ import { musicArtist } from '../schemas/musicRelations.js'
 import { inArray } from 'drizzle-orm'
 import { unique } from '../utils/deduplicate.js'
 import { normalizeText } from '../utils/normalize.js'
+import { media } from '../schemas/media.js'
 
 export const animeThemesRepository = {
   async upsertMusicBatch(musicEntries: NewMusic[]): Promise<number> {
@@ -177,6 +179,35 @@ export const animeThemesRepository = {
       return 0
     }
   },
+  async upsertArtistMediaBatch(
+    artistMediaEntries: NewMedia[]
+  ): Promise<number> {
+    try {
+      const existingMedias = await db
+        .select()
+        .from(media)
+        .where(
+          inArray(
+            media.src,
+            artistMediaEntries.map((m) => m.src)
+          )
+        )
+      const existingMediaSrcs = new Set(existingMedias.map((m) => m.src))
+      const newMediaEntries = artistMediaEntries.filter(
+        (m) => !existingMediaSrcs.has(m.src)
+      )
+      if (newMediaEntries.length === 0) {
+        console.log('No new artist media entries to insert.')
+        return 0
+      }
+
+      await db.insert(media).values(newMediaEntries)
+      return newMediaEntries.length
+    } catch (e) {
+      console.error('Failed to upsert artist media batch:', e)
+      return 0
+    }
+  },
   async upsertMusicArtistBatch(
     musicArtistEntries: NewMusicArtist[]
   ): Promise<number> {
@@ -226,7 +257,9 @@ export const animeThemesRepository = {
 
       // 1️⃣ nombres únicos normalizados
       const artistNames = unique<string>(
-        animeMusics.map((am) => am.artistName),
+        animeMusics
+          .map((am) => am?.artistName)
+          .filter((name) => name !== undefined),
         (name) => normalizeText(name)
       )
 
@@ -273,7 +306,7 @@ export const animeThemesRepository = {
       const relations: NewMusicArtist[] = []
 
       for (const am of animeMusics) {
-        const artistId = artistMap.get(normalizeText(am.artistName))
+        const artistId = artistMap.get(normalizeText(am?.artistName))
         if (!artistId) continue
 
         relations.push({
@@ -340,15 +373,92 @@ export const animeThemesRepository = {
 
   async saveArtist(artistResults: AnimeArtistProcessorResult[]): Promise<void> {
     const artists: NewArtist[] = []
+    const artistMedias: NewMedia[] = []
+    const processArtistMedia = async (
+      artistMedia: {
+        entityType: string
+        artistName: string
+        mediaType: string
+        src: string
+        id?: number
+        size?: string | null
+      }[]
+    ) => {
+      if (artistMedia.length === 0) return
+      const medias = []
+
+      const artistIds = await db
+        .select({ id: artist.id, name: artist.name })
+        .from(artist)
+        .where(
+          inArray(
+            artist.name,
+            artistMedia.map((am) => am.artistName)
+          )
+        )
+
+      const artistIdMap = new Map<string, number>()
+      for (const a of artistIds) {
+        artistIdMap.set(normalizeText(a.name), a.id)
+      }
+      //Crear los artistas que faltan
+      const newArtistEntries: NewArtist[] = []
+      for (const am of artistMedia) {
+        if (!artistIdMap.has(normalizeText(am.artistName))) {
+          newArtistEntries.push({ name: am.artistName })
+        }
+      }
+
+      if (newArtistEntries.length > 0) {
+        await this.upsertArtistBatch(newArtistEntries)
+      }
+      //Volver a consultar para obtener los IDs
+      const allArtists = await db
+        .select({ id: artist.id, name: artist.name })
+        .from(artist)
+        .where(
+          inArray(
+            artist.name,
+            artistMedia.map((am) => am.artistName)
+          )
+        )
+
+      for (const a of allArtists) {
+        artistIdMap.set(normalizeText(a.name), a.id)
+      }
+      for (const am of artistMedia) {
+        const artistId = artistIdMap.get(normalizeText(am.artistName))
+        if (!artistId) continue
+        medias.push({
+          entityId: artistId,
+          entityType: am.entityType,
+          mediaType: am.mediaType,
+          src: am.src,
+          size: am.size || 'default',
+        })
+      }
+
+      return medias
+    }
 
     for (const result of artistResults) {
       if (result.artist) artists.push(result.artist)
+      if (result.artistMedias) {
+        const medias = await processArtistMedia(result.artistMedias)
+        if (medias) artistMedias.push(...medias)
+      }
     }
 
     const uniqueArtists = unique<NewArtist>(artists, (a) =>
       normalizeText(a.name)
     )
 
+    const uniqueArtistMedias = unique<NewMedia>(
+      artistMedias,
+      (m) => `${m.entityId}:${m.entityType}:${m.mediaType}:${m.src}:${m.size}`
+    )
+
     await this.upsertArtistBatch(uniqueArtists)
+    await this.upsertArtistMediaBatch(uniqueArtistMedias)
   },
 }
