@@ -32,6 +32,10 @@ const mapAnime = (anime: Anime) => {
       synopsis: anime.synopsis,
       background: anime.background,
     },
+    titleSynonyms: (anime.title_synonyms || []).map((title) => ({
+      animeId: anime.mal_id,
+      title,
+    })),
 
     genres: (anime.genres || []).map((g) => ({
       malId: g.mal_id,
@@ -49,11 +53,77 @@ const mapAnime = (anime: Anime) => {
       name: t.name,
       type: t.type,
     })),
+    animeMedias: (() => {
+      const animeMedia = []
+      //si existe src de trailer, agregarlo sino no se agrega
 
-    titleSynonyms: (anime.title_synonyms || []).map((title) => ({
-      animeId: anime.mal_id,
-      title,
-    })),
+      if (
+        anime.trailer.url ||
+        anime.trailer.youtube_id ||
+        anime.trailer.embed_url
+      )
+        animeMedia.push({
+          entityType: 'anime',
+          mediaType: 'trailer',
+          src:
+            anime.trailer.url ||
+            `https://www.youtube.com/watch?v=${anime.trailer.youtube_id}` ||
+            anime.trailer.embed_url ||
+            '',
+          size: 'default',
+          entityId: anime.mal_id,
+        })
+      if (anime.images.webp) {
+        animeMedia.push(
+          {
+            entityId: anime.mal_id,
+            entityType: 'anime',
+            mediaType: 'poster',
+            src: anime.images.webp.large_image_url || '',
+            size: 'large',
+          },
+          {
+            entityId: anime.mal_id,
+            entityType: 'anime',
+            mediaType: 'poster',
+            src: anime.images.webp.image_url || '',
+            size: 'default',
+          },
+          {
+            entityId: anime.mal_id,
+            entityType: 'anime',
+            mediaType: 'poster',
+            src: anime.images.webp.small_image_url || '',
+            size: 'small',
+          }
+        )
+      } else if (anime.images.jpg) {
+        animeMedia.push(
+          {
+            entityId: anime.mal_id,
+            entityType: 'anime',
+            mediaType: 'poster',
+            src: anime.images.jpg.large_image_url || '',
+            size: 'large',
+          },
+          {
+            entityId: anime.mal_id,
+            entityType: 'anime',
+            mediaType: 'poster',
+            src: anime.images.jpg.image_url || '',
+            size: 'default',
+          },
+          {
+            entityId: anime.mal_id,
+            entityType: 'anime',
+            mediaType: 'poster',
+            src: anime.images.jpg.small_image_url || '',
+            size: 'small',
+          }
+        )
+      }
+      return animeMedia
+    })(),
   }
   return animeResult
 }
@@ -71,6 +141,27 @@ export const mapCharacter = (character: Character) => {
       characterId: character.mal_id,
       nickname,
     })),
+    characterMedia: (() => {
+      const media = []
+      if (character.images.webp) {
+        media.push({
+          entityId: character.mal_id,
+          entityType: 'character',
+          mediaType: 'picture',
+          src: character.images.webp.image_url || '',
+          size: 'default',
+        })
+      } else if (character.images.jpg) {
+        media.push({
+          entityId: character.mal_id,
+          entityType: 'character',
+          mediaType: 'picture',
+          src: character.images.jpg.image_url || '',
+          size: 'default',
+        })
+      }
+      return media
+    })(),
   }
   return charcaterResult
 }
@@ -103,6 +194,27 @@ const mapProducer = (producer: Producer) => {
       established: producer.established,
       count: producer.count,
     },
+    producerMedia: (() => {
+      const media = []
+      if (producer.images.webp) {
+        media.push({
+          entityId: producer.mal_id,
+          entityType: 'producer',
+          mediaType: 'logo',
+          src: producer.images.webp.image_url || '',
+          size: 'default',
+        })
+      } else if (producer.images.jpg) {
+        media.push({
+          entityId: producer.mal_id,
+          entityType: 'producer',
+          mediaType: 'logo',
+          src: producer.images.jpg.image_url || '',
+          size: 'default',
+        })
+      }
+      return media
+    })(),
 
     titles: (producer.titles || []).map((t) => ({
       producerId: producer.mal_id,
@@ -117,7 +229,6 @@ export const processAnime = (
   rawData: JikanResponse<Anime>,
   task: ScrapingTask
 ) => {
-
   return (rawData.data || []).map(mapAnime)
 }
 
@@ -125,7 +236,6 @@ export const processCharacter = (
   rawData: JikanResponse<Character>,
   task: ScrapingTask
 ) => {
-
   return (rawData.data || []).map(mapCharacter)
 }
 
@@ -133,7 +243,6 @@ export const processStaff = (
   rawData: JikanResponse<Staff>,
   task: ScrapingTask
 ) => {
-
   return (rawData.data || []).map(mapStaff)
 }
 
@@ -141,6 +250,5 @@ export const processProducer = (
   rawData: JikanResponse<Producer>,
   task: ScrapingTask
 ) => {
-
   return (rawData.data || []).map(mapProducer)
 }
