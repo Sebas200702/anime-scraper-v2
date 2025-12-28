@@ -20,6 +20,7 @@ import type {
   NewAnimeRelatedAnime,
   NewAnimeStaff,
   NewAnimeTheme,
+  NewCharacterVoiceActor,
   NewMedia,
 } from '../types/index.js'
 
@@ -28,6 +29,7 @@ import { staff } from '../schemas/staff.js'
 import { inArray } from 'drizzle-orm/sql/expressions/conditions'
 import { character } from '../schemas/character.js'
 import { anime } from '../schemas/anime.js'
+import { characterVoiceActor } from '@schemas/characterRelations.js'
 
 export const jikanRelationsRepository = {
   async upsertAnimeGenresBatch(relations: NewAnimeGenre[]): Promise<number> {
@@ -64,37 +66,7 @@ export const jikanRelationsRepository = {
       return 0
     }
   },
-  async upsertAnimeMediaBatch(relations: NewMedia[]): Promise<number> {
-    const exixtingMedia = await db
-      .select({
-        entityId: media.entityId,
-        mediaType: media.mediaType,
-        size: media.size,
-        src: media.src,
-      })
-      .from(media)
-      .where(
-        inArray(
-          media.entityId,
-          relations.map((r) => r.entityId)
-        )
-      )
-    const existingSet = new Set(
-      exixtingMedia.map(
-        (em) => `${em.entityId}:${em.mediaType}:${em.size}:${em.src}`
-      )
-    )
-    const newRelations = relations.filter(
-      (r) => !existingSet.has(`${r.entityId}:${r.mediaType}:${r.size}:${r.src}`)
-    )
-    try {
-      await db.insert(media).values(newRelations).onConflictDoNothing()
-      return newRelations.length
-    } catch (e) {
-      console.error('Failed to upsert anime media batch:', e)
-      return 0
-    }
-  },
+
   async upsertAnimeThemesBatch(relations: NewAnimeTheme[]): Promise<number> {
     const exixtingAnimeThemes = await db
       .select({
@@ -260,38 +232,7 @@ export const jikanRelationsRepository = {
       return 0
     }
   },
-  async upsertCharacterMediaBatch(relations: NewMedia[]): Promise<number> {
-    const existingCharactersMedia = await db
-      .select({
-        entityId: media.entityId,
-        mediaType: media.mediaType,
-        size: media.size,
-        src: media.src,
-      })
-      .from(media)
-      .where(
-        inArray(
-          media.entityId,
-          relations.map((r) => r.entityId)
-        )
-      )
-    const existingSet = new Set(
-      existingCharactersMedia.map(
-        (em) => `${em.entityId}:${em.mediaType}:${em.size}:${em.src}`
-      )
-    )
-    const newRelations = relations.filter(
-      (r) => !existingSet.has(`${r.entityId}:${r.mediaType}:${r.size}:${r.src}`)
-    )
-
-    try {
-      await db.insert(media).values(newRelations).onConflictDoNothing()
-      return newRelations.length
-    } catch (e) {
-      console.error('Failed to upsert character media batch:', e)
-      return 0
-    }
-  },
+ 
 
   async upsertAnimeStaffBatch(relations: NewAnimeStaff[]): Promise<number> {
     if (relations.length === 0) return 0
@@ -316,7 +257,16 @@ export const jikanRelationsRepository = {
       if (validRelations.length === 0) return 0
 
       // 4. insertar solo las válidas
-      await db.insert(animeStaff).values(validRelations).onConflictDoNothing()
+      await db
+        .insert(animeStaff)
+        .values(
+          validRelations.map(({ animeId, staffId, role }) => ({
+            animeId,
+            staffId,
+            role,
+          }))
+        )
+        .onConflictDoNothing()
 
       return validRelations.length
     } catch (e) {
@@ -324,6 +274,39 @@ export const jikanRelationsRepository = {
       return 0
     }
   },
+  async upsertCharacterVoiceActorsBatch(
+    relations: NewCharacterVoiceActor[]
+  ): Promise<number> {
+    const existingVoiceActors = await db
+      .select({
+        characterId: character.malId,
+        staffId: staff.malId,
+      })
+      .from(characterVoiceActor)
+      .where(
+        inArray(
+          characterVoiceActor.characterId,
+          relations.map((r) => r.characterId)
+        )
+      )
+    const existingSet = new Set(
+      existingVoiceActors.map((eva) => `${eva.characterId}:${eva.staffId}`)
+    )
+    const newRelations = relations.filter(
+      (r) => !existingSet.has(`${r.characterId}:${r.staffId}`)
+    )
+    try {
+      await db
+        .insert(characterVoiceActor)
+        .values(newRelations)
+        .onConflictDoNothing()
+      return newRelations.length
+    } catch (e) {
+      console.error('Failed to upsert character voice actors batch:', e)
+      return 0
+    }
+  },
+
   async upsertStaffMediaBatch(relations: NewMedia[]): Promise<number> {
     const existingStaffMedia = await db
       .select({
@@ -364,13 +347,13 @@ export const jikanRelationsRepository = {
     const themeRelations: NewAnimeTheme[] = []
     const demographicRelations: NewAnimeDemographic[] = []
     const producerRelations: NewAnimeProducer[] = []
-    const animeMedia: NewMedia[] = []
+
     for (const result of animeDetailsResults) {
       genreRelations.push(...result.animeGenres)
       themeRelations.push(...result.animeThemes)
       demographicRelations.push(...result.animeDemographics)
       producerRelations.push(...result.animeProducers)
-      animeMedia.push(...result.animeMedias)
+
     }
 
     const uniqueGenreRelations = unique(
@@ -389,35 +372,36 @@ export const jikanRelationsRepository = {
       producerRelations,
       (p) => p.animeId + ':' + p.producerId
     )
-    const uniqueAnimeMedia = unique(
-      animeMedia,
-      (m) => m.entityId + ':' + m.mediaType + ':' + m.size + ':' + m.src
-    )
+
     await this.upsertAnimeGenresBatch(uniqueGenreRelations)
     await this.upsertAnimeThemesBatch(uniqueThemeRelations)
     await this.upsertAnimeDemographicsBatch(uniqueDemographicRelations)
     await this.upsertAnimeProducersBatch(uniqueProducerRelations)
-    await this.upsertAnimeMediaBatch(uniqueAnimeMedia)
+
   },
   async saveAnimeCharacters(
     animeCharactersResults: AnimeCharactersProcessorResult[]
   ): Promise<void> {
     const characterRelations: NewAnimeCharacter[] = []
-    const characterMedia: NewMedia[] = []
+    const characterVoiceActors: NewCharacterVoiceActor[] = []
+
     for (const result of animeCharactersResults) {
       characterRelations.push(...result.animeCharacters)
-      characterMedia.push(...result.characterMedia)
+
+      characterVoiceActors.push(...result.characterVoiceActors)
     }
     const uniqueCharacterRelations = unique(
       characterRelations,
       (c) => c.animeId + ':' + c.characterId + ':' + c.role
     )
-    const uniqueCharacterMedia = unique(
-      characterMedia,
-      (m) => m.entityId + ':' + m.mediaType + ':' + m.size + ':' + m.src
+
+    const uniqueCharacterVoiceActors = unique(
+      characterVoiceActors,
+      (s) => s.characterId + ':' + s.staffId + ':' + s.language
     )
     await this.upsertAnimeCharactersBatch(uniqueCharacterRelations)
-    await this.upsertCharacterMediaBatch(uniqueCharacterMedia)
+
+    await this.upsertCharacterVoiceActorsBatch(uniqueCharacterVoiceActors)
   },
   async saveAnimeStaff(
     animeStaffResults: AnimeStaffProcessorResult[]
