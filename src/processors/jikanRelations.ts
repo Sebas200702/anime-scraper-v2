@@ -1,3 +1,4 @@
+
 import type {
   AnimeCharactersProcessorResult,
   AnimeRelationsProcessorResult,
@@ -41,67 +42,7 @@ export const processAnimeDetails = (
       }))
     ),
 
-    animeMedias: (() => {
-      const animeMedia = []
-      if (animeData.trailer)
-        animeMedia.push({
-          entityType: 'anime',
-          mediaType: 'trailer',
-          src: animeData.trailer.url || '',
-          size: 'default',
-          entityId: animeId,
-        })
-      if (animeData.images.webp) {
-        animeMedia.push(
-          {
-            entityId: animeId,
-            entityType: 'anime',
-            mediaType: 'poster',
-            src: animeData.images.webp.large_image_url || '',
-            size: 'large',
-          },
-          {
-            entityId: animeId,
-            entityType: 'anime',
-            mediaType: 'poster',
-            src: animeData.images.webp.image_url || '',
-            size: 'default',
-          },
-          {
-            entityId: animeId,
-            entityType: 'anime',
-            mediaType: 'poster',
-            src: animeData.images.webp.small_image_url || '',
-            size: 'small',
-          }
-        )
-      } else if (animeData.images.jpg) {
-        animeMedia.push(
-          {
-            entityId: animeId,
-            entityType: 'anime',
-            mediaType: 'poster',
-            src: animeData.images.jpg.large_image_url || '',
-            size: 'large',
-          },
-          {
-            entityId: animeId,
-            entityType: 'anime',
-            mediaType: 'poster',
-            src: animeData.images.jpg.image_url || '',
-            size: 'default',
-          },
-          {
-            entityId: animeId,
-            entityType: 'anime',
-            mediaType: 'poster',
-            src: animeData.images.jpg.small_image_url || '',
-            size: 'small',
-          }
-        )
-      }
-      return animeMedia
-    })(),
+
   }
   return animeRelationResult
 }
@@ -118,27 +59,14 @@ export const processAnimeCharacters = (
       characterId: item.character.mal_id,
       role: item.role || 'Unknown',
     })),
-    characterMedia: data.flatMap((item) => {
-      const mediaList = []
-      if (item.character.images.webp) {
-        mediaList.push({
-          entityId: item.character.mal_id,
-          entityType: 'character',
-          mediaType: 'picture',
-          src: item.character.images.webp.image_url || '',
-          size: 'default',
-        })
-      } else if (item.character.images.jpg) {
-        mediaList.push({
-          entityId: item.character.mal_id,
-          entityType: 'character',
-          mediaType: 'picture',
-          src: item.character.images.jpg.image_url || '',
-          size: 'default',
-        })
-      }
-      return mediaList
-    }),
+    characterVoiceActors: data.flatMap((item) =>
+      (item.voice_actors || []).map((va) => ({
+        characterId: item.character.mal_id,
+        staffId: va.person.mal_id,
+        language: va.language || 'Unknown',
+      }))
+    ),
+    
   }
   return animeCharactersResult
 }
