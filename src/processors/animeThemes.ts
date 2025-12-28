@@ -8,21 +8,20 @@ import type {
   AnimeThemesArtistNextData,
 } from 'types/animeThemesApi.js'
 export function extractMalId(
-  resources: { site: string; link?: string }[] | null
-) {
-  if (!resources) return null
-
+  resources: { site: string; link?: string }[]
+): number | null {
   const malResource = resources.find(
     (r) => r.site === 'MyAnimeList' || r.link?.includes('myanimelist.net')
   )
 
   if (!malResource?.link) return null
 
-  // Captura cualquier ID numérico al final de la URL
-  const regex = /\/(\d+)(?:\/)?$/
+  const regex = /myanimelist\.net\/(?:\w+)\/(\d+)/
   const match = regex.exec(malResource.link)
 
-  return Number.parseInt(match?.[1] ?? '') || null
+  if (!match) return null
+
+  return Number(match[1])
 }
 
 // Generate audio URL from basename
@@ -50,7 +49,23 @@ export const processArtist = (
       malId,
       name: artistData.name,
     },
-
+    artistMedias: artistData.images.map((image) => {
+      let size: 'large' | 'small' | 'default'
+      if (image.facet === 'Large Cover') {
+        size = 'large'
+      } else if (image.facet === 'Small Cover') {
+        size = 'small'
+      } else {
+        size = 'default'
+      }
+      return {
+        artistName: artistData.name,
+        entityType: 'artist',
+        mediaType: 'picture',
+        src: image.link,
+        size,
+      }
+    }),
   }
   return artistResult
 }
@@ -71,15 +86,15 @@ export const processAnimeThemes = (
       : [],
     musics: themesData.map((theme) => ({
       type: theme.type ?? 'Unknown',
-      title: theme.song.title ?? 'Unknown Title',
+      title: theme.song?.title ?? 'Unknown Title',
       id: theme.id,
     })),
     musicResolutions:
       themesData.flatMap((theme) =>
         (theme.entries || []).flatMap((entry) =>
           (entry.videos || []).map((video) => ({
-            songId: entry.id,
-            musicVersionId: theme.id,
+            songId: video.id,
+            musicVersionId: entry.id,
 
             resolution: video.resolution,
             audioUrl: generateAudioUrl(video.basename) || '',
@@ -97,9 +112,9 @@ export const processAnimeThemes = (
         }))
       ) ?? [],
     musicArtists: themesData.flatMap((theme) =>
-      theme.song.performances.map((performance) => ({
+      theme.song?.performances.map((performance) => ({
         musicId: theme.id,
-        artistName: performance.artist.name,
+        artistName: performance.artist?.name || 'Unknown Artist',
       }))
     ),
   }
