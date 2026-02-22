@@ -1,61 +1,74 @@
 import fs from 'node:fs/promises'
-import type { Proxy } from 'types/index.js'
+import type { ProxyState } from 'types/index.js'
 const raw = await fs.readFile('./proxies.json', 'utf-8')
-const proxies = JSON.parse(raw)
-
+const rawProxies: string[] = JSON.parse(raw)
 
 export const proxyManager = {
-  proxies: [] as Proxy[],
+  proxies: [] as ProxyState[],
+  initialized: false,
 
   init() {
-    console.log(`Loaded ${proxies.length} proxies`)
-    this.proxies = proxies.map((proxy: string) => ({
-      value: `http://${proxy}`,
-      isUsed: false,
+    if (this.initialized) return
+    this.initialized = true
+    console.log(`📡 Loaded ${rawProxies.length} proxies`)
+    this.proxies = rawProxies.map((proxy) => ({
+      url: `http://${proxy}`,
       failures: 0,
+      lastUsed: 0,
+      cooldownUntil: 0,
+      totalRequests: 0,
     }))
   },
 
-  getProxy() {
-    const available = this.proxies.filter((p) => !p.isUsed)
-
-    if (available.length === 0) {
-      throw new Error('No available proxies')
-    }
-
-    const proxy = available[Math.floor(Math.random() * available.length)]
-    if (proxy) {
-      proxy.isUsed = true
-    }
-
-    return proxy
+  getAvailableProxies(): ProxyState[] {
+    const now = Date.now()
+    return this.proxies
+      .filter((p) => p.failures < 10 && now >= p.cooldownUntil)
+      .sort((a, b) => a.lastUsed - b.lastUsed) // LRU ordering
   },
 
-  releaseProxy(proxy: { isUsed: boolean }) {
-    proxy.isUsed = false
+  /**
+   * Allocates proxy pools for N workers.
+   * Distributes all available proxies evenly across workers.
+   * Each worker gets multiple proxies to rotate through.
+   * @returns Array of URL-string arrays, one per worker.
+   */
+  allocateForWorkers(workerCount: number) {
+    const available = this.getAvailableProxies()
+    if (available.length < workerCount) throw new Error('Not enough proxies')
+
+    return available.slice(0, workerCount)
   },
 
-  markFailure(proxy: { failures: number; isUsed: boolean }) {
+  reportFailure(proxyUrl: string) {
+    const proxy = this.proxies.find((p) => p.url === proxyUrl)
+    if (!proxy) return
     proxy.failures++
-
-    if (proxy.failures >= 3) {
-      proxy.isUsed = true // bloqueado permanentemente
-    } else {
-      proxy.isUsed = false
-    }
+    proxy.cooldownUntil =
+      Date.now() + Math.min(1000 * 2 ** proxy.failures, 60_000)
   },
 
-  getProxyList(length: number) {
-    if (length > this.proxies.filter((p) => !p.isUsed).length) {
-      throw new Error('Not enough available proxies')
-    }
+  reportSuccess(proxyUrl: string) {
+    const proxy = this.proxies.find((p) => p.url === proxyUrl)
+    if (!proxy) return
+    proxy.failures = Math.max(0, proxy.failures - 1)
+    proxy.cooldownUntil = 0
+    proxy.totalRequests++
+  },
 
-    const list = []
-
-    for (let i = 0; i < length; i++) {
-      list.push(this.getProxy())
-    }
-
-    return list
+  getHealthSummary(): {
+    total: number
+    healthy: number
+    cooldown: number
+    dead: number
+  } {
+    const now = Date.now()
+    const total = this.proxies.length
+    const dead = this.proxies.filter((p) => p.failures >= 10).length
+    const cooldown = this.proxies.filter(
+      (p) => p.failures < 10 && now < p.cooldownUntil
+    ).length
+    const healthy = total - dead - cooldown
+    return { total, healthy, cooldown, dead }
   },
 }

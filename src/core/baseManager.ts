@@ -1,6 +1,11 @@
 import { Worker } from 'node:worker_threads'
 import { proxyManager } from './proxyManager.js'
-import type { Proxy, ScrapingTask, SourceConfig, BufferedTask } from '../types/index.js'
+import type {
+  ScrapingTask,
+  SourceConfig,
+  BufferedTask,
+  ProxyState,
+} from '../types/index.js'
 
 export class BaseWorkerManager {
   maxWorkers: number
@@ -13,13 +18,13 @@ export class BaseWorkerManager {
   pageBatch = 0
   bufferByTaskType: Map<string, BufferedTask[]> = new Map()
 
-  saving = false
   finishedWorkers = 0
   sourceConfig: SourceConfig | null = null
 
   stats: {
     startTime: number | null
     tasksCompleted: number
+    tasksProcessed?: number
     tasksErrors: number
     itemsSaved?: Record<string, number>
   }
@@ -74,7 +79,7 @@ export class BaseWorkerManager {
   /* =========================
      WORKERS CORE
      ========================= */
-  spawnWorker(id: number, tasks: ScrapingTask[], proxy: Proxy) {
+  spawnWorker(id: number, tasks: ScrapingTask[], proxy: ProxyState) {
     const workerData = this.getWorkerData
       ? this.getWorkerData(id, tasks, proxy)
       : { workerId: id, tasks, proxy }
@@ -88,7 +93,7 @@ export class BaseWorkerManager {
 
     this.workers.push(worker)
   }
-  getWorkerData(id: number, tasks: ScrapingTask[], proxy: Proxy) {
+  getWorkerData(id: number, tasks: ScrapingTask[], proxy: ProxyState) {
     return {
       workerId: id,
       tasks,
@@ -113,7 +118,7 @@ export class BaseWorkerManager {
     const tasksPerWorker = Math.ceil(totalTasks / workersToUse)
 
     proxyManager.init()
-    const proxies = proxyManager.getProxyList(workersToUse)
+    const proxies = proxyManager.allocateForWorkers(workersToUse)
 
     for (let i = 0; i < workersToUse; i++) {
       const start = i * tasksPerWorker
@@ -133,7 +138,12 @@ export class BaseWorkerManager {
         this.spawnWorker(i, chunk, proxy)
       }
     }
+
+    console.log(
+      `Spawned ${this.workers.length} workers with ~${Math.ceil(proxies.length / workersToUse)} proxies each`
+    )
   }
+
   printStats() {
     const endTime = Date.now()
     const duration = this.stats.startTime
@@ -171,7 +181,5 @@ export class BaseWorkerManager {
 
     // Esperar a que todos los workers terminen
     await this.completionPromise
-
-    this.printStats()
   }
 }

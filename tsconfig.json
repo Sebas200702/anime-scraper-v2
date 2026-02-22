@@ -18,7 +18,7 @@
       "@utils/*": ["utils/*"],
       "@services/*": ["services/*"],
       "@scripts/*": ["scripts/*"],
-      "types": ["types/index.djs"],
+      "types": ["types/index.d.ts"],
       "types/*": ["types/*"]
     },
 

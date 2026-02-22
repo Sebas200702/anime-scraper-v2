@@ -1,4 +1,3 @@
-import { animeStaff } from './../schemas/animeRelations'
 import { InferSelectModel, InferInsertModel } from 'drizzle-orm'
 import { anime, animeTitleSynonym } from '../schemas/anime.js'
 import { producer, producerTitle } from '../schemas/producer.js'
@@ -22,7 +21,7 @@ import {
   animeRelatedAnime,
   animeProducer,
 } from '../schemas/animeRelations.js'
-import { animeExternalIds, animeMedia } from '../schemas/animeExternal.js'
+import { animeExternalIds } from '../schemas/animeExternal.js'
 
 export type Anime = InferSelectModel<typeof anime>
 export type NewAnime = InferInsertModel<typeof anime>
@@ -84,8 +83,6 @@ export type AnimeCharacter = InferSelectModel<typeof animeCharacter>
 export type NewAnimeCharacter = InferInsertModel<typeof animeCharacter>
 export type AnimeExternalIds = InferSelectModel<typeof animeExternalIds>
 export type NewAnimeExternalIds = InferInsertModel<typeof animeExternalIds>
-export type AnimeMedia = InferSelectModel<typeof animeMedia>
-export type NewAnimeMedia = InferInsertModel<typeof animeMedia>
 export type AnimeRelatedAnime = InferSelectModel<typeof animeRelatedAnime>
 export type NewAnimeRelatedAnime = InferInsertModel<typeof animeRelatedAnime>
 export type AnimeProducer = InferSelectModel<typeof animeProducer>
@@ -95,8 +92,12 @@ export type NewMedia = InferInsertModel<typeof media>
 export interface SourceConfig {
   name: string
   maxWorkers: number
+  /** Number of concurrent tasks per worker thread (default: 1) */
+  concurrencyPerWorker?: number
+  /** Max tasks to load per batch iteration (default: 2000) */
+  taskBatchSize?: number
   pageBatch: number
-  rateLimit: { perMinute: number }
+  rateLimit: { perSecond?: number; perMinute: number }
   deduplicateBy?: string | null
   tasks: {
     [key: string]: {
@@ -142,27 +143,31 @@ export interface NewScrapingTask {
   updatedAt?: Date
 }
 
-export interface Proxy {
-  value: string
-  isUsed: boolean
+export interface ProxyState {
+  url: string
   failures: number
+  lastUsed: number
+  cooldownUntil: number
+  totalRequests: number
 }
 export interface WorkerData {
   workerId: number
   tasks: ScrapingTask[]
-  proxy: Proxy
+  /** Array of proxy URL strings for this worker to rotate through */
+  proxyUrls: string[]
   sourceName: string | undefined
   sourceConfig: SourceConfig | null
 }
 
 export interface WorkerMessage {
   workerId: number
-  status: 'done' | 'error' | 'finished'
+  status: 'done' | 'error' | 'finished' | 'proxy-failure' | 'proxy-success'
   taskType: string
   entity?: string
   taskId: number
   error?: string
   data?: any
+  proxyUrl?: string
 }
 
 export interface AnimeProcessorResult {

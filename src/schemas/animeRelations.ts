@@ -58,20 +58,21 @@ export const animeStaff = sqliteTable(
       .references(() => staff.malId, { onDelete: 'cascade' }),
     role: text('role').notNull(),
   },
-  (t) => [
-    primaryKey({ columns: [t.animeId, t.staffId, t.role] }),
-  ]
+  (t) => [primaryKey({ columns: [t.animeId, t.staffId, t.role] })]
 )
 
-
-export const animeMusic = sqliteTable('anime_music', {
-  animeId: integer('anime_id')
-    .references(() => anime.malId)
-    .notNull(),
-  musicId: integer('music_id')
-    .references(() => music.id)
-    .notNull(),
-})
+export const animeMusic = sqliteTable(
+  'anime_music',
+  {
+    animeId: integer('anime_id')
+      .references(() => anime.malId)
+      .notNull(),
+    musicId: integer('music_id')
+      .references(() => music.id)
+      .notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.animeId, t.musicId] })]
+)
 
 export const animeCharacter = sqliteTable(
   'anime_character',
@@ -87,16 +88,21 @@ export const animeCharacter = sqliteTable(
   (t) => [primaryKey({ columns: [t.animeId, t.characterId, t.role] })]
 )
 
-
-export const animeRelatedAnime = sqliteTable('anime_relation', {
-  animeId: integer('anime_id')
-    .references(() => anime.malId)
-    .notNull(),
-  relationType: text('relation_type').notNull(),
-  relatedAnimeId: integer('related_anime_id')
-    .references(() => anime.malId)
-    .notNull(),
-})
+export const animeRelatedAnime = sqliteTable(
+  'anime_relation',
+  {
+    animeId: integer('anime_id')
+      .references(() => anime.malId)
+      .notNull(),
+    relationType: text('relation_type').notNull(),
+    relatedAnimeId: integer('related_anime_id')
+      .references(() => anime.malId)
+      .notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.animeId, t.relatedAnimeId, t.relationType] }),
+  ]
+)
 
 export const animeProducer = sqliteTable(
   'anime_producer',
@@ -108,7 +114,5 @@ export const animeProducer = sqliteTable(
       .notNull()
       .references(() => producer.malId, { onDelete: 'cascade' }),
   },
-  (t) => [
-    primaryKey({ columns: [t.animeId, t.producerId] }),
-  ]
+  (t) => [primaryKey({ columns: [t.animeId, t.producerId] })]
 )

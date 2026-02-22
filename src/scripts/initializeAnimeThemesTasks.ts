@@ -6,9 +6,12 @@ import {
 
 export const initializeAnimeThemesTasks = async () => {
   try {
-    console.log('Fetching anime slugs from AnimeThemes API...')
+    const existing = await taskRepository.getExistingEntityIds('animeThemes')
+    console.log(
+      `Found ${existing.size} existing animeThemes tasks — skipping those`
+    )
 
-    // Obtener todos los slugs del endpoint
+    console.log('Fetching anime slugs from AnimeThemes API...')
     const response = await fetchAnimeThemesSlugs()
     const animes = response.pageProps.animeAll
 
@@ -20,88 +23,57 @@ export const initializeAnimeThemesTasks = async () => {
 
     console.log(`Found ${artists.length} artist slugs from AnimeThemes`)
 
-    // Verificar qué tareas ya están completadas
-    console.log('Checking for existing completed tasks...')
-    const completedTasks = await taskRepository.getTasks(
-      'animeThemes'
-    )
-
-    console.log(
-      `Found ${completedTasks.length} already completed/in-progress animeThemes tasks`
-    )
-
     const batchSize = 2000
-    let tasks = []
     let totalCreated = 0
 
-    // Crear tareas para cada anime usando slug
-    for (const anime of animes) {
-      const slug = anime.slug
-
-      // Verificar si ya existe la tarea
-      if (!completedTasks.some((task) => task.entityId === slug)) {
-        tasks.push({
+    // Crear tareas para anime slugs en lotes
+    for (let i = 0; i < animes.length; i += batchSize) {
+      const batch = animes.slice(i, i + batchSize)
+      const tasks = batch
+        .filter((anime: { slug: string }) => !existing.has(anime.slug))
+        .map((anime: { slug: string }) => ({
           entityType: 'animeThemes',
-          entityId: slug,
+          entityId: anime.slug,
           taskType: 'anime_themes_hydration',
           priority: 10,
           status: 'pending',
-          payload: { slug },
-        })
+          payload: { slug: anime.slug },
+        }))
 
-        // Guardar en lotes de 5000
-        if (tasks.length >= batchSize) {
-          console.log(`Creating batch of ${tasks.length} tasks...`)
-          await taskRepository.createManyTasks(tasks)
-          totalCreated += tasks.length
-          console.log(`✓ Created ${totalCreated} tasks so far`)
-          tasks = [] // Limpiar el array
-        }
+      if (tasks.length > 0) {
+        await taskRepository.createManyTasks(tasks)
+        totalCreated += tasks.length
+        console.log(
+          `Anime batch: ${tasks.length} new tasks (total: ${totalCreated})`
+        )
       }
     }
 
-    // Crear tareas para cada artista usando slug
-    for (const artist of artists) {
-      const slug = artist.slug
-
-      // Verificar si ya existe la tarea
-      if (!completedTasks.some((task) => task.entityId === slug)) {
-        tasks.push({
+    // Crear tareas para artist slugs en lotes
+    for (let i = 0; i < artists.length; i += batchSize) {
+      const batch = artists.slice(i, i + batchSize)
+      const tasks = batch
+        .filter((artist: { slug: string }) => !existing.has(artist.slug))
+        .map((artist: { slug: string }) => ({
           entityType: 'animeThemes',
-          entityId: slug,
+          entityId: artist.slug,
           taskType: 'artist_hydration',
           priority: 5,
           status: 'pending',
-          payload: { slug },
-        })
+          payload: { slug: artist.slug },
+        }))
 
-        // Guardar en lotes de 5000
-        if (tasks.length >= batchSize) {
-          console.log(`Creating batch of ${tasks.length} tasks...`)
-          await taskRepository.createManyTasks(tasks)
-          totalCreated += tasks.length
-          console.log(`✓ Created ${totalCreated} tasks so far`)
-          tasks = [] // Limpiar el array
-        }
+      if (tasks.length > 0) {
+        await taskRepository.createManyTasks(tasks)
+        totalCreated += tasks.length
+        console.log(
+          `Artist batch: ${tasks.length} new tasks (total: ${totalCreated})`
+        )
       }
     }
 
-    // Guardar las tareas restantes
-    if (tasks.length > 0) {
-      console.log(`Creating final batch of ${tasks.length} tasks...`)
-      await taskRepository.createManyTasks(tasks)
-      totalCreated += tasks.length
-    }
-
-    if (totalCreated === 0) {
-      console.log(
-        '✓ All animeThemes tasks are already completed or in progress!'
-      )
-      return
-    }
-
     console.log(
-      `✓ Created ${totalCreated} new animeThemes hydration tasks (${completedTasks.length} already existed)`
+      `✓ Created ${totalCreated} new animeThemes tasks (${existing.size} already existed)`
     )
   } catch (error) {
     console.error('Error initializing animeThemes tasks:', error)

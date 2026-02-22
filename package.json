@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "tsc --project tsconfig.json && tsc-alias --project tsconfig.json ",
-    "start": "node dist/src/index.js",
+    "start": "bun dist/src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {

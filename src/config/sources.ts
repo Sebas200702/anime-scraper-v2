@@ -2,9 +2,9 @@ import type { SourceConfig } from 'types/index.js'
 export const SOURCES: SourceConfig[] = [
   {
     name: 'jikan',
-    maxWorkers: 80,
+    maxWorkers: 2,
     pageBatch: 40,
-    rateLimit: { perMinute: 60 },
+    rateLimit: { perSecond: 1, perMinute: 40 },
     deduplicateBy: 'mal_id',
     tasks: {
       anime_page_hydration: { entity: 'anime', extractPage: true },
@@ -17,7 +17,7 @@ export const SOURCES: SourceConfig[] = [
     name: 'jikanRelations',
     maxWorkers: 80,
     pageBatch: 40,
-    rateLimit: { perMinute: 60 },
+    rateLimit: { perSecond: 1, perMinute: 40 },
     tasks: {
       anime_details_hydration: { entity: 'animeDetails' },
       anime_characters_hydration: { entity: 'animeCharacters' },
@@ -28,7 +28,7 @@ export const SOURCES: SourceConfig[] = [
     name: 'animeThemes',
     maxWorkers: 60,
     pageBatch: 500,
-    rateLimit: { perMinute: 40 },
+    rateLimit: { perSecond: 1, perMinute: 40 },
     tasks: {
       anime_themes_hydration: {
         entity: 'animeThemes',
@@ -42,7 +42,7 @@ export const SOURCES: SourceConfig[] = [
     name: 'animeMapping',
     maxWorkers: 60,
     pageBatch: 2000,
-    rateLimit: { perMinute: 60 },
+    rateLimit: { perSecond: 1, perMinute: 40 },
     tasks: {
       anime_mapping: { entity: 'animeMapping', needsPayload: true },
     },
@@ -51,7 +51,7 @@ export const SOURCES: SourceConfig[] = [
     name: 'animeEpisodes',
     maxWorkers: 60,
     pageBatch: 80,
-    rateLimit: { perMinute: 60 },
+    rateLimit: { perSecond: 1, perMinute: 40 },
     tasks: {
       anime_episodes_hydration: { entity: 'animeEpisodes', extractPage: true },
     },
@@ -60,7 +60,7 @@ export const SOURCES: SourceConfig[] = [
     name: 'tvdbSeriesArtworks',
     maxWorkers: 80,
     pageBatch: 100,
-    rateLimit: { perMinute: 60 },
+    rateLimit: { perSecond: 1, perMinute: 40 },
     tasks: {
       tvdb_series_artworks: {
         entity: 'tvdbSeriesArtworks',

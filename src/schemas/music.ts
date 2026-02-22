@@ -24,13 +24,19 @@ export const musicVersion = sqliteTable(
   (t) => [uniqueIndex('music_version_unique').on(t.musicId, t.versionId)]
 )
 
-export const musicResolution = sqliteTable('music_resolution', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  musicVersionId: integer('music_version_id')
-    .notNull()
-    .references(() => musicVersion.versionId, { onDelete: 'cascade' }),
-  songId: integer('song_id').notNull(),
-  resolution: integer('resolution').notNull(),
-  audioUrl: text('audio_url'),
-  videoUrl: text('video_url'),
-})
+export const musicResolution = sqliteTable(
+  'music_resolution',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    musicVersionId: integer('music_version_id')
+      .notNull()
+      .references(() => musicVersion.versionId, { onDelete: 'cascade' }),
+    songId: integer('song_id').notNull(),
+    resolution: integer('resolution').notNull(),
+    audioUrl: text('audio_url'),
+    videoUrl: text('video_url'),
+  },
+  (t) => [
+    uniqueIndex('music_resolution_song_res_unique').on(t.songId, t.resolution),
+  ]
+)

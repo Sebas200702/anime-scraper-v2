@@ -1,14 +1,16 @@
 import { parentPort, workerData } from 'node:worker_threads'
 import { ProxyAgent } from 'undici'
 import { createRateLimiter } from '../utils/rateLimit.js'
-import { taskRepository } from '../repositories/tasks.js'
 import { capitalize } from '../config/sources.js'
 import type { WorkerMessage } from 'types/index.js'
 
 const { workerId, tasks, proxy, sourceName, sourceConfig } = workerData
-const agent = new ProxyAgent(proxy.value)
+const agent = new ProxyAgent(proxy.url)
 
-const rateLimiter = createRateLimiter(1, sourceConfig.rateLimit.perMinute)
+const rateLimiter = createRateLimiter(
+  sourceConfig.rateLimit.perSecond,
+  sourceConfig.rateLimit.perMinute
+)
 
 async function run() {
   // Importar módulos dinámicamente una sola vez
@@ -17,7 +19,6 @@ async function run() {
 
   for (const task of tasks) {
     try {
-      await taskRepository.markTaskInProgress(task.id)
       await rateLimiter()
 
       const taskConfig = sourceConfig.tasks[task.taskType]
@@ -64,7 +65,7 @@ async function run() {
         workerId,
         status: 'error',
         taskId: task.id,
-        taskType: task.task_type,
+        taskType: task.taskType,
         error: err.message,
       }
       parentPort?.postMessage(msg)

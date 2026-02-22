@@ -4,8 +4,9 @@ import { createRateLimiter } from '../utils/rateLimit.js'
 import type { ScrapingTask } from 'types/index.js'
 import type { ProxyAgent } from 'undici'
 
-const kitsuLimiter = createRateLimiter(1, 40)
-const tvdbLimiter = createRateLimiter(1, 40)
+// Scaled by concurrency — each concurrent task uses a different proxy/IP
+const kitsuLimiter = createRateLimiter(4, 200)
+const tvdbLimiter = createRateLimiter(4, 200)
 
 export const fetchAnimeMapping = async (
   task: ScrapingTask,
@@ -20,8 +21,10 @@ export const fetchAnimeMapping = async (
       year?: number
       type?: string
     }
+  // Extract the numeric malId from entityId (e.g. "anime_mapping_123" → 123)
+  const malId = Number(task.entityId.replace('anime_mapping_', ''))
   const payload = {
-    mal_id: task.entityId,
+    mal_id: malId,
     title,
     title_english,
     title_japanese,

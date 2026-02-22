@@ -33,7 +33,16 @@ export const fetchAnimeEpisodes = async (
       agent,
     })
 
+    if (!response.data || response.data.length === 0) {
+      break
+    }
+
     allEpisodes.push(...response.data)
+    offset += limit
+
+    if (response.data.length < limit) {
+      hasNext = false
+    }
   }
 
   return { data: allEpisodes }

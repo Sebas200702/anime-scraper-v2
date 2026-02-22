@@ -4,13 +4,14 @@ import type {
 } from '../types/index.js'
 
 export const processAnimeMapping = (
-  rawData: { kitsuId: number; tvdbId: number },
+  rawData: { kitsuId: number | null; tvdbId: number | null },
   task: ScrapingTask
 ) => {
-  const { anime_id } = task.payload as { anime_id: number }
+  // Extract the numeric malId from entityId (e.g. "anime_mapping_123" → 123)
+  const malId = Number(task.entityId.replace('anime_mapping_', ''))
   const externalIdResult: AnimeExternalIdsProcessorResult = {
     animeExternalIds: {
-      animeId: anime_id,
+      animeId: malId,
       kitsuId: rawData.kitsuId,
       tvdbId: rawData.tvdbId,
     },

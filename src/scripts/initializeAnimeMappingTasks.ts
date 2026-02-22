@@ -1,24 +1,18 @@
 import { db } from '../libs/db.js'
 import { taskRepository } from '../repositories/tasks.js'
-import { anime, animeTitleSynonym } from '../schemas/anime.js'
-import { eq } from 'drizzle-orm'
+import { anime } from '../schemas/anime.js'
 
 export const initializeAnimeMappingTasks = async () => {
   try {
     console.log('Fetching anime data from database in batches...')
 
-    const completedTasks = await taskRepository.getCompletedTasks(
-      null,
-      'animeMapping'
-    )
+    const existing = await taskRepository.getExistingEntityIds('animeMapping')
     console.log(
-      `Found ${completedTasks.length} already completed/in-progress animeMapping tasks`
+      `Found ${existing.size} existing animeMapping tasks — skipping those`
     )
 
-    const fetchBatchSize = 5000
-    const taskBatchSize = 5000
+    const fetchBatchSize = 2000
     let offset = 0
-    let totalAnimes = 0
     let totalCreated = 0
     let hasMore = true
 
@@ -31,67 +25,36 @@ export const initializeAnimeMappingTasks = async () => {
           titleEnglish: anime.titleEnglish,
           year: anime.year,
           type: anime.type,
-          titleSynonyms: animeTitleSynonym.title,
         })
         .from(anime)
-        .innerJoin(
-          animeTitleSynonym,
-          eq(anime.malId, animeTitleSynonym.animeId)
-        )
         .limit(fetchBatchSize)
         .offset(offset)
 
-      if (!animes || animes.length === 0) {
-        break
-      }
+      if (!animes || animes.length === 0) break
 
-      totalAnimes += animes.length
-      console.log(`Fetched ${animes.length} anime (total: ${totalAnimes})`)
+      const tasks = animes
+        .filter((a) => !existing.has(`anime_mapping_${a.malId}`))
+        .map((a) => ({
+          entityType: 'animeMapping',
+          entityId: `anime_mapping_${a.malId}`,
+          taskType: 'anime_mapping_hydration',
+          priority: 5,
+          status: 'pending',
+          payload: {
+            title: a.title,
+            title_japanese: a.titleJapanese,
+            title_english: a.titleEnglish,
+            year: a.year,
+            type: a.type,
+          },
+        }))
 
-      let tasks = []
-
-      // Crear tareas para cada anime
-      for (const anime of animes) {
-        const entityId = `anime_mapping_${anime.malId}`
-
-        // Verificar si ya existe la tarea
-        if (!completedTasks.some((task) => task.entityId === entityId)) {
-          tasks.push({
-            entityType: 'animeMapping',
-            entityId: entityId,
-            taskType: 'anime_mapping_hydration',
-            priority: 5,
-            status: 'pending',
-            payload: {
-              title: anime.title,
-              title_japanese: anime.titleJapanese,
-              title_english: anime.titleEnglish,
-              title_synonyms: anime.titleSynonyms,
-              year: anime.year,
-              type: anime.type,
-            },
-          })
-
-          // Guardar en lotes de 5000
-          if (tasks.length >= taskBatchSize) {
-            console.log(`Creating batch of ${tasks.length} tasks...`)
-            await taskRepository.createManyTasks(tasks)
-            totalCreated += tasks.length
-            console.log(`✓ Created ${totalCreated} tasks so far`)
-            tasks = []
-          }
-        }
-      }
-
-      // Guardar tareas restantes del lote
       if (tasks.length > 0) {
-        console.log(`Creating batch of ${tasks.length} tasks...`)
         await taskRepository.createManyTasks(tasks)
         totalCreated += tasks.length
-        console.log(`✓ Created ${totalCreated} tasks so far`)
+        console.log(`Batch: ${tasks.length} new tasks (total: ${totalCreated})`)
       }
 
-      // Si recibimos menos registros que el tamaño del lote, no hay más
       if (animes.length < fetchBatchSize) {
         hasMore = false
       } else {
@@ -99,15 +62,8 @@ export const initializeAnimeMappingTasks = async () => {
       }
     }
 
-    if (totalCreated === 0) {
-      console.log(
-        '✓ All animeMapping tasks are already completed or in progress!'
-      )
-      return
-    }
-
     console.log(
-      `✓ Created ${totalCreated} new animeMapping hydration tasks (${completedTasks.length} already existed)`
+      `✓ Created ${totalCreated} new animeMapping tasks (${existing.size} already existed)`
     )
   } catch (error) {
     console.error('Error initializing animeMapping tasks:', error)

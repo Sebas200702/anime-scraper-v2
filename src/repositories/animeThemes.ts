@@ -18,223 +18,145 @@ import { inArray } from 'drizzle-orm'
 import { unique } from '../utils/deduplicate.js'
 import { normalizeText } from '../utils/normalize.js'
 import { media } from '../schemas/media.js'
+import { chunk, SQLITE_MAX_VARIABLES } from '../utils/chunk.js'
 
 export const animeThemesRepository = {
-  async upsertMusicBatch(musicEntries: NewMusic[]): Promise<number> {
+  async upsertMusicBatch(
+    musicEntries: NewMusic[],
+    txCtx?: any
+  ): Promise<number> {
     try {
-      const existingMusics = await db
-        .select()
-        .from(music)
-        .where(
-          inArray(
-            music.id,
-            musicEntries.map((m) => m.id!)
-          )
-        )
-      const existingMusicIds = new Set(existingMusics.map((m) => m.id))
-      const newMusicEntries = musicEntries.filter(
-        (m) => !existingMusicIds.has(m.id!)
-      )
-      if (newMusicEntries.length === 0) {
-        console.log('No new music entries to insert.')
-        return 0
+      if (!musicEntries || musicEntries.length === 0) return 0
+      const batchSize = Math.floor(SQLITE_MAX_VARIABLES / 6)
+      const run = async (tx: any) => {
+        for (const batch of chunk(musicEntries, batchSize)) {
+          await tx.insert(music).values(batch).onConflictDoNothing()
+        }
       }
-      await db.insert(music).values(newMusicEntries)
-      return newMusicEntries.length
+      if (txCtx) await run(txCtx)
+      else await db.transaction(run)
+      return musicEntries.length
     } catch (e) {
       console.error('Failed to upsert music batch:', e)
       return 0
     }
   },
   async upsertMusicVersionsBatch(
-    musicVersionEntries: NewMusicVersion[]
+    musicVersionEntries: NewMusicVersion[],
+    txCtx?: any
   ): Promise<number> {
     try {
-      const existingVersions = await db
-        .select({
-          musicId: musicVersion.musicId,
-          versionId: musicVersion.versionId,
-        })
-        .from(musicVersion)
-        .where(
-          inArray(
-            musicVersion.versionId,
-            musicVersionEntries.map((mv) => mv.versionId)
-          )
-        )
-      const existingVersionIds = new Set(
-        existingVersions.map((mv) => mv.versionId)
-      )
-      const newMusicVersionEntries = musicVersionEntries.filter(
-        (mv) => !existingVersionIds.has(mv.versionId)
-      )
-      if (newMusicVersionEntries.length === 0) {
-        console.log('No new music version entries to insert.')
-        return 0
+      if (!musicVersionEntries || musicVersionEntries.length === 0) return 0
+      const batchSize = Math.floor(SQLITE_MAX_VARIABLES / 4)
+      const run = async (tx: any) => {
+        for (const batch of chunk(musicVersionEntries, batchSize)) {
+          await tx.insert(musicVersion).values(batch).onConflictDoNothing()
+        }
       }
-
-      await db.insert(musicVersion).values(newMusicVersionEntries)
-
-      return newMusicVersionEntries.length
+      if (txCtx) await run(txCtx)
+      else await db.transaction(run)
+      return musicVersionEntries.length
     } catch (e) {
       console.error('Failed to upsert music versions batch:', e)
       return 0
     }
   },
   async upsertMusicResolutionsBatch(
-    musicResolutionEntries: NewMusicResolution[]
+    musicResolutionEntries: NewMusicResolution[],
+    txCtx?: any
   ): Promise<number> {
     try {
-      const existingResolutions = await db
-        .select({
-          songId: musicResolution.songId,
-        })
-        .from(musicResolution)
-        .where(
-          inArray(
-            musicResolution.songId,
-            musicResolutionEntries.map((mr) => mr.songId)
-          )
-        )
-      const existingResolutionIds = new Set(
-        existingResolutions.map((mr) => mr.songId)
-      )
-
-      const newMusicResolutionEntries = musicResolutionEntries.filter(
-        (mr) => !existingResolutionIds.has(mr.songId)
-      )
-      if (newMusicResolutionEntries.length === 0) {
-        console.log('No new music resolution entries to insert.')
+      if (!musicResolutionEntries || musicResolutionEntries.length === 0)
         return 0
+      const batchSize = Math.floor(SQLITE_MAX_VARIABLES / 6)
+      const run = async (tx: any) => {
+        for (const batch of chunk(musicResolutionEntries, batchSize)) {
+          await tx.insert(musicResolution).values(batch).onConflictDoNothing()
+        }
       }
-
-      await db.insert(musicResolution).values(newMusicResolutionEntries)
-
-      return newMusicResolutionEntries.length
+      if (txCtx) await run(txCtx)
+      else await db.transaction(run)
+      return musicResolutionEntries.length
     } catch (e) {
       console.error('Failed to upsert music resolutions batch:', e)
       return 0
     }
   },
-  async upsertArtistBatch(artistEntries: NewArtist[]): Promise<number> {
+  async upsertArtistBatch(
+    artistEntries: NewArtist[],
+    txCtx?: any
+  ): Promise<number> {
     try {
-      const existingArtists = await db
-        .select({ name: artist.name })
-        .from(artist)
-        .where(
-          inArray(
-            artist.name,
-            artistEntries.map((a) => a.name)
-          )
-        )
-      const existingArtistNames = new Set(existingArtists.map((a) => a.name))
-      const newArtistEntries = artistEntries.filter(
-        (a) => !existingArtistNames.has(a.name)
-      )
-      if (newArtistEntries.length === 0) {
-        console.log('No new artist entries to insert.')
-        return 0
+      if (!artistEntries || artistEntries.length === 0) return 0
+      const batchSize = Math.floor(SQLITE_MAX_VARIABLES / 3)
+      const run = async (tx: any) => {
+        for (const batch of chunk(artistEntries, batchSize)) {
+          await tx.insert(artist).values(batch).onConflictDoNothing()
+        }
       }
-
-      await db.insert(artist).values(newArtistEntries)
-      return newArtistEntries.length
+      if (txCtx) await run(txCtx)
+      else await db.transaction(run)
+      return artistEntries.length
     } catch (e) {
       console.error('Failed to upsert artist batch:', e)
       return 0
     }
   },
   async upsertAnimeMusicBatch(
-    animeMusicEntries: NewAnimeMusic[]
+    animeMusicEntries: NewAnimeMusic[],
+    txCtx?: any
   ): Promise<number> {
     try {
-      const existingAnimeMusic = await db
-        .select({
-          animeId: animeMusic.animeId,
-          musicId: animeMusic.musicId,
-        })
-        .from(animeMusic)
-        .where(
-          inArray(
-            animeMusic.musicId,
-            animeMusicEntries.map((am) => am.musicId)
-          )
-        )
-      const existingAnimeMusicIds = new Set(
-        existingAnimeMusic.map((am) => am.musicId)
-      )
-      const newAnimeMusicEntries = animeMusicEntries.filter(
-        (am) => !existingAnimeMusicIds.has(am.musicId)
-      )
-
-      if (newAnimeMusicEntries.length === 0) {
-        console.log('No new anime music entries to insert.')
-        return 0
+      if (!animeMusicEntries || animeMusicEntries.length === 0) return 0
+      const batchSize = Math.floor(SQLITE_MAX_VARIABLES / 4)
+      const run = async (tx: any) => {
+        for (const batch of chunk(animeMusicEntries, batchSize)) {
+          await tx.insert(animeMusic).values(batch).onConflictDoNothing()
+        }
       }
-
-      await db.insert(animeMusic).values(newAnimeMusicEntries)
-
-      return newAnimeMusicEntries.length
+      if (txCtx) await run(txCtx)
+      else await db.transaction(run)
+      return animeMusicEntries.length
     } catch (e) {
       console.error('Failed to upsert anime music batch:', e)
       return 0
     }
   },
   async upsertArtistMediaBatch(
-    artistMediaEntries: NewMedia[]
+    artistMediaEntries: NewMedia[],
+    txCtx?: any
   ): Promise<number> {
     try {
-      const existingMedias = await db
-        .select()
-        .from(media)
-        .where(
-          inArray(
-            media.src,
-            artistMediaEntries.map((m) => m.src)
-          )
-        )
-      const existingMediaSrcs = new Set(existingMedias.map((m) => m.src))
-      const newMediaEntries = artistMediaEntries.filter(
-        (m) => !existingMediaSrcs.has(m.src)
-      )
-      if (newMediaEntries.length === 0) {
-        console.log('No new artist media entries to insert.')
-        return 0
+      if (!artistMediaEntries || artistMediaEntries.length === 0) return 0
+      const batchSize = Math.floor(SQLITE_MAX_VARIABLES / 6)
+      const run = async (tx: any) => {
+        for (const batch of chunk(artistMediaEntries, batchSize)) {
+          await tx.insert(media).values(batch).onConflictDoNothing()
+        }
       }
-
-      await db.insert(media).values(newMediaEntries)
-      return newMediaEntries.length
+      if (txCtx) await run(txCtx)
+      else await db.transaction(run)
+      return artistMediaEntries.length
     } catch (e) {
       console.error('Failed to upsert artist media batch:', e)
       return 0
     }
   },
   async upsertMusicArtistBatch(
-    musicArtistEntries: NewMusicArtist[]
+    musicArtistEntries: NewMusicArtist[],
+    txCtx?: any
   ): Promise<number> {
     try {
-      const existingMusicArtists = await db
-        .select({
-          musicId: musicArtist.musicId,
-          artistId: musicArtist.artistId,
-        })
-        .from(musicArtist)
-
-      const existingSet = new Set(
-        existingMusicArtists.map((e) => `${e.musicId}:${e.artistId}`)
-      )
-
-      const newEntries = musicArtistEntries.filter(
-        (ma) => !existingSet.has(`${ma.musicId}:${ma.artistId}`)
-      )
-
-      if (newEntries.length === 0) {
-        console.log('No new music artist entries to insert.')
-        return 0
+      if (!musicArtistEntries || musicArtistEntries.length === 0) return 0
+      const batchSize = Math.floor(SQLITE_MAX_VARIABLES / 2)
+      const run = async (tx: any) => {
+        for (const batch of chunk(musicArtistEntries, batchSize)) {
+          await tx.insert(musicArtist).values(batch).onConflictDoNothing()
+        }
       }
-
-      await db.insert(musicArtist).values(newEntries)
-
-      return newEntries.length
+      if (txCtx) await run(txCtx)
+      else await db.transaction(run)
+      return musicArtistEntries.length
     } catch (e) {
       console.error('Failed to upsert music artist batch:', e)
       return 0
@@ -243,7 +165,7 @@ export const animeThemesRepository = {
 
   async saveAnimeThemes(
     musicResult: AnimeMusicProcessorResult[]
-  ): Promise<void> {
+  ): Promise<number> {
     const musics: NewMusic[] = []
     const versions: NewMusicVersion[] = []
     const resolutions: NewMusicResolution[] = []
@@ -264,10 +186,14 @@ export const animeThemesRepository = {
       )
 
       // 2️⃣ buscar artistas existentes
-      let existingArtists = await db
-        .select({ id: artist.id, name: artist.name })
-        .from(artist)
-        .where(inArray(artist.name, artistNames))
+      let existingArtists: { id: number; name: string }[] = []
+      for (const batch of chunk(artistNames, SQLITE_MAX_VARIABLES)) {
+        const found = await db
+          .select({ id: artist.id, name: artist.name })
+          .from(artist)
+          .where(inArray(artist.name, batch))
+        existingArtists.push(...found)
+      }
 
       const artistMap = new Map<string, number>()
       for (const a of existingArtists) {
@@ -287,15 +213,15 @@ export const animeThemesRepository = {
         await this.upsertArtistBatch(newArtistEntries)
 
         // volver a consultar para obtener IDs
-        const insertedArtists = await db
-          .select({ id: artist.id, name: artist.name })
-          .from(artist)
-          .where(
-            inArray(
-              artist.name,
-              newArtistEntries.map((a) => a.name)
-            )
-          )
+        let insertedArtists: { id: number; name: string }[] = []
+        const insertedNames = newArtistEntries.map((a) => a.name)
+        for (const batch of chunk(insertedNames, SQLITE_MAX_VARIABLES)) {
+          const found = await db
+            .select({ id: artist.id, name: artist.name })
+            .from(artist)
+            .where(inArray(artist.name, batch))
+          insertedArtists.push(...found)
+        }
 
         for (const a of insertedArtists) {
           artistMap.set(normalizeText(a.name), a.id)
@@ -362,16 +288,24 @@ export const animeThemesRepository = {
     )
 
     // =====================================================
-    // Inserciones (ORDEN CRÍTICO)
+    // Inserciones — 1 sola transacción para todo el save
     // =====================================================
-    await this.upsertMusicBatch(uniqueMusics)
-    await this.upsertMusicVersionsBatch(uniqueMusicVersions)
-    await this.upsertAnimeMusicBatch(uniqueAnimeMusics)
-    await this.upsertMusicResolutionsBatch(uniqueMusicResolutions)
-    await this.upsertMusicArtistBatch(uniqueMusicArtists)
+    await db.transaction(async (tx) => {
+      // Music primero (FK parent)
+      await this.upsertMusicBatch(uniqueMusics, tx)
+      // Children dependen de music, pero no entre sí
+      await this.upsertMusicVersionsBatch(uniqueMusicVersions, tx)
+      await this.upsertAnimeMusicBatch(uniqueAnimeMusics, tx)
+      await this.upsertMusicResolutionsBatch(uniqueMusicResolutions, tx)
+      await this.upsertMusicArtistBatch(uniqueMusicArtists, tx)
+    })
+
+    return uniqueMusics.length
   },
 
-  async saveArtist(artistResults: AnimeArtistProcessorResult[]): Promise<void> {
+  async saveArtist(
+    artistResults: AnimeArtistProcessorResult[]
+  ): Promise<number> {
     const artists: NewArtist[] = []
     const artistMedias: NewMedia[] = []
     const processArtistMedia = async (
@@ -387,15 +321,15 @@ export const animeThemesRepository = {
       if (artistMedia.length === 0) return
       const medias = []
 
-      const artistIds = await db
-        .select({ id: artist.id, name: artist.name })
-        .from(artist)
-        .where(
-          inArray(
-            artist.name,
-            artistMedia.map((am) => am.artistName)
-          )
-        )
+      const artistNames = artistMedia.map((am) => am.artistName)
+      let artistIds: { id: number; name: string }[] = []
+      for (const batch of chunk(artistNames, SQLITE_MAX_VARIABLES)) {
+        const found = await db
+          .select({ id: artist.id, name: artist.name })
+          .from(artist)
+          .where(inArray(artist.name, batch))
+        artistIds.push(...found)
+      }
 
       const artistIdMap = new Map<string, number>()
       for (const a of artistIds) {
@@ -413,15 +347,15 @@ export const animeThemesRepository = {
         await this.upsertArtistBatch(newArtistEntries)
       }
       //Volver a consultar para obtener los IDs
-      const allArtists = await db
-        .select({ id: artist.id, name: artist.name })
-        .from(artist)
-        .where(
-          inArray(
-            artist.name,
-            artistMedia.map((am) => am.artistName)
-          )
-        )
+      const allArtistNames = artistMedia.map((am) => am.artistName)
+      let allArtists: { id: number; name: string }[] = []
+      for (const batch of chunk(allArtistNames, SQLITE_MAX_VARIABLES)) {
+        const found = await db
+          .select({ id: artist.id, name: artist.name })
+          .from(artist)
+          .where(inArray(artist.name, batch))
+        allArtists.push(...found)
+      }
 
       for (const a of allArtists) {
         artistIdMap.set(normalizeText(a.name), a.id)
@@ -458,7 +392,11 @@ export const animeThemesRepository = {
       (m) => `${m.entityId}:${m.entityType}:${m.mediaType}:${m.src}:${m.size}`
     )
 
-    await this.upsertArtistBatch(uniqueArtists)
-    await this.upsertArtistMediaBatch(uniqueArtistMedias)
+    await db.transaction(async (tx) => {
+      await this.upsertArtistBatch(uniqueArtists, tx)
+      await this.upsertArtistMediaBatch(uniqueArtistMedias, tx)
+    })
+
+    return uniqueArtists.length
   },
 }
