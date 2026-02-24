@@ -3,6 +3,7 @@ config()
 
 export const CONFIG = {
   JIKAN_BASE: process.env.JIKAN_BASE || 'https://api.jikan.moe/v4',
+  MAL_BASE: 'https://myanimelist.net',
   TVDB_API_KEY: process.env.TVDB_API_KEY,
   TVDB_BASE: process.env.TVDB_BASE || 'https://api4.thetvdb.com/v4',
   ANIME_THEMES_BASE:
