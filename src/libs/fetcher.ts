@@ -7,6 +7,7 @@ interface FetcherOptions {
   agent?: ProxyAgent
   options?: Record<string, any>
   body?: any
+  isJson?: boolean
 }
 export const fetcher = async <T>({
   url,
@@ -14,6 +15,7 @@ export const fetcher = async <T>({
   headers = {},
   agent,
   body,
+  isJson = true,
 }: FetcherOptions) => {
   const defaultHeaders: Record<string, string> = {
     'User-Agent':
@@ -36,6 +38,9 @@ export const fetcher = async <T>({
     throw new Error(`Api returned ${statusCode}`)
   }
   const text = await responseBody.text()
+  if (!isJson) {
+    return text as T
+  }
   const data = JSON.parse(text)
 
   return data as T
