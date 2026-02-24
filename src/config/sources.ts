@@ -2,9 +2,9 @@ import type { SourceConfig } from 'types/index.js'
 export const SOURCES: SourceConfig[] = [
   {
     name: 'jikan',
-    maxWorkers: 2,
+    maxWorkers: 1,
     pageBatch: 40,
-    rateLimit: { perSecond: 1, perMinute: 40 },
+    rateLimit: { perSecond: 1, perMinute: 60 },
     deduplicateBy: 'mal_id',
     tasks: {
       anime_page_hydration: { entity: 'anime', extractPage: true },
@@ -70,9 +70,7 @@ export const SOURCES: SourceConfig[] = [
   },
 ]
 
-export function capitalize(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1)
-}
+export { capitalize } from '../shared/parsers.js'
 
 export function getSourceConfig(sourceName: string) {
   const config = SOURCES.find((s) => s.name === sourceName)
