@@ -1,7 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads'
 import { ProxyAgent } from 'undici'
 import { createRateLimiter } from '../utils/rateLimit.js'
-import { capitalize } from '../config/sources.js'
+import { capitalize } from '../shared/parsers.js'
 import type { WorkerMessage } from 'types/index.js'
 
 const { workerId, tasks, proxy, sourceName, sourceConfig } = workerData
