@@ -108,10 +108,28 @@ export interface SourceConfig {
     }
   }
 }
+export type ProcessorResult =
+  | AnimeProcessorResult
+  | CharacterProcessorResult
+  | StaffProcessorResult
+  | ProducerProcessorResult
+  | AnimeRelationsProcessorResult
+  | AnimeCharactersProcessorResult
+  | AnimeStaffProcessorResult
+  | ArtworksProcessorResult
+  | AnimeMusicProcessorResult
+  | AnimeArtistProcessorResult
+  | AnimeExternalIdsProcessorResult
+  | EpisodeProcessorResult
+
 export interface BufferedTask {
   taskId: number
   taskType: string
-  data: any
+  data: ProcessorResult | ProcessorResult[]
+}
+
+export interface SourceRepository {
+  [key: `save${string}`]: (items: ProcessorResult[]) => Promise<number | undefined>
 }
 
 export interface ScrapingTask {
@@ -166,7 +184,7 @@ export interface WorkerMessage {
   entity?: string
   taskId: number
   error?: string
-  data?: any
+  data?: ProcessorResult | ProcessorResult[]
   proxyUrl?: string
 }
 
