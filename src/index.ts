@@ -37,7 +37,7 @@ async function main() {
     process.exit(1)
   }
 }
-main()
+await main()
   .then(() => {
     process.exit(0)
   })
