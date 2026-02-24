@@ -1,3 +1,4 @@
+import type { ProxyAgent } from 'undici'
 import { taskRepository } from '../repositories/tasks.js'
 import {
   fetchAnimePage,
@@ -5,6 +6,7 @@ import {
   fetchProducerPage,
   fetchStaffPage,
 } from '../services/jikan.js'
+import type { DataType, JikanResponse } from 'types/jikanApi.js'
 
 const ENTITY_CONFIGS = [
   {
@@ -31,7 +33,10 @@ const ENTITY_CONFIGS = [
 
 const fetchEntityMetadata = async (config: {
   name: string
-  fetchFunction: (page: number, agent?: any) => Promise<any>
+  fetchFunction: (
+    page: number,
+    agent?: ProxyAgent
+  ) => Promise<JikanResponse<DataType>>
   taskType: string
 }) => {
   const json = await config.fetchFunction(1)
