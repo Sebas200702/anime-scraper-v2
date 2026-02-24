@@ -16,6 +16,9 @@ export interface Items {
   per_page: number
 }
 
+export type DataType = Anime | Character | Staff | Producer
+
+
 export interface Anime {
   mal_id: number
   url: string
