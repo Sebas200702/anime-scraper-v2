@@ -11,10 +11,14 @@
 >
 > **Estrategia de fill/refresh**: `docs/fill-and-refresh-strategy.md`.
 >
-> **Estado**: planeación cerrada 2026-10-15. **Fase 0 implementada** en
-> `fix/fetcher-safe-writes` (build verde + fetcher verificado con servidor
-> mock); falta la corrida de humo de 1.000 tareas, que requiere `.env` y
-> proxies reales. Fase 1 pendiente.
+> **Estado**: planeación cerrada 2026-10-15. **Fase 0** implementada
+> (`fix/fetcher-safe-writes`) y **Fase 1 · PR1** implementado
+> (`fix/fetcher-resilience`: clasificación tipada, backoff + jitter,
+> `Retry-After`, timeouts separados headers/body y sniff de challenge, con
+> 36 tests en `bun test` y CI en `.github/workflows/ci.yml`).
+> **Hallazgo nuevo H-17**: bajo Bun los proxies **no se usan** (`ProxyAgent` es
+> un stub) — PR2 queda bloqueado por la decisión de transporte.
+> Falta la corrida de humo de 1.000 tareas (requiere `.env` y proxies reales).
 
 ---
 
@@ -51,6 +55,7 @@
 | H-14 | `ANIME_THEMES_BASE` usa `_next/data/{buildId}` con buildId hardcodeado | `config/config.ts` | Rota en cada deploy de animethemes.moe → 404 masivo |
 | H-15 | Cero tests, README stub, sin `.env.example`, `proxies.json` (100 proxies) commiteado, `workerPath` hardcodeado a `./dist/...` | repo | No se puede correr en local ni verificar cambios |
 | H-16 | **El repo no compilaba**: `src/processors/mal/*` importa `cheerio`, que nunca estuvo en `package.json` (el path MAL es código muerto: no hay source `mal` en `SOURCES`); y `tsc` emite `dist/` igual porque no hay `noEmitOnError` | `src/processors/mal/animeDetails.ts:1`; `package.json`; `src/scripts/mal-test.ts` (único consumidor) | Build "verde" engañoso: `dist/` se genera con errores de tipo |
+| H-17 | **Los proxies no se usan en runtime**: Bun resuelve `undici` a su implementación, donde `ProxyAgent` es un stub (`class ProxyAgent extends DispatcherBase { constructor() { super(); } }`) que ignora la URL; los `headersTimeout`/`bodyTimeout` de undici también podrían ignorarse | probe verificado en Bun 1.4.2 (proxy nunca recibe la request; `ENOTFOUND` directo) vs Node 26 con undici real (sí proxya, vía CONNECT) | **Todas las requests salen por la IP local** → 429 y bloqueos garantizados con 80 workers; con H-06 explica por qué "el pool nunca aprende": nunca se usó. Fase 0 (menos workers) es hoy la única mitigación efectiva |
 
 ---
 
@@ -121,9 +126,26 @@ sin esperar al refactor. Todo config + ~50 líneas.
 - **Tests** (`bun test` + mock server `node:http`): matriz de clasificación,
   `Retry-After`, timeout, HTML sniff, no-retry en 404.
 - **Criterio**: matriz cubierta + humo de 1k con la config de Fase 0 sin 429.
+- **Nota**: `agent` se pasa a undici; bajo Bun es un no-op (H-17) y el fetcher
+  ahora lo **avisa** en vez de fallar en silencio.
+- **Deuda declarada (revisión de PR1)**: el peor caso de una tarea con proxy
+  muerto puede estirarse a ~9 min (3 intentos × 30s × estrategias de
+  `mapWithRetry`); PR2 lo acota con presupuesto por tarea (el fetcher ya acepta
+  `signal`). `retryAfterMs` viaja sin tope en el error (el delay sí se acota):
+  el rate gate de PR2 debe acotarlo al pausar por host. 502/504 quedan
+  `transient` sin marca de proxy y 451 `blocked` con culpa al proxy: decidir
+  antes de PR3. `body.text()` sin cap de tamaño: se resuelve al mover el fetch
+  al padre (PR2).
 
 ### PR2 — `feat/rate-gate` (Opción A, D-S1)
 
+- **Transporte (bloqueante, H-17)**: decidir y verificar **cómo salen las
+  requests por proxy** antes de construir el rate gate encima: (a) correr el
+  proceso bajo **Node** con el `undici` real (ProxyAgent + CONNECT funciona), o
+  (b) quedarse en Bun y usar el proxy nativo de Bun
+  (`fetch(url, { proxy })`, verificado: sí proxya). Criterio: test de
+  integración con un proxy local que reciba la request (marker) en el runtime
+  elegido.
 - **Inversión**: el padre fetchea (bucket global por host + proxies por request
   + retries centralizados); el worker solo mapea `{task, rawText} → data`.
 - `core/rateGate.ts`: token bucket por host `{ perSecond, perMinute, burst }`,
@@ -203,11 +225,11 @@ sin esperar al refactor. Todo config + ~50 líneas.
 ```bash
 bun install
 bun run build            # tsc + tsc-alias (workerPath vive en dist/)
-bun test                 # bun:test + mock server (desde PR1)
+bun test                 # bun:test + mock server (23 tests: fetcher + sanitizeError)
 bun run start <source>   # smoke manual contra el stack local
 ```
 
-- CI (GitHub Actions) desde PR1: typecheck + tests, sin acceso a fuentes reales.
+- CI (`.github/workflows/ci.yml`): `bun install --frozen-lockfile` → `bun run build` → `bun test`, sin acceso a fuentes reales.
 - Fase 2+: los tests de cola corren contra Postgres local (compose de anidev).
 - Humo estándar: 1.000 tareas del source que toque, medir 429/block-rate,
   tareas colgadas y pérdidas de escritura.
