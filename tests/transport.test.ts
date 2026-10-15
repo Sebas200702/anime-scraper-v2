@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { fetcher } from '../src/libs/fetcher.js'
-import { normalizeProxy } from '../src/libs/transport.js'
+import { isSocksProxy, normalizeProxy } from '../src/libs/transport.js'
 
 describe('normalizeProxy', () => {
   test('agrega esquema a ip:port y quita la barra final', () => {
@@ -39,9 +39,30 @@ describe('normalizeProxy', () => {
     expect(normalizeProxy('1.2.3.4')).toBeNull()
     expect(normalizeProxy('no es una url')).toBeNull()
   })
+
+  test('detecta los esquemas SOCKS (no soportados por Bun)', () => {
+    expect(isSocksProxy('socks5://1.2.3.4:1080')).toBe(true)
+    expect(isSocksProxy('socks5h://1.2.3.4:1080')).toBe(true)
+    expect(isSocksProxy('socks4://1.2.3.4:1080')).toBe(true)
+    expect(isSocksProxy('http://1.2.3.4:8080')).toBe(false)
+  })
 })
 
 describe('transporte con proxy', () => {
+  test('un proxy SOCKS falla con un mensaje claro (no sale directo)', async () => {
+    let message = ''
+    try {
+      await fetcher({
+        url: 'http://ingest-proxy-check.invalid/ok',
+        agent: 'socks5://127.0.0.1:1080',
+        retry: { maxAttempts: 1 },
+      })
+    } catch (error) {
+      message = String((error as Error).message)
+    }
+    expect(message).toContain('Unsupported proxy scheme')
+    expect(message).toContain('socks5')
+  })
   test.skipIf(!process.versions.bun)(
     'la request sale POR el proxy (no directa)',
     async () => {

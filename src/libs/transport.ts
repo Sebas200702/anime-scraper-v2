@@ -29,6 +29,22 @@ export interface TransportResponse {
 }
 
 const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i
+const SOCKS_SCHEME = /^socks(4|4a|5|5h)?:\/\//i
+
+/**
+ * Bun solo enruta proxies HTTP/HTTPS en `fetch(url, { proxy })`: un
+ * `socks5://` se ignoraría en silencio (mismo tipo de fallo que H-17), así que
+ * se rechaza explícitamente.
+ */
+export const isSocksProxy = (target: string): boolean =>
+  SOCKS_SCHEME.test(target)
+
+const assertSupportedProxy = (proxy: ProxyTarget | undefined): void => {
+  if (typeof proxy !== 'string' || !isSocksProxy(proxy)) return
+  throw new Error(
+    `Unsupported proxy scheme for ${proxy}: usa el endpoint HTTP/HTTPS del proveedor, o corre con Node (undici Socks5ProxyAgent), o puentea con gost/microsocks`
+  )
+}
 
 /**
  * Normaliza una entrada de listado a URL de proxy.
@@ -89,6 +105,7 @@ const sendWithFetch = async ({
   proxy,
   signal,
 }: TransportRequest): Promise<TransportResponse> => {
+  assertSupportedProxy(proxy)
   // Un ProxyAgent bajo Bun es un stub: avisar en vez de fingir que proxya.
   if (proxy && typeof proxy !== 'string') warnIfProxyIgnored(proxy)
 
@@ -116,6 +133,7 @@ const sendWithUndici = async ({
   bodyTimeoutMs,
   signal,
 }: TransportRequest): Promise<TransportResponse> => {
+  assertSupportedProxy(proxy)
   const dispatcher = typeof proxy === 'string' ? agentFor(proxy) : proxy
 
   const response = await request(url, {

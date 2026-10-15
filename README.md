@@ -39,7 +39,16 @@ Formatos aceptados en `proxies.json` (array de strings; ver
 
 - `ip:port`
 - `user:pass@ip:port`
-- `http://host:port`, `https://host:port`, `socks5://host:port`
+- `http://host:port`, `https://host:port`
+
+**SOCKS no está soportado**: Bun solo enruta proxies HTTP/HTTPS en
+`fetch(url, { proxy })` (un `socks5://` se ignoraría en silencio), así que el
+transporte lo **rechaza con un mensaje explícito**. Si tu proveedor solo ofrece
+SOCKS, usa su endpoint HTTP/HTTPS, puentea con `gost`/`microsocks`, o corre bajo
+Node (undici `Socks5ProxyAgent`).
+
+Ojo también con `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` en el entorno: **Bun las
+lee automáticamente** y toda request saldría por ahí (ignora valores `socks`).
 
 `proxies.json` está **fuera del control de versiones** porque puede llevar
 credenciales.
