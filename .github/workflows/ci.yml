@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    name: build + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Fijado a la versión que generó bun.lock (reproducibilidad).
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck (src + tests)
+        run: bunx tsc -p tsconfig.test.json
+
+      - name: Build
+        run: bun run build
+
+      - name: Tests
+        run: bun test
