@@ -27,6 +27,12 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .cache
 *jsbuildinfo
 
+# listas generadas por el harvester de proxies
+proxies.verified.json
+
+# proxies reales (pueden llevar credenciales); usa proxies.example.json
+proxies.json
+
 # IntelliJ based IDEs
 .idea
 

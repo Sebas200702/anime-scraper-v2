@@ -55,7 +55,9 @@
 | H-14 | `ANIME_THEMES_BASE` usa `_next/data/{buildId}` con buildId hardcodeado | `config/config.ts` | Rota en cada deploy de animethemes.moe → 404 masivo |
 | H-15 | Cero tests, README stub, sin `.env.example`, `proxies.json` (100 proxies) commiteado, `workerPath` hardcodeado a `./dist/...` | repo | No se puede correr en local ni verificar cambios |
 | H-16 | **El repo no compilaba**: `src/processors/mal/*` importa `cheerio`, que nunca estuvo en `package.json` (el path MAL es código muerto: no hay source `mal` en `SOURCES`); y `tsc` emite `dist/` igual porque no hay `noEmitOnError` | `src/processors/mal/animeDetails.ts:1`; `package.json`; `src/scripts/mal-test.ts` (único consumidor) | Build "verde" engañoso: `dist/` se genera con errores de tipo |
-| H-17 | **Los proxies no se usan en runtime**: Bun resuelve `undici` a su implementación, donde `ProxyAgent` es un stub (`class ProxyAgent extends DispatcherBase { constructor() { super(); } }`) que ignora la URL; los `headersTimeout`/`bodyTimeout` de undici también podrían ignorarse | probe verificado en Bun 1.4.2 (proxy nunca recibe la request; `ENOTFOUND` directo) vs Node 26 con undici real (sí proxya, vía CONNECT) | **Todas las requests salen por la IP local** → 429 y bloqueos garantizados con 80 workers; con H-06 explica por qué "el pool nunca aprende": nunca se usó. Fase 0 (menos workers) es hoy la única mitigación efectiva |
+| H-17 | **Los proxies no se usaban en runtime**: Bun resuelve `undici` a su implementación, donde `ProxyAgent` es un stub (`class ProxyAgent extends DispatcherBase { constructor() { super(); } }`) que ignora la URL. **Matiz verificado**: el proxy nativo de Bun (`fetch(url, { proxy })`) **sí enruta** (CONNECT incluido) y Node + undici real también; solo el shim de `ProxyAgent` bajo Bun es un no-op | probes con proxies reales: Node y Bun-fetch reciben el `407` **del proxy** (prueba de ruteo), Bun+`ProxyAgent` sale directo por la IP local | Todas las requests salían por la IP local → 429 y bloqueos con 80 workers; explica por qué "el pool nunca aprende" (H-06): nunca se usó. Fase 0 (menos workers) fue la única mitigación efectiva |
+| H-18 | **Los proxies de `proxies.json` exigen credenciales**: los 4 muestreados responden `407 Proxy Authentication Required` (y el archivo solo tiene `ip:port`) | probe contra `api.ipify.org` y Jikan con 4 proxies del listado | Sin `user:pass` (o whitelisting por IP del proveedor) **ninguna corrida puede salir por proxy**: el bloqueo de H-17 se vuelve irrelevante hasta tener proxies autenticados |
+| H-19 | **Los proxies libres no sirven para este catálogo, medido**: el harvester propio probó 200 candidatos de 5 listas públicas auto-verificadas → 26 vivos (13%), 43 transparentes (devolvían la IP local) y **0 de 26** pasaron una request JSON real (11 devolvieron body no-JSON, 8 network, 5 timeout, 2 transient). Control: el objetivo directo respondía OK (Kitsu; Jikan no es alcanzable desde el sandbox por TCP) | `src/scripts/probeProxies.ts`, tres corridas (150/300/200 candidatos) | Cierra la vía "proxies gratis": o proveedor autenticado, o IP única con rate-limit honesto. El harvester queda como herramienta de re-probe (PR3) |
 
 ---
 
@@ -139,13 +141,13 @@ sin esperar al refactor. Todo config + ~50 líneas.
 
 ### PR2 — `feat/rate-gate` (Opción A, D-S1)
 
-- **Transporte (bloqueante, H-17)**: decidir y verificar **cómo salen las
-  requests por proxy** antes de construir el rate gate encima: (a) correr el
-  proceso bajo **Node** con el `undici` real (ProxyAgent + CONNECT funciona), o
-  (b) quedarse en Bun y usar el proxy nativo de Bun
-  (`fetch(url, { proxy })`, verificado: sí proxya). Criterio: test de
-  integración con un proxy local que reciba la request (marker) en el runtime
-  elegido.
+- **Transporte (bloqueante, H-17)**: usar un transporte que **realmente enrute**
+  por proxy: `fetch(url, { proxy })` nativo de Bun (verificado con proxies
+  reales) o, bajo Node, `undici` real (ProxyAgent + CONNECT). El shim de
+  `ProxyAgent` bajo Bun queda prohibido en el camino crítico.
+- **Credenciales de proxy (H-18)**: aceptar `user:pass@ip:port` (y
+  `PROXY_USER`/`PROXY_PASS` por env) al normalizar el listado; los proxies
+  actuales responden 407 sin credenciales.
 - **Inversión**: el padre fetchea (bucket global por host + proxies por request
   + retries centralizados); el worker solo mapea `{task, rawText} → data`.
 - `core/rateGate.ts`: token bucket por host `{ perSecond, perMinute, burst }`,
@@ -241,7 +243,7 @@ bun run start <source>   # smoke manual contra el stack local
 | Riesgo | Mitigación |
 |---|---|
 | **`failed` es terminal (H-09)**: un fallo transitorio de escritura se vuelve un hueco permanente (el inicializador salta los entityIds existentes, `failed` incluidos) | Deuda explícita de Fase 0: el fallo queda visible con `error` y la corrida no se cuelga; la Fase 2 lo cierra con `dead_letter` + retry por `attempts` + re-arm por política |
-| Los 100 proxies pueden estar quemados y el pool real ser pequeño | El re-probe de PR3 da la verdad medible; plan B: proveedor con rotación por request |
+| Los 100 proxies de `proxies.json` responden **407** (H-18) | El usuario aporta proxies autenticados; el código acepta `user:pass@ip:port` y `PROXY_USER`/`PROXY_PASS` |
 | Límites reales de Jikan/Kitsu cambian sin aviso | Buckets configurables por env + métrica de block-rate (D.3) |
 | Kitsu episodios es el cuello real de la cobertura | Modo B acotado a `airing` + broadcast day; números en la estrategia de fill |
 | Promoción mal ordenada rompe FKs | Validación referencial previa + transacción + rollback (Track D, D.0) |

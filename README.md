@@ -27,6 +27,42 @@ source. Sources disponibles: `jikan`, `jikanRelations`, `animeThemes`,
 El worker se carga desde `dist/` (`./dist/src/core/genericWorker.js`), por eso
 `bun run build` es obligatorio antes de `start`.
 
+## Proxies
+
+El transporte acepta la **URL** del proxy: enruta bajo Bun con
+`fetch(url, { proxy })` y bajo Node con el `undici` real. El `ProxyAgent` de
+undici **no funciona bajo Bun** (su shim lo ignora, hallazgo H-17), así que el
+worker pasa la URL, no un agent.
+
+Formatos aceptados en `proxies.json` (array de strings; ver
+`proxies.example.json`):
+
+- `ip:port`
+- `user:pass@ip:port`
+- `http://host:port`, `https://host:port`, `socks5://host:port`
+
+`proxies.json` está **fuera del control de versiones** porque puede llevar
+credenciales.
+
+Credenciales globales para proxies que no las traen: `PROXY_USER` / `PROXY_PASS`.
+
+Verificar candidatos (descarga listas públicas, mide liveness, IP de egreso y
+una request real; escribe `proxies.verified.json`):
+
+```bash
+bun run proxies:probe --limit 200 --concurrency 40
+bun run proxies:probe --from ./proxies.txt --check-url https://kitsu.io/api/edge/anime/1
+```
+
+> ⚠️ Las listas públicas son de operadores desconocidos: úsalas solo contra
+> fuentes **sin credenciales** (Jikan, Kitsu, AnimeThemes). Nunca mandes el token
+> de TVDB por un proxy libre, y valida el payload antes de escribirlo al catálogo
+> (pueden inyectar datos).
+>
+> Medición 2026-10-15: de 200 candidatos de 5 listas auto-verificadas, 26 vivos
+> (13%) y **0** pasaron una request JSON real; 11 de ellos devolvieron un body
+> modificado. Los proxies libres no son una base viable para este catálogo.
+
 ## Límites de fuentes (Fase 0)
 
 El limiter actual es **por worker**, así que la tasa efectiva es
