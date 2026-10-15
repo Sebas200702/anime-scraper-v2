@@ -11,7 +11,8 @@
   "scripts": {
     "build": "tsc --project tsconfig.json && tsc-alias --project tsconfig.json ",
     "start": "bun dist/src/index.js",
-    "test": "bun test"
+    "test": "bun test",
+    "proxies:probe": "bun src/scripts/probeProxies.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
