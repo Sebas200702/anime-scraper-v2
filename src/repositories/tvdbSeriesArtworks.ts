@@ -17,8 +17,10 @@ export const tvdbSeriesArtworksRepository = {
       })
       return tvdbSeriesArtworkEntries.length
     } catch (e) {
+      // Re-lanzar (ver `saveData`): un fallo de escritura no puede contar como
+      // tarea completada.
       console.error('Failed to upsert TVDB series artworks batch:', e)
-      return 0
+      throw e
     }
   },
   async saveTvdbSeriesArtworks(

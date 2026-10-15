@@ -3,6 +3,7 @@ import { taskRepository } from '../repositories/tasks.js'
 import { StatsReporter } from './statsReporter.js'
 import { proxyManager } from './proxyManager.js'
 import { capitalize } from '../shared/parsers.js'
+import { sanitizeError } from '../utils/sanitizeError.js'
 import type {
   ProxyState,
   ScrapingTask,
@@ -178,7 +179,12 @@ export class GenericManager extends BaseWorkerManager {
   // --- Buffering & Saving ---
 
   async processWorkerData(taskId: number, taskType: string, data: any) {
-    if (!data) return
+    // Un processor sin resultados no es un fallo: la tarea se completa con 0
+    // items (antes quedaba `in_progress` hasta el próximo arranque).
+    if (!data) {
+      await taskRepository.markTaskCompleted(taskId)
+      return
+    }
     if (!this.bufferByTaskType.has(taskType))
       this.bufferByTaskType.set(taskType, [])
     this.bufferByTaskType.get(taskType)!.push({ taskId, taskType, data })
@@ -192,9 +198,9 @@ export class GenericManager extends BaseWorkerManager {
 
     this.savingByTaskType.add(taskType)
     try {
+      // `saveData` no propaga fallos de escritura (marca las tareas `failed`).
+      // Sin catch a propósito: tragarse el error sería perder el lote.
       await this.saveData(buffer.splice(0, this.pageBatch))
-    } catch (error) {
-      console.error('Error saving batch:', error)
     } finally {
       this.savingByTaskType.delete(taskType)
     }
@@ -209,6 +215,10 @@ export class GenericManager extends BaseWorkerManager {
       try {
         while (buffer.length > 0)
           await this.saveData(buffer.splice(0, this.pageBatch))
+      } catch (error) {
+        // Un tipo que falle no puede abortar el volcado de los demás ni dejar
+        // `resolveCompletion` sin llamar (eso colgaría la corrida entera).
+        console.error(`Error flushing ${taskType}:`, error)
       } finally {
         this.savingByTaskType.delete(taskType)
       }
@@ -219,7 +229,6 @@ export class GenericManager extends BaseWorkerManager {
     if (batch.length === 0) return
     const first = batch[0]
     if (!first) return
-    const repository = await this.getRepository()
     const taskConfig = this.sourceConfig?.tasks[first.taskType]
     const entity = capitalize(taskConfig?.entity || '')
     const saveFnName = `save${entity}`
@@ -227,13 +236,34 @@ export class GenericManager extends BaseWorkerManager {
     const items = batch.flatMap((b) =>
       Array.isArray(b.data) ? b.data : [b.data]
     )
-    const totalSaved = (await repository[saveFnName](items)) ?? items.length
+    const taskIds = batch.map((b) => b.taskId)
 
-    await taskRepository.markTasksCompleted(batch.map((b) => b.taskId))
-    this.reporter.recordSaved(entity, totalSaved, batch.length)
-    console.log(
-      `💾 Saved ${totalSaved} ${entity}(s) from ${batch.length} task(s)`
-    )
+    try {
+      const repository = await this.getRepository()
+      const totalSaved = (await repository[saveFnName](items)) ?? items.length
+      await taskRepository.markTasksCompleted(taskIds)
+      this.reporter.recordSaved(entity, totalSaved, batch.length)
+      console.log(
+        `💾 Saved ${totalSaved} ${entity}(s) from ${batch.length} task(s)`
+      )
+    } catch (error: any) {
+      // Una escritura fallida NO puede marcar la tarea como completada: eso
+      // sería pérdida silenciosa de datos.
+      const reason = sanitizeError(error?.message)
+      this.reporter.incrementErrors(batch.length)
+      console.error(`❌ Failed to save ${batch.length} ${entity}(s): ${reason}`)
+      try {
+        await taskRepository.markTasksFailed(taskIds, reason)
+      } catch (markError) {
+        // Si ni marcar el fallo se puede (DB caída), es preferible dejar las
+        // tareas `in_progress`: el próximo arranque las re-encola. Propagar
+        // aquí colgaría la corrida.
+        console.error(
+          `Could not mark ${taskIds.length} task(s) as failed:`,
+          markError
+        )
+      }
+    }
   }
 
   override printStats() {

@@ -12,6 +12,7 @@ import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
  * @param label - Label for error logging
  * @param txCtx - Optional transaction context for nested transactions
  * @returns Number of items upserted
+ * @throws When the batch fails, so callers never confirm a lost write.
  */
 export async function batchUpsert<T extends Record<string, unknown>>(
   table: SQLiteTable,
@@ -40,6 +41,6 @@ export async function batchUpsert<T extends Record<string, unknown>>(
     return items.length
   } catch (error) {
     console.error(`Failed to upsert ${label}:`, error)
-    return 0
+    throw error
   }
 }

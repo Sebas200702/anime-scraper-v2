@@ -27,14 +27,13 @@ export class StatsReporter {
     this.stats.tasksProcessed++
   }
 
-  incrementErrors() {
-    this.stats.tasksErrors++
+  incrementErrors(count = 1) {
+    this.stats.tasksErrors += count
   }
 
   recordSaved(entity: string, count: number, taskCount: number) {
     this.stats.tasksCompleted += taskCount
-    this.stats.itemsSaved[entity] =
-      (this.stats.itemsSaved[entity] ?? 0) + count
+    this.stats.itemsSaved[entity] = (this.stats.itemsSaved[entity] ?? 0) + count
   }
 
   print() {

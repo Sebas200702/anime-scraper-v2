@@ -88,7 +88,13 @@ export class BaseWorkerManager {
       workerData,
     })
 
-    worker.on('message', (msg) => this.handleWorkerMessage(id, msg))
+    // Un rechazo del handler sin capturar colgaría la corrida (el listener
+    // descarta la promesa): se loguea explícitamente.
+    worker.on('message', (msg) => {
+      this.handleWorkerMessage(id, msg).catch((err) =>
+        console.error(`Worker ${id} message handler error:`, err)
+      )
+    })
     worker.on('error', (err) => this.handleWorkerError(id, err))
 
     this.workers.push(worker)

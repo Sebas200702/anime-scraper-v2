@@ -18,8 +18,10 @@ export const animeEpisodesRepository = {
       })
       return episodeEntries.length
     } catch (e) {
+      // Re-lanzar para que el manager marque la tarea `failed` y no
+      // `completed`: devolver 0 en silencio equivale a perder episodios.
       console.error('Failed to upsert anime episodes batch:', e)
-      return 0
+      throw e
     }
   },
 

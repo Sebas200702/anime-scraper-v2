@@ -20,8 +20,10 @@ export const animeMappingRepository = {
       })
       return animeExternalIdEntries.length
     } catch (e) {
+      // Re-lanzar (ver `saveData`): un fallo de escritura no puede contar como
+      // tarea completada.
       console.error('Failed to upsert anime external ids batch:', e)
-      return 0
+      throw e
     }
   },
   async saveAnimeMapping(

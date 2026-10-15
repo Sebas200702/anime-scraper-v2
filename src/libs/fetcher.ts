@@ -8,7 +8,16 @@ interface FetcherOptions {
   options?: Record<string, any>
   body?: any
   isJson?: boolean
+  /** Wall-clock budget for the whole request (headers + body). */
+  timeoutMs?: number
 }
+
+const DEFAULT_TIMEOUT_MS = 30_000
+const BODY_SNIPPET_LENGTH = 200
+
+const snippet = (text: string) =>
+  text.replace(/\s+/g, ' ').trim().slice(0, BODY_SNIPPET_LENGTH)
+
 export const fetcher = async <T>({
   url,
   method = 'GET',
@@ -16,6 +25,7 @@ export const fetcher = async <T>({
   agent,
   body,
   isJson = true,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 }: FetcherOptions) => {
   const defaultHeaders: Record<string, string> = {
     'User-Agent':
@@ -31,17 +41,42 @@ export const fetcher = async <T>({
     headers: mergedHeaders,
     body,
     ...(agent ? { dispatcher: agent } : {}),
+    // Sin timeout, un proxy colgado bloquea la tarea para siempre y la corrida
+    // nunca termina. La clasificación fina (429 / blocked / timeout) llega en
+    // la Fase 1.
+    signal: AbortSignal.timeout(timeoutMs),
   }
-  const { body: responseBody, statusCode } = await request(url, fetchOptions)
+  const read = async () => {
+    try {
+      const response = await request(url, fetchOptions)
+      const text = await response.body.text()
+      return { statusCode: response.statusCode, text }
+    } catch (error: any) {
+      // El abort de `AbortSignal.timeout` llega sin URL ni status: sin esto el
+      // log de un proxy colgado es indescifrable.
+      if (error?.name === 'TimeoutError' || error?.code === 'UND_ERR_ABORTED') {
+        throw new Error(`Timeout after ${timeoutMs}ms for ${url}`)
+      }
+      throw error
+    }
+  }
+
+  const { statusCode, text } = await read()
 
   if (statusCode >= 400) {
-    throw new Error(`Api returned ${statusCode}`)
+    throw new Error(`Api returned ${statusCode} for ${url}: ${snippet(text)}`)
   }
-  const text = await responseBody.text()
   if (!isJson) {
     return text as T
   }
-  const data = JSON.parse(text)
 
-  return data as T
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    // Un body que no es JSON (HTML de challenge, error de CDN) se reporta con
+    // evidencia en vez de reventar en una excepción de parse sin contexto.
+    throw new Error(
+      `Invalid JSON (${statusCode}) from ${url}: ${snippet(text)}`
+    )
+  }
 }

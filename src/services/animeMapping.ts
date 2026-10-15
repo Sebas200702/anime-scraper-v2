@@ -4,9 +4,11 @@ import { createRateLimiter } from '../utils/rateLimit.js'
 import type { ScrapingTask } from 'types/index.js'
 import type { ProxyAgent } from 'undici'
 
-// Scaled by concurrency — each concurrent task uses a different proxy/IP
-const kitsuLimiter = createRateLimiter(4, 200)
-const tvdbLimiter = createRateLimiter(4, 200)
+// Fase 0: los limiters de módulo son **por worker** (cada thread importa su
+// propia copia), así que se alinean con la cuota de Kitsu (60/min) en vez de
+// escalarlos por concurrencia. La Fase 1 los reemplaza por un bucket global.
+const kitsuLimiter = createRateLimiter(1, 50)
+const tvdbLimiter = createRateLimiter(1, 50)
 
 export const fetchAnimeMapping = async (
   task: ScrapingTask,
