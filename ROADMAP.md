@@ -13,12 +13,11 @@
 >
 > **Estado**: planeación cerrada 2026-10-15. **Fase 0** implementada
 > (`fix/fetcher-safe-writes`) y **Fase 1 · PR1** implementado
-> (`fix/fetcher-resilience`: clasificación tipada, backoff + jitter,
-> `Retry-After`, timeouts separados headers/body y sniff de challenge, con
-> 36 tests en `bun test` y CI en `.github/workflows/ci.yml`).
-> **Hallazgo nuevo H-17**: bajo Bun los proxies **no se usan** (`ProxyAgent` es
-> un stub) — PR2 queda bloqueado por la decisión de transporte.
-> Falta la corrida de humo de 1.000 tareas (requiere `.env` y proxies reales).
+> (`fix/fetcher-resilience`) más el transporte de proxies (H-17/H-20/H-21) y el
+> harvester + modo backfill. **Proxies: 100/100 verificados** (trial de
+> ProxyScrape) y `proxies.json` activo; falta medir contra **Jikan desde el
+> VPS** (este sandbox no alcanza `api.jikan.moe`).
+> Falta la corrida de humo de 1.000 tareas.
 
 ---
 
@@ -57,8 +56,9 @@
 | H-16 | **El repo no compilaba**: `src/processors/mal/*` importa `cheerio`, que nunca estuvo en `package.json` (el path MAL es código muerto: no hay source `mal` en `SOURCES`); y `tsc` emite `dist/` igual porque no hay `noEmitOnError` | `src/processors/mal/animeDetails.ts:1`; `package.json`; `src/scripts/mal-test.ts` (único consumidor) | Build "verde" engañoso: `dist/` se genera con errores de tipo |
 | H-17 | **Los proxies no se usaban en runtime**: Bun resuelve `undici` a su implementación, donde `ProxyAgent` es un stub (`class ProxyAgent extends DispatcherBase { constructor() { super(); } }`) que ignora la URL. **Matiz verificado**: el proxy nativo de Bun (`fetch(url, { proxy })`) **sí enruta** (CONNECT incluido) y Node + undici real también; solo el shim de `ProxyAgent` bajo Bun es un no-op | probes con proxies reales: Node y Bun-fetch reciben el `407` **del proxy** (prueba de ruteo), Bun+`ProxyAgent` sale directo por la IP local | Todas las requests salían por la IP local → 429 y bloqueos con 80 workers; explica por qué "el pool nunca aprende" (H-06): nunca se usó. Fase 0 (menos workers) fue la única mitigación efectiva |
 | H-18 | **Los proxies de `proxies.json` exigen credenciales**: los 4 muestreados responden `407 Proxy Authentication Required` (y el archivo solo tiene `ip:port`) | probe contra `api.ipify.org` y Jikan con 4 proxies del listado | Sin `user:pass` (o whitelisting por IP del proveedor) **ninguna corrida puede salir por proxy**: el bloqueo de H-17 se vuelve irrelevante hasta tener proxies autenticados |
-| H-19 | **Los proxies libres no sirven para este catálogo, medido**: el harvester propio probó 200 candidatos de 5 listas públicas auto-verificadas → 26 vivos (13%), 43 transparentes (devolvían la IP local) y **0 de 26** pasaron una request JSON real (11 devolvieron body no-JSON, 8 network, 5 timeout, 2 transient). Control: el objetivo directo respondía OK (Kitsu; Jikan no es alcanzable desde el sandbox por TCP) | `src/scripts/probeProxies.ts`, tres corridas (150/300/200 candidatos) | Cierra la vía "proxies gratis": o proveedor autenticado, o IP única con rate-limit honesto. El harvester queda como herramienta de re-probe (PR3) |
+| H-19 | **Los proxies libres no sirven para este catálogo, medido** (veredicto corregido tras H-21): de 150 candidatos de 5 listas públicas auto-verificadas, 16 vivos y **4 pasan (2.7%)** una request JSON real; el resto son timeouts/network y **varios fallan con `self signed certificate`** (interceptan TLS) | `src/scripts/probeProxies.ts`, corridas de 150/300/200/150 candidatos | Cierra la vía "proxies gratis": o proveedor autenticado, o IP única con rate-limit honesto. El harvester queda como herramienta de re-probe (PR3) |
 | H-20 | **Bun solo enruta proxies HTTP/HTTPS**: `fetch(url, { proxy: 'socks5://…' })` ignoraría el proxy (issue `oven-sh/bun#16812` abierto), y Bun además lee `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` del entorno automáticamente (ignorando valores `socks`) | doc de Bun + test del transporte | Un pool SOCKS5 (habitual en listas libres y ofrecido por algunos proveedores) fallaría en silencio: el transporte ahora lo **rechaza con mensaje explícito**. Revisar también esas env vars en contenedores/shell |
+| H-21 | **Tres trampas de medición que invalidaron los primeros veredictos**: (a) las exportaciones de proveedores traen **CRLF**; (b) pasar un proxy **sin esquema** (`ip:port`) hace que el runtime falle al instante o salga directo, porque exige `http://`; (c) cada API usa otra forma de payload, así que una aserción Jikan-shaped (`data.title`) marca como fallo un éxito de Kitsu (`data.attributes.canonicalTitle`) | probe con los 100 proxies de ProxyScrape: los 79 y 100 "fallos" consecutivos eran **falsos negativos de la aserción**; con la corrección pasan **100/100** (~450 ms, datos reales de Kitsu) | El transporte ahora **normaliza y valida** cualquier proxy string (esquema, socks, URL inválida) y el harvester describe el payload sin depender de la API. Regla: antes de concluir "los proxies no sirven", validar la aserción con un control directo |
 
 ---
 
@@ -164,6 +164,11 @@ sin esperar al refactor. Todo config + ~50 líneas.
 
 ### PR3 — `fix/proxy-pool`
 
+- **Ya implementado (adelantado)**: degradar en vez de abortar
+  (`allocateForWorkers` devuelve los disponibles y el manager arranca menos
+  workers) y lectura defensiva de `proxies.json` (sin archivo se corre directo,
+  no rompe el arranque); modo backfill por env (`SCRAPER_MODE=backfill`,
+  `SCRAPER_MAX_WORKERS`) con un proxy por worker.
 - Pool **por request** con selección LRU y rotación real (elimina el
   "1 proxy por worker", H-06).
 - Scoring por causa (H-07): `blocked` penalización fuerte; `timeout` media;
@@ -223,8 +228,21 @@ sin esperar al refactor. Todo config + ~50 líneas.
 
 ---
 
-## 7. Verificación por PR
+## 6.5 Proxies: estado y modo backfill (2026-10-15)
 
+- **Verificado**: los 100 proxies del trial de ProxyScrape pasan **100/100** una
+  request real (Kitsu, ~450 ms) y el egress es la IP del proxy. `proxies.json`
+  (gitignored) está activo con esa lista.
+- **Límites del trial**: 7 días, **10 GB**, **10 conexiones concurrentes** → el
+  barrido completo (~3-5 GB) cabe, con techo de 10 slots.
+- **Modo A (backfill)**: `SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run start <source>`.
+  Un proxy por worker ⇒ cada worker usa la cuota completa de la fuente (el
+  bucket por (host, IP) fino llega en PR2).
+- **Modo B (prod, Dokploy)**: sin proxies, una IP, ~3 min/día.
+- **Pendiente**: medir desde el VPS contra **Jikan** (aquí no es alcanzable) y
+  correr el humo de 1.000 tareas con el pool activo.
+
+## 7. Verificación por PR
 ```bash
 bun install
 bun run build            # tsc + tsc-alias (workerPath vive en dist/)

@@ -49,6 +49,37 @@ describe('normalizeProxy', () => {
 })
 
 describe('transporte con proxy', () => {
+  test.skipIf(!process.versions.bun)(
+    'un proxy sin esquema se normaliza (no sale directo)',
+    async () => {
+      const received: string[] = []
+      const proxy = createServer((req, res) => {
+        received.push(req.url ?? '')
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end('{"proxied":true}')
+      })
+
+      const port = await new Promise<number>((resolve) => {
+        proxy.listen(0, '127.0.0.1', () =>
+          resolve((proxy.address() as AddressInfo).port)
+        )
+      })
+
+      try {
+        const data = await fetcher<{ proxied: boolean }>({
+          url: 'http://ingest-proxy-check.invalid/ok',
+          agent: `127.0.0.1:${port}`, // sin esquema: el caso que rompía
+          retry: { maxAttempts: 1 },
+        })
+
+        expect(data.proxied).toBe(true)
+        expect(received.length).toBe(1)
+      } finally {
+        proxy.close()
+      }
+    }
+  )
+
   test('un proxy SOCKS falla con un mensaje claro (no sale directo)', async () => {
     let message = ''
     try {

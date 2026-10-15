@@ -46,6 +46,16 @@ describe('parseProxyList', () => {
     )
     expect(list).toEqual(['1.2.3.4:8080'])
   })
+
+  test('tolera finales de línea CRLF (exportaciones de proveedores)', () => {
+    expect(parseProxyList('1.2.3.4:8080\r\n5.6.7.8:3129\r\n')).toEqual([
+      '1.2.3.4:8080',
+      '5.6.7.8:3129',
+    ])
+    expect(parseProxyList('user:pass@1.2.3.4:8080\r\n')).toEqual([
+      'user:pass@1.2.3.4:8080',
+    ])
+  })
 })
 
 describe('parseProxyEntries', () => {

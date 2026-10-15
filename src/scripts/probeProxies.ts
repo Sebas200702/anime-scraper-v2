@@ -50,6 +50,7 @@ const concurrency = Number(flag('concurrency', '20'))
 const timeoutMs = Number(flag('timeout', '8000'))
 const outFile = flag('out', 'proxies.verified.json')
 const fromFile = flag('from', '')
+const onlyFile = flag('only', '')
 const checkUrl = flag('check-url', DEFAULT_CHECK_URL)
 const stage1Only = has('stage1-only')
 
@@ -131,29 +132,70 @@ const probeEgress = async (entry: string): Promise<Probe> => {
   }
 }
 
-const probeJikan = async (entry: string): Promise<Probe> => {
+const probeTarget = async (entry: string): Promise<Probe> => {
   const started = Date.now()
   try {
-    const data = await fetcher<{ data?: { title?: string } }>({
+    const data = await fetcher<unknown>({
       url: checkUrl,
       agent: proxyFor(entry),
       timeoutMs: timeoutMs + 4000,
       retry: { maxAttempts: 1 },
     })
-    const title = data.data?.title
-    if (!title) {
+
+    const detail = describePayload(data)
+    if (!detail) {
       return {
         entry,
         ok: false,
         ms: Date.now() - started,
         kind: 'invalid_body',
-        detail: 'sin data.title',
+        detail: `json vacío: ${JSON.stringify(data)?.slice(0, 40)}`,
       }
     }
-    return { entry, ok: true, ms: Date.now() - started, detail: title }
+    return { entry, ok: true, ms: Date.now() - started, detail }
   } catch (error) {
     return toProbe(entry, started, error, '')
   }
+}
+
+/**
+ * Describe un payload JSON válido sin depender de la forma de una API concreta
+ * (Jikan usa `data.title`, Kitsu `data.attributes.canonicalTitle`, ipify
+ * `ip`…). Devuelve `null` si el JSON está vacío.
+ */
+const describePayload = (data: unknown): string | null => {
+  const serialized = JSON.stringify(data)
+  if (
+    !serialized ||
+    serialized === '{}' ||
+    serialized === '[]' ||
+    serialized === 'null'
+  ) {
+    return null
+  }
+
+  const pick = (path: string): unknown =>
+    path.split('.').reduce<unknown>((acc, key) => {
+      if (acc && typeof acc === 'object') {
+        return (acc as Record<string, unknown>)[key]
+      }
+      return undefined
+    }, data)
+
+  for (const path of [
+    'data.title',
+    'data.attributes.canonicalTitle',
+    'title',
+    'name',
+    'ip',
+  ]) {
+    const value = pick(path)
+    if (typeof value === 'string' || typeof value === 'number') {
+      return `${path}=${value}`
+    }
+  }
+
+  return `json:${serialized.slice(0, 40)}`
 }
 
 const histogram = (probes: Probe[]): string => {
@@ -186,31 +228,31 @@ const fetchList = async (url: string): Promise<string[]> => {
 
 const perSource: string[][] = []
 
-for (const entry of SOURCES) {
-  if (has('no-lists')) break
-  const found = await fetchList(entry)
-  console.log(`   ${entry.split('/').slice(-1)[0]} → ${found.length}`)
-  perSource.push(found)
-}
-
-if (fromFile) {
+const addFile = async (path: string, label: string) => {
   try {
-    const raw = await readFile(fromFile, 'utf8')
+    const raw = await readFile(path, 'utf8')
     const found = parseProxyEntries(raw)
-    console.log(`   ${fromFile} → ${found.length}`)
+    console.log(`   ${label} → ${found.length}`)
     perSource.push(found)
   } catch {
-    console.warn(`   ${fromFile} → no se pudo leer`)
+    console.warn(`   ${label} → no se pudo leer`)
   }
 }
 
-try {
-  const raw = await readFile('./proxies.json', 'utf8')
-  const found = parseProxyEntries(raw)
-  console.log(`   proxies.json → ${found.length}`)
-  perSource.push(found)
-} catch {
-  // sin proxies.json local, no pasa nada
+if (onlyFile) {
+  // Modo exclusivo: mide exactamente esta lista (sin listas públicas ni
+  // proxies.json), que es lo que se quiere al verificar un proveedor.
+  await addFile(onlyFile, onlyFile)
+} else {
+  for (const entry of SOURCES) {
+    if (has('no-lists')) break
+    const found = await fetchList(entry)
+    console.log(`   ${entry.split('/').slice(-1)[0]} → ${found.length}`)
+    perSource.push(found)
+  }
+
+  if (fromFile) await addFile(fromFile, fromFile)
+  if (!has('no-local')) await addFile('./proxies.json', 'proxies.json')
 }
 
 // Round-robin entre listas: si se tomara el prefijo del union, se mediría solo
@@ -285,12 +327,15 @@ if (!stage1Only && alive.length > 0) {
   const stage2 = await mapWithConcurrency(
     alive,
     Math.min(concurrency, 10),
-    (probe) => probeJikan(probe.entry)
+    (probe) => probeTarget(probe.entry)
   )
   finalists = stage2.filter((probe): probe is ProbeOk => probe.ok)
   console.log(
     `pasan la verificación: ${finalists.length} · fallos: ${histogram(stage2)}`
   )
+  for (const failure of stage2.filter((probe) => !probe.ok).slice(0, 5)) {
+    console.log(`   ✗ ${failure.entry} → ${failure.kind}: ${failure.detail}`)
+  }
 }
 
 // --- 4. Resultado ---------------------------------------------------------

@@ -47,6 +47,22 @@ const assertSupportedProxy = (proxy: ProxyTarget | undefined): void => {
 }
 
 /**
+ * Normaliza y valida un proxy antes de usarlo. Un `ip:port` sin esquema haría
+ * que el runtime fallara en el instante (o saliera directo), así que se
+ * normaliza aquí: la misma clase de fallo silencioso que H-17/H-20.
+ */
+const resolveProxy = (target?: ProxyTarget): ProxyTarget | undefined => {
+  if (typeof target !== 'string' || !target) return target
+
+  const normalized = normalizeProxy(target)
+  if (!normalized) {
+    throw new Error(`Invalid proxy: ${target}`)
+  }
+  assertSupportedProxy(normalized)
+  return normalized
+}
+
+/**
  * Normaliza una entrada de listado a URL de proxy.
  *
  * Acepta `ip:port`, `user:pass@ip:port` y URLs con esquema (`http://`,
@@ -105,7 +121,6 @@ const sendWithFetch = async ({
   proxy,
   signal,
 }: TransportRequest): Promise<TransportResponse> => {
-  assertSupportedProxy(proxy)
   // Un ProxyAgent bajo Bun es un stub: avisar en vez de fingir que proxya.
   if (proxy && typeof proxy !== 'string') warnIfProxyIgnored(proxy)
 
@@ -133,7 +148,6 @@ const sendWithUndici = async ({
   bodyTimeoutMs,
   signal,
 }: TransportRequest): Promise<TransportResponse> => {
-  assertSupportedProxy(proxy)
   const dispatcher = typeof proxy === 'string' ? agentFor(proxy) : proxy
 
   const response = await request(url, {
@@ -158,5 +172,7 @@ const sendWithUndici = async ({
  * - Bun: `fetch` nativo, que soporta `proxy` por request (CONNECT incluido).
  * - Node: `undici` real, con un `ProxyAgent` cacheado por URL de proxy.
  */
-export const send = (req: TransportRequest): Promise<TransportResponse> =>
-  isBunRuntime() ? sendWithFetch(req) : sendWithUndici(req)
+export const send = (req: TransportRequest): Promise<TransportResponse> => {
+  const resolved: TransportRequest = { ...req, proxy: resolveProxy(req.proxy) }
+  return isBunRuntime() ? sendWithFetch(resolved) : sendWithUndici(resolved)
+}

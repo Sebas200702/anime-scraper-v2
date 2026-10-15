@@ -3,8 +3,23 @@ import type { ProxyState } from 'types/index.js'
 import { CONFIG } from '../config/config.js'
 import { normalizeProxy } from '../libs/transport.js'
 
-const raw = await fs.readFile('./proxies.json', 'utf-8')
-const rawProxies: string[] = JSON.parse(raw)
+const PROXIES_FILE = './proxies.json'
+
+const loadRawProxies = async (): Promise<string[]> => {
+  try {
+    const parsed: unknown = JSON.parse(await fs.readFile(PROXIES_FILE, 'utf-8'))
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((entry): entry is string => typeof entry === 'string')
+  } catch (error: any) {
+    // Sin archivo (o inválido) se corre directo: degradar, no romper el arranque.
+    console.warn(
+      `📡 ${PROXIES_FILE} no disponible (${error?.message ?? error}); se correrá sin proxies`
+    )
+    return []
+  }
+}
+
+const rawProxies = await loadRawProxies()
 
 export const proxyManager = {
   proxies: [] as ProxyState[],
@@ -49,7 +64,14 @@ export const proxyManager = {
    */
   allocateForWorkers(workerCount: number) {
     const available = this.getAvailableProxies()
-    if (available.length < workerCount) throw new Error('Not enough proxies')
+
+    // Degradar, no abortar: si hay menos proxies que workers, arrancan menos
+    // (antes lanzaba y tumbaba la corrida entera).
+    if (available.length < workerCount) {
+      console.warn(
+        `📡 Solo ${available.length} proxies disponibles para ${workerCount} workers: se arrancan ${available.length}`
+      )
+    }
 
     return available.slice(0, workerCount)
   },

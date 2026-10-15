@@ -53,15 +53,35 @@ lee automáticamente** y toda request saldría por ahí (ignora valores `socks`)
 `proxies.json` está **fuera del control de versiones** porque puede llevar
 credenciales.
 
+### Modos
+
+| Modo | Cómo | Para qué |
+|---|---|---|
+| **incremental** (default) | `bun run start <source>` | prod/Dokploy: una IP, ~3 min/día |
+| **backfill** | `SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run start <source>` | barrido de una vez: **un proxy por worker**, cada worker con la cuota completa de su IP |
+
+En modo backfill el pool usa hasta `SCRAPER_MAX_WORKERS` proxies (si hay menos,
+arrancan menos workers en vez de abortar). Con 10 conexiones concurrentes de un
+trial, `SCRAPER_MAX_WORKERS=10`.
+
 Credenciales globales para proxies que no las traen: `PROXY_USER` / `PROXY_PASS`.
 
 Verificar candidatos (descarga listas públicas, mide liveness, IP de egreso y
 una request real; escribe `proxies.verified.json`):
 
 ```bash
+# solo tu lista de proveedor (sin listas públicas ni proxies.json)
+bun run proxies:probe --only ~/Downloads/mi-proveedor.txt --concurrency 10
+
+# mezcla: listas públicas + tu archivo + proxies.json actual
 bun run proxies:probe --limit 200 --concurrency 40
 bun run proxies:probe --from ./proxies.txt --check-url https://kitsu.io/api/edge/anime/1
 ```
+
+`--only <archivo>` es el modo para validar un proveedor (mide exactamente esa
+lista); `--check-url <url>` cambia el objetivo de la etapa 2 (por defecto Jikan;
+usa Kitsu si tu red no alcanza `api.jikan.moe`); `--stage1-only` omite la etapa
+2; `--out <archivo>` cambia la salida.
 
 > ⚠️ Las listas públicas son de operadores desconocidos: úsalas solo contra
 > fuentes **sin credenciales** (Jikan, Kitsu, AnimeThemes). Nunca mandes el token

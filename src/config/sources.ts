@@ -89,8 +89,52 @@ export const SOURCES: SourceConfig[] = [
 
 export { capitalize } from '../shared/parsers.js'
 
+/**
+ * Modo A (backfill, entorno aislado): un proxy por worker, así que la tasa
+ * efectiva se multiplica por IP y cada worker puede usar su cuota completa.
+ * Modo B (prod) mantiene los valores conservadores de la Fase 0.
+ *
+ * Se activa con `SCRAPER_MODE=backfill` y `SCRAPER_MAX_WORKERS` lo acota.
+ */
+const BACKFILL_PROFILES: Record<
+  string,
+  { maxWorkers: number; rateLimit: { perSecond: number; perMinute: number } }
+> = {
+  jikan: { maxWorkers: 10, rateLimit: { perSecond: 1, perMinute: 40 } },
+  jikanRelations: {
+    maxWorkers: 10,
+    rateLimit: { perSecond: 1, perMinute: 40 },
+  },
+  animeThemes: { maxWorkers: 10, rateLimit: { perSecond: 1, perMinute: 60 } },
+  animeMapping: { maxWorkers: 10, rateLimit: { perSecond: 1, perMinute: 50 } },
+  animeEpisodes: { maxWorkers: 10, rateLimit: { perSecond: 1, perMinute: 50 } },
+  tvdbSeriesArtworks: {
+    maxWorkers: 5,
+    rateLimit: { perSecond: 1, perMinute: 40 },
+  },
+}
+
+const MAX_WORKERS_ENV = Number(process.env.SCRAPER_MAX_WORKERS)
+
 export function getSourceConfig(sourceName: string) {
   const config = SOURCES.find((s) => s.name === sourceName)
   if (!config) throw new Error(`Unknown source: ${sourceName}`)
-  return { ...config }
+
+  const resolved = { ...config }
+  const profile = BACKFILL_PROFILES[resolved.name]
+
+  if (profile && process.env.SCRAPER_MODE === 'backfill') {
+    const cap =
+      Number.isInteger(MAX_WORKERS_ENV) && MAX_WORKERS_ENV > 0
+        ? MAX_WORKERS_ENV
+        : profile.maxWorkers
+
+    resolved.maxWorkers = Math.min(cap, profile.maxWorkers)
+    resolved.rateLimit = { ...profile.rateLimit }
+    console.log(
+      `⚙️  Modo backfill: ${resolved.name} con ${resolved.maxWorkers} workers (1 proxy por worker)`
+    )
+  }
+
+  return resolved
 }
