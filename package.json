@@ -13,19 +13,27 @@
     "start": "bun dist/src/index.js",
     "dev": "bun src/index.ts",
     "test": "bun test",
-    "proxies:probe": "bun src/scripts/probeProxies.ts"
+    "proxies:probe": "bun src/scripts/probeProxies.ts",
+    "test:integration": "RUN_DB_TESTS=1 bun test tests/queue.integration.test.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "schema:mirror": "bun scripts/mirrorSchema.ts",
+    "schema:check": "bun scripts/mirrorSchema.ts --check"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
     "cheerio": "^1.2.0",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
+    "pg": "^8.23.1",
     "tsx": "^4.21.0",
     "undici": "^7.16.0"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@types/bun": "latest",
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
     "prettier": "^3.5.3",
     "tsc-alias": "^1.8.16",
     "typescript": "^5.9.3"

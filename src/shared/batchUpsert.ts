@@ -1,6 +1,6 @@
 import { db } from '../libs/db.js'
-import { chunk, SQLITE_MAX_VARIABLES } from '../utils/chunk.js'
-import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
+import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
+import type { PgTable } from 'drizzle-orm/pg-core'
 
 /**
  * Generic batch upsert function that eliminates repetitive repository code.
@@ -15,7 +15,7 @@ import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
  * @throws When the batch fails, so callers never confirm a lost write.
  */
 export async function batchUpsert<T extends Record<string, unknown>>(
-  table: SQLiteTable,
+  table: PgTable,
   items: T[],
   columnsPerRow: number,
   label: string,
@@ -24,7 +24,7 @@ export async function batchUpsert<T extends Record<string, unknown>>(
   if (!items || items.length === 0) return 0
 
   try {
-    const batchSize = Math.floor(SQLITE_MAX_VARIABLES / columnsPerRow)
+    const batchSize = Math.floor(MAX_PARAMS_PER_STATEMENT / columnsPerRow)
 
     const run = async (tx: any) => {
       for (const batch of chunk(items, batchSize)) {

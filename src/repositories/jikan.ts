@@ -3,7 +3,7 @@ import { demographic, genre, theme } from '../schemas/animeTaxonomy.js'
 import { character, characterNickname } from '../schemas/character.js'
 import { staff, staffAlternativeName } from '../schemas/staff.js'
 import { producer, producerTitle } from '../schemas/producer.js'
-import { media } from '../schemas/media.js'
+import { mediaRepository } from './media.js'
 import { unique } from '../utils/deduplicate.js'
 import { normalizeText } from '../utils/normalize.js'
 import { batchUpsert } from '../shared/batchUpsert.js'
@@ -69,7 +69,7 @@ export const jikanRepository = {
       batchUpsert(demographic, uniqueDemographics, 3, 'demographics'),
       batchUpsert(theme, uniqueThemes, 3, 'themes'),
       batchUpsert(animeTitleSynonym, uniqueTitleSynonyms, 3, 'title-synonyms'),
-      batchUpsert(media, uniqueAnimeMedia, 6, 'anime-media'),
+      mediaRepository.saveMedia(uniqueAnimeMedia),
     ])
 
     return uniqueAnimes.length
@@ -100,7 +100,7 @@ export const jikanRepository = {
     await batchUpsert(character, uniqueCharacters, 5, 'characters')
     await Promise.all([
       batchUpsert(characterNickname, uniqueNicknames, 3, 'nicknames'),
-      batchUpsert(media, uniqueMedia, 6, 'character-media'),
+      mediaRepository.saveMedia(uniqueMedia),
     ])
 
     return uniqueCharacters.length

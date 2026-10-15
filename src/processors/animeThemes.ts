@@ -96,7 +96,7 @@ export const processAnimeThemes = (
             songId: video.id,
             musicVersionId: entry.id,
 
-            resolution: video.resolution,
+            resolution: String(video.resolution),
             audioUrl: generateAudioUrl(video.basename) || '',
             videoUrl: generateVideoUrl(video.basename) || '',
           }))

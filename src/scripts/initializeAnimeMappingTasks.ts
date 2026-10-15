@@ -35,7 +35,7 @@ export const initializeAnimeMappingTasks = async () => {
       const tasks = animes
         .filter((a) => !existing.has(`anime_mapping_${a.malId}`))
         .map((a) => ({
-          entityType: 'animeMapping',
+          source: 'animeMapping',
           entityId: `anime_mapping_${a.malId}`,
           taskType: 'anime_mapping_hydration',
           priority: 5,

@@ -8,7 +8,7 @@ import {
   animeTheme,
 } from '../schemas/animeRelations.js'
 import { characterVoiceActor } from '../schemas/characterRelations.js'
-import { media } from '../schemas/media.js'
+import { mediaRepository } from './media.js'
 import { anime } from '../schemas/anime.js'
 import { character } from '../schemas/character.js'
 import { staff } from '../schemas/staff.js'
@@ -141,7 +141,7 @@ export const jikanRelationsRepository = {
 
     await Promise.all([
       batchUpsert(animeStaff, validStaff, 3, 'anime-staff'),
-      batchUpsert(media, uMedia, 6, 'staff-media'),
+      mediaRepository.saveMedia(uMedia),
     ])
 
     return validStaff.length + uMedia.length

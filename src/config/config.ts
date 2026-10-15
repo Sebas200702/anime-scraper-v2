@@ -11,8 +11,15 @@ export const CONFIG = {
     'https://animethemes.moe/_next/data/VWF_eO0-IV7PSTArS1q1e',
   KITSU_BASE: process.env.KITSU_BASE || 'https://kitsu.io/api/edge',
   ANILIST_BASE: process.env.ANILIST_BASE || 'https://graphql.anilist.co',
-  TURSO_DATABASE_URL: process.env.TURSO_DATABASE_URL || '',
-  TURSO_AUTH_TOKEN: process.env.TURSO_AUTH_TOKEN || '',
+
+  /** Postgres de ingesta (cola `ingest.*` + catálogo). Local por defecto. */
+  DATABASE_URL:
+    process.env.DATABASE_URL ||
+    'postgres://anidev:anidev@127.0.0.1:5432/scraper_local',
+
+  /** Lease del claim: si el proceso muere, el reaper lo devuelve a `pending`. */
+  TASK_LEASE_SECONDS: Number(process.env.TASK_LEASE_SECONDS || 900),
+
   // Credenciales para proxies que las requieren (los listados públicos suelen
   // responder 407 sin ellas, H-18).
   PROXY_USER: process.env.PROXY_USER,

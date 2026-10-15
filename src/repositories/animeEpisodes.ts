@@ -1,7 +1,7 @@
 import { episode } from './../schemas/episode.js'
 import type { EpisodeProcessorResult, NewEpisode } from '../types/index.js'
 import { db } from '../libs/db.js'
-import { chunk, SQLITE_MAX_VARIABLES } from '../utils/chunk.js'
+import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 
 export const animeEpisodesRepository = {
   async upsertAnimeEpisodesBatch(
@@ -9,7 +9,7 @@ export const animeEpisodesRepository = {
   ): Promise<number> {
     try {
       // episode table has ~10 columns, use conservative batch size
-      const batchSize = Math.floor(SQLITE_MAX_VARIABLES / 10)
+      const batchSize = Math.floor(MAX_PARAMS_PER_STATEMENT / 10)
       const chunks = chunk(episodeEntries, batchSize)
       await db.transaction(async (tx) => {
         for (const batch of chunks) {

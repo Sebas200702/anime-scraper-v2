@@ -13,17 +13,22 @@ const testMalScraper = async () => {
   // 1. Create a mock task, similar to what the main system would do.
   const mockTask: ScrapingTask = {
     id: 1,
+    source: 'mal',
     taskType: 'anime_full_hydration',
-    entityType: 'animeFull',
     entityId: String(ANIME_ID_TO_TEST),
     status: 'pending',
     priority: 1,
     payload: { animeId: ANIME_ID_TO_TEST },
     createdAt: new Date(),
     updatedAt: new Date(),
-    scheduledAt: null,
+    scheduledAt: new Date(),
     attempts: 0,
-    error: null,
+    maxAttempts: 3,
+    leasedUntil: null,
+    lastScrapedAt: null,
+    refreshAfter: null,
+    lastError: null,
+    skipReason: null,
   }
 
   try {

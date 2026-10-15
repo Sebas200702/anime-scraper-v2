@@ -1,21 +1,22 @@
-import {
-  integer,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from 'drizzle-orm/sqlite-core'
+/**
+ * ESPEJO de `anidev-v2/src/lib/db/schemas/producer` — anidev-v2 es el dueño del
+ * DDL y el scraper solo lo refleja para escribir en la misma forma.
+ *
+ * No editar a mano: `bun run schema:mirror` (drift check: `bun run schema:mirror --check`).
+ */
 
-export const producer = sqliteTable('producer', {
+import { integer, pgTable, serial, text, uniqueIndex } from 'drizzle-orm/pg-core'
+
+export const producer = pgTable('producer', {
   malId: integer('mal_id').primaryKey(),
   established: text('established'),
   about: text('about'),
   count: integer('count'),
 })
-
-export const producerTitle = sqliteTable(
+export const producerTitle = pgTable(
   'producer_title',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: serial('id').primaryKey(),
     producerId: integer('producer_id')
       .notNull()
       .references(() => producer.malId, { onDelete: 'cascade' }),

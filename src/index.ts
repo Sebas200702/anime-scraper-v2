@@ -1,5 +1,4 @@
 import { GenericManager } from './core/genericManager.js'
-import { enableForeignKeys } from './libs/db.js'
 import { getSourceConfig } from './config/sources.js'
 // Initializers
 import { initializeTasks } from './scripts/initializeTasks.js'
@@ -17,7 +16,6 @@ const INITIALIZERS: Record<string, () => Promise<void>> = {
   tvdbSeriesArtworks: initializeTvdbSeriesArtworksTasks,
 }
 async function main() {
-  await enableForeignKeys()
   const arg = process.argv[2] || 'jikan'
   const sourceName = Object.keys(INITIALIZERS).includes(arg) ? arg : 'jikan'
   try {

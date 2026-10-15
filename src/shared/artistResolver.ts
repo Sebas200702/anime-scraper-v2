@@ -1,7 +1,7 @@
 import { db } from '../libs/db.js'
 import { artist } from '../schemas/artist.js'
 import { inArray } from 'drizzle-orm'
-import { chunk, SQLITE_MAX_VARIABLES } from '../utils/chunk.js'
+import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 import { normalizeText } from '../utils/normalize.js'
 import { batchUpsert } from './batchUpsert.js'
 import type { NewArtist } from '../types/index.js'
@@ -22,7 +22,7 @@ export async function resolveArtistIds(
   const artistMap = new Map<string, number>()
 
   // 1. Find existing artists
-  for (const batch of chunk(uniqueNames, SQLITE_MAX_VARIABLES)) {
+  for (const batch of chunk(uniqueNames, MAX_PARAMS_PER_STATEMENT)) {
     const found = await db
       .select({ id: artist.id, name: artist.name })
       .from(artist)
@@ -42,7 +42,7 @@ export async function resolveArtistIds(
 
     // Re-query to get new IDs
     const newNames = missing.map((a) => a.name)
-    for (const batch of chunk(newNames, SQLITE_MAX_VARIABLES)) {
+    for (const batch of chunk(newNames, MAX_PARAMS_PER_STATEMENT)) {
       const found = await db
         .select({ id: artist.id, name: artist.name })
         .from(artist)

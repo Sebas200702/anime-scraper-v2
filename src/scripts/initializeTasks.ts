@@ -69,7 +69,7 @@ export const initializeTasks = async () => {
         const entityId = `${metadata.name}_${page}`
         if (existing.has(entityId)) continue
         allTasks.push({
-          entityType: 'jikan',
+          source: 'jikan',
           entityId,
           taskType: metadata.taskType,
           priority: 5,

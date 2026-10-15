@@ -33,7 +33,7 @@ export async function initializeTvdbSeriesArtworksTasks() {
     const tasks = entries
       .filter((entry) => !existing.has(`tvdb_artworks_${entry.tvdbId}`))
       .map((entry) => ({
-        entityType: 'tvdbSeriesArtworks',
+        source: 'tvdbSeriesArtworks',
         entityId: `tvdb_artworks_${entry.tvdbId}`,
         taskType: 'tvdb_series_artworks',
         priority: 5,

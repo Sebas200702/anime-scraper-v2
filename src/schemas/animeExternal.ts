@@ -1,21 +1,25 @@
-import { integer, text, sqliteTable } from 'drizzle-orm/sqlite-core'
+/**
+ * ESPEJO de `anidev-v2/src/lib/db/schemas/anime-external` — anidev-v2 es el dueño del
+ * DDL y el scraper solo lo refleja para escribir en la misma forma.
+ *
+ * No editar a mano: `bun run schema:mirror` (drift check: `bun run schema:mirror --check`).
+ */
 
+import { integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 import { anime } from './anime.js'
 
-export const animeExternalIds = sqliteTable('anime_external_ids', {
+export const animeExternalIds = pgTable('anime_external_ids', {
   animeId: integer('anime_id')
     .notNull()
     .primaryKey()
     .references(() => anime.malId),
-
   animeThemesSlug: text('anime_themes_slug'),
   kitsuId: integer('kitsu_id'),
   tvdbId: integer('tvdb_id'),
-
-  createdAt: integer('created_at', { mode: 'timestamp' })
+  createdAt: timestamp('created_at')
     .notNull()
     .$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' })
+  updatedAt: timestamp('updated_at')
     .notNull()
     .$defaultFn(() => new Date()),
 })

@@ -4,8 +4,10 @@ import { proxyManager } from './proxyManager.js'
 import { RateGate } from './rateGate.js'
 import { TaskDispatcher, type DispatcherTask } from './taskDispatcher.js'
 import { SINGLE_IP_SOURCES, SOURCE_HOSTS } from '../config/sources.js'
+import { DEFAULT_REFRESH_SECONDS } from '../config/sources.js'
 import { capitalize } from '../shared/parsers.js'
 import { sanitizeError } from '../utils/sanitizeError.js'
+import { FetchError } from '../libs/httpError.js'
 import type {
   ScrapingTask,
   SourceConfig,
@@ -37,6 +39,7 @@ export class GenericManager {
   bufferByTaskType = new Map<string, BufferedTask[]>()
 
   private readonly savingByTaskType: Set<string> = new Set()
+  private readonly refreshCache = new Map<string, number | undefined>()
   private cachedRepository: any = null
   private cachedModules: { services: any; processors: any } | null = null
   private statsInterval: ReturnType<typeof setInterval> | null = null
@@ -73,10 +76,28 @@ export class GenericManager {
 
   async getTasks() {
     const batchSize = this.sourceConfig?.taskBatchSize || 2000
-    this.taskQueue = await taskRepository.getPendingTasks(
+    // Claim atómico: la tarea queda `in_progress` con lease desde aquí, así que
+    // un crash no pierde el lote (el reaper lo devuelve a `pending`).
+    this.taskQueue = await taskRepository.claimTasks(
       batchSize,
       this.sourceConfig?.name
     )
+  }
+
+  /**
+   * Cadencia de refresh del taskType: `ingest.task_policy` manda, y si no hay
+   * política se usa el default del source (Memoria del plan de fill/refresh).
+   */
+  private async refreshSeconds(taskType: string): Promise<number | undefined> {
+    if (this.refreshCache.has(taskType)) return this.refreshCache.get(taskType)
+
+    const source = this.sourceConfig?.name ?? this.source
+    const seconds =
+      (await taskRepository.refreshSecondsFor(source, taskType)) ??
+      DEFAULT_REFRESH_SECONDS[taskType]
+
+    this.refreshCache.set(taskType, seconds)
+    return seconds
   }
 
   /** Fetch + mapeo en el proceso padre, con la IP que decidió el orquestador. */
@@ -161,18 +182,19 @@ export class GenericManager {
           this.taskQueue as DispatcherTask[],
           {
             run: async (task, proxyUrl) => {
-              // `in_progress` por tarea, justo antes de usarla: antes se marcaba
-              // el lote completo por adelantado y un crash perdía el resto.
-              await taskRepository.markTaskInProgress(task.id)
+              // Ya está claimada con lease: se ejecuta y nada más.
               return await this.runTask(task as ScrapingTask, proxyUrl)
             },
             onDone: (task, data) =>
               this.processWorkerData(task.id, task.taskType, data),
-            onError: (task, error) =>
-              taskRepository.markTaskFailed(
-                task.id,
-                sanitizeError((error as Error)?.message)
-              ),
+            onError: async (task, error) => {
+              await taskRepository.failTasks(
+                [task.id],
+                sanitizeError((error as Error)?.message),
+                error instanceof FetchError ? error.retryAfterMs : undefined,
+                error instanceof FetchError ? error.retryable : true
+              )
+            },
           }
         )
 
@@ -196,9 +218,12 @@ export class GenericManager {
 
   async processWorkerData(taskId: number, taskType: string, data: any) {
     // Un processor sin resultados no es un fallo: la tarea se completa con 0
-    // items (antes quedaba `in_progress` hasta el próximo arranque).
+    // items y se programa su refresh por política.
     if (!data) {
-      await taskRepository.markTaskCompleted(taskId)
+      await taskRepository.completeTasks(
+        [taskId],
+        await this.refreshSeconds(taskType)
+      )
       return
     }
     if (!this.bufferByTaskType.has(taskType))
@@ -256,7 +281,10 @@ export class GenericManager {
     try {
       const repository = await this.getRepository()
       const totalSaved = (await repository[saveFnName](items)) ?? items.length
-      await taskRepository.markTasksCompleted(taskIds)
+      await taskRepository.completeTasks(
+        taskIds,
+        await this.refreshSeconds(first.taskType)
+      )
       this.reporter.recordSaved(entity, totalSaved, batch.length)
       console.log(
         `💾 Saved ${totalSaved} ${entity}(s) from ${batch.length} task(s)`
@@ -268,7 +296,7 @@ export class GenericManager {
       this.reporter.incrementErrors(batch.length)
       console.error(`❌ Failed to save ${batch.length} ${entity}(s): ${reason}`)
       try {
-        await taskRepository.markTasksFailed(taskIds, reason)
+        await taskRepository.failTasks(taskIds, reason)
       } catch (markError) {
         // Si ni marcar el fallo se puede (DB caída), es preferible dejar las
         // tareas `in_progress`: el próximo arranque las re-encola. Propagar

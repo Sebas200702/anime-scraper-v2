@@ -8,9 +8,32 @@ Ingesta del catálogo de **anidev-v2** (Track D).
 
 ## Requisitos
 
-- [Bun](https://bun.com) ≥ 1.3
-- Un `.env` (copia `.env.example`) con `TURSO_DATABASE_URL`,
-  `TURSO_AUTH_TOKEN` y `TVDB_API_KEY`.
+- [Bun](https://bun.com) ≥ 1.4
+- **Postgres local** (misma versión que prod: `postgres:16`). El stack de
+  anidev-v2 ya lo levanta (`docker compose up -d`); la DB de ingesta por defecto
+  es `scraper_local`.
+- Un `.env` (copia `.env.example`) con `DATABASE_URL` (opcional: hay default
+  local) y `TVDB_API_KEY`.
+
+## Base de datos de ingesta
+
+La cola (`ingest.*`) y el catálogo viven en **Postgres local**: el mismo motor
+que prod, así que el DDL y las queries no cambian al promover.
+
+```bash
+# crear la DB y aplicar migraciones (una vez)
+createdb -h 127.0.0.1 -U anidev scraper_local
+psql -h 127.0.0.1 -U anidev -d scraper_local -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm'
+bun run db:migrate
+
+# el esquema del catálogo es un ESPEJO del de anidev-v2 (dueño del DDL)
+bun run schema:mirror          # regenera src/schemas/*.ts desde ../anidev-v2
+bun run schema:check           # falla si quedó desactualizado (drift check)
+```
+
+La cola da lo que la versión Turso no tenía: **claim atómico**
+(`FOR UPDATE SKIP LOCKED`), **lease + reaper**, `attempts → dead_letter` y
+`refresh_after` para re-armar lo vencido sin duplicar filas.
 
 ## Uso
 
@@ -24,6 +47,13 @@ bun run start jikanRelations # sobre dist/
 `bun run dev <source>` corre el inicializador de tareas y luego la ingesta del
 source. Sources disponibles: `jikan`, `jikanRelations`, `animeThemes`,
 `animeMapping`, `animeEpisodes`, `tvdbSeriesArtworks`.
+
+## Tests
+
+```bash
+bun test                 # unit (sin DB)
+bun run test:integration # cola ingest.* contra Postgres local (RUN_DB_TESTS=1)
+```
 
 ## Arquitectura de ingesta
 
@@ -69,12 +99,11 @@ credenciales.
 
 | Modo | Cómo | Para qué |
 |---|---|---|
-| **incremental** (default) | `bun run start <source>` | prod/Dokploy: una IP, ~3 min/día |
-| **backfill** | `SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run start <source>` | barrido de una vez: **un proxy por worker**, cada worker con la cuota completa de su IP |
+| **incremental** (default) | `bun run dev <source>` | prod: una IP, ~3 min/día |
+| **backfill** | `SCRAPER_MODE=backfill bun run dev <source>` | barrido de una vez: **30 tareas en vuelo**, una IP por tarea |
 
-En modo backfill el pool usa hasta `SCRAPER_MAX_WORKERS` proxies (si hay menos,
-arrancan menos workers en vez de abortar). Con 10 conexiones concurrentes de un
-trial, `SCRAPER_MAX_WORKERS=10`.
+En modo backfill el pool usa hasta `min(30, tamaño del pool)` proxies (si hay
+menos, arrancan menos en vez de abortar). `SCRAPER_MAX_WORKERS` acota ese número.
 
 Credenciales globales para proxies que no las traen: `PROXY_USER` / `PROXY_PASS`.
 

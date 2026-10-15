@@ -1,11 +1,13 @@
-import {
-  integer,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from 'drizzle-orm/sqlite-core'
+/**
+ * ESPEJO de `anidev-v2/src/lib/db/schemas/staff` — anidev-v2 es el dueño del
+ * DDL y el scraper solo lo refleja para escribir en la misma forma.
+ *
+ * No editar a mano: `bun run schema:mirror` (drift check: `bun run schema:mirror --check`).
+ */
 
-export const staff = sqliteTable('staff', {
+import { integer, pgTable, serial, text, uniqueIndex } from 'drizzle-orm/pg-core'
+
+export const staff = pgTable('staff', {
   malId: integer('mal_id').primaryKey(),
   name: text('name').notNull(),
   givenName: text('given_name'),
@@ -13,11 +15,10 @@ export const staff = sqliteTable('staff', {
   birthday: text('birthday'),
   about: text('about'),
 })
-
-export const staffAlternativeName = sqliteTable(
+export const staffAlternativeName = pgTable(
   'staff_alternative_name',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: serial('id').primaryKey(),
     staffId: integer('staff_id')
       .notNull()
       .references(() => staff.malId, { onDelete: 'cascade' }),

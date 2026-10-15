@@ -4,14 +4,14 @@ import type {
 } from 'types/index.js'
 import { db } from '../libs/db.js'
 import { animeExternalIds } from '../schemas/animeExternal.js'
-import { chunk, SQLITE_MAX_VARIABLES } from '../utils/chunk.js'
+import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 
 export const animeMappingRepository = {
   async upsertAnimeExternalIdsBatch(
     animeExternalIdEntries: NewAnimeExternalIds[]
   ): Promise<number> {
     try {
-      const batchSize = Math.floor(SQLITE_MAX_VARIABLES / 3)
+      const batchSize = Math.floor(MAX_PARAMS_PER_STATEMENT / 3)
       const chunks = chunk(animeExternalIdEntries, batchSize)
       await db.transaction(async (tx) => {
         for (const batch of chunks) {

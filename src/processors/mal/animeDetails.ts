@@ -1,5 +1,10 @@
 import * as cheerio from 'cheerio'
-import type { ScrapingTask, AnimeProcessorResult, NewAnime } from '../../types/index.js'
+import type {
+  ScrapingTask,
+  AnimeProcessorResult,
+  NewAnime,
+  NewMedia,
+} from '../../types/index.js'
 import { parseNumber, parseYear } from '../../shared/parsers.js'
 
 /**
@@ -92,7 +97,7 @@ export const processAnime = (
   const posterSrc =
     $('img[itemprop="image"]').attr('data-src') ||
     $('img[itemprop="image"]').attr('src')
-  const animeMedias = posterSrc
+  const animeMedias: NewMedia[] = posterSrc
     ? [{ entityId: malId, entityType: 'anime', mediaType: 'poster', src: posterSrc, size: null }]
     : []
 

@@ -27,7 +27,7 @@ export const DEFAULT_RETRY: RetryPolicy = {
   jitter: 0.5,
 }
 
-const DEFAULT_TIMEOUT_MS = 30_000
+const DEFAULT_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS ?? 30_000)
 const SNIPPET_LENGTH = 200
 
 const HTML_CONTENT_TYPE = /text\/html|application\/xhtml/i

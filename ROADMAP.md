@@ -11,12 +11,13 @@
 >
 > **Estrategia de fill/refresh**: `docs/fill-and-refresh-strategy.md`.
 >
-> **Estado**: **PR2 (núcleo) implementado**: rate gate por (host, IP), pool con
-> rotación por tarea y reporte de resultado, orquestador con `maxInFlight` y
-> proceso único (sin `worker_threads`). Proxies: **100/100 verificados**
-> (trial de ProxyScrape) y `proxies.json` activo.
-> **Falta**: humo de 1.000 tareas (local; Jikan no es alcanzable desde el
-> sandbox) y la Fase 2 (cola en Postgres) para la reanudación crash-safe.
+> **Estado**: **Fases 0–2 implementadas**. PR2 (rate gate por (host, IP), pool con
+> rotación por tarea, orquestador con `maxInFlight` y **30 tareas en vuelo** en
+> backfill) y **Fase 2 (cola `ingest.*` en Postgres local, lease/reaper/
+> dead-letter/refresh)** con 9 tests de integración y smoke end-to-end real.
+> Proxies: **100/100 verificados** (trial de ProxyScrape).
+> **Falta**: promoción diff-upsert a prod (Fase 3) y el humo con Jikan real
+> (no es alcanzable desde este sandbox).
 
 ---
 
@@ -181,22 +182,29 @@ sin esperar al refactor. Todo config + ~50 líneas.
 
 ## 5. Fase 2 — Postgres + cola crash-safe
 
-> Depende de: `anidev-v2/openspec/changes/ingest-queue-postgres`.
+> Change `anidev-v2/openspec/changes/ingest-queue-postgres`.
 
-- **Port**: `libs/db.ts` de libSQL a pg (`drizzle-orm/node-postgres` o
-  `postgres-js`); schemas a `pg-core` espejo de anidev-v2 (con **drift check en
-  CI** contra `anidev-v2/src/lib/db/schemas/`); `DATABASE_URL` local/prod +
-  `DATABASE_URL_SCRAPER` en el compose. Cero DDL aquí (D-S3).
-- **Cola**: claim `FOR UPDATE SKIP LOCKED` + lease + reaper + `dead_letter` +
-  `refresh_after` (semántica en el change de anidev-v2).
-- **Generadores idempotentes**: los `initialize*Tasks` pasan a UPSERT por lotes
-  (inserta faltantes + re-arma vencidos); fuera `getExistingEntityIds` en
-  memoria (H-10).
-- **Heartbeat** de lease desde el padre mientras hay tareas en vuelo.
-- **Modo A**: local (`docker compose up -d` de anidev) sembrado con
-  `bun run db:clone-prod`.
-- **Criterio**: `kill -9` en medio de un batch → al re-arrancar, 0 tareas
-  perdidas (reaper re-encola) y 0 dobles claims con dos procesos concurrentes.
+- **✅ Implementado y verificado** (2026-10-15):
+  - DB **local** `scraper_local` (Postgres 16, el mismo motor que prod) con el
+    esquema de catálogo **espejado de anidev** (`bun run schema:mirror` +
+    `schema:check` como drift check; verificado columna a columna: *idéntico en
+    las 35 tablas compartidas*).
+  - Cola `ingest.*` con **claim `FOR UPDATE SKIP LOCKED` + lease + reaper**,
+    `attempts → dead_letter`, `refresh_after` por política (`task_policy` vía
+    `refreshSecondsFor`, con default por taskType) y `ingest.run` para métricas.
+  - Driver `drizzle-orm/node-postgres` + `pg`. Migraciones locales con
+    drizzle-kit (`bun run db:generate` / `db:migrate`).
+  - **9 tests de integración** contra la DB local (claim concurrente sin
+    solapamiento, lease vencido → reaper, intentos agotados → dead_letter,
+    fallo no reintentable, backoff por `Retry-After`, complete → refresh →
+    re-arm, generador idempotente, stats).
+  - **Smoke end-to-end real**: 3 animes → 9 tareas generadas → claim con lease →
+    fetch por proxy → timeouts clasificados → 3 intentos con backoff →
+    `dead_letter` con `last_error` (Jikan no es alcanzable desde este sandbox).
+- **Pendiente**: promoción diff-upsert A→prod (Fase 3) y que anidev aplique el
+  DDL de `ingest.*` en prod (en local lo crea este repo).
+- **Gap detectado**: la media de **artist** no tiene tabla en el DDL de anidev
+  (el router la avisa y la descarta): necesita columna/tabla en su esquema.
 
 ---
 

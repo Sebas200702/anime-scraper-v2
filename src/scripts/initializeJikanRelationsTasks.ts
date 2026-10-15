@@ -26,7 +26,7 @@ export const initializeJikanRelationsTasks = async () => {
       const entries = []
       if (!existing.has(`anime_details_${a.malId}`))
         entries.push({
-          entityType: 'jikanRelations',
+          source: 'jikanRelations',
           entityId: `anime_details_${a.malId}`,
           taskType: 'anime_details_hydration',
           priority: 5,
@@ -35,7 +35,7 @@ export const initializeJikanRelationsTasks = async () => {
         })
       if (!existing.has(`anime_characters_${a.malId}`))
         entries.push({
-          entityType: 'jikanRelations',
+          source: 'jikanRelations',
           entityId: `anime_characters_${a.malId}`,
           taskType: 'anime_characters_hydration',
           priority: 5,
@@ -44,7 +44,7 @@ export const initializeJikanRelationsTasks = async () => {
         })
       if (!existing.has(`anime_staff_${a.malId}`))
         entries.push({
-          entityType: 'jikanRelations',
+          source: 'jikanRelations',
           entityId: `anime_staff_${a.malId}`,
           taskType: 'anime_staff_hydration',
           priority: 5,

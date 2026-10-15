@@ -6,11 +6,10 @@ import { staff, staffAlternativeName } from '../schemas/staff.js'
 import { artist } from '../schemas/artist.js'
 import { music, musicResolution, musicVersion } from '../schemas/music.js'
 import { episode, episodeSource, episodeSubtitle } from '../schemas/episode.js'
-import { scrapingTasks } from '../schemas/scrapingTasks.js'
+import { ingestTask } from '../schemas/ingest.js'
 import { genre, demographic, theme } from '../schemas/animeTaxonomy.js'
 import { characterVoiceActor } from '../schemas/characterRelations.js'
 import { musicArtist } from '../schemas/musicRelations.js'
-import { media } from '../schemas/media.js'
 import {
   animeGenre,
   animeDemographic,
@@ -55,8 +54,8 @@ export type EpisodeSource = InferSelectModel<typeof episodeSource>
 export type NewEpisodeSource = InferInsertModel<typeof episodeSource>
 export type EpisodeSubtitle = InferSelectModel<typeof episodeSubtitle>
 export type NewEpisodeSubtitle = InferInsertModel<typeof episodeSubtitle>
-export type BbScrapingTask = InferSelectModel<typeof scrapingTasks>
-export type NewBbScrapingTask = InferInsertModel<typeof scrapingTasks>
+export type BbScrapingTask = InferSelectModel<typeof ingestTask>
+export type NewBbScrapingTask = InferInsertModel<typeof ingestTask>
 export type Genre = InferSelectModel<typeof genre>
 export type NewGenre = InferInsertModel<typeof genre>
 export type Demographic = InferSelectModel<typeof demographic>
@@ -87,8 +86,27 @@ export type AnimeRelatedAnime = InferSelectModel<typeof animeRelatedAnime>
 export type NewAnimeRelatedAnime = InferInsertModel<typeof animeRelatedAnime>
 export type AnimeProducer = InferSelectModel<typeof animeProducer>
 export type NewAnimeProducer = InferInsertModel<typeof animeProducer>
-export type Media = InferSelectModel<typeof media>
-export type NewMedia = InferInsertModel<typeof media>
+/**
+ * Media en el catálogo de anidev, que la normaliza **por entidad** (una tabla
+ * por tipo): `entityType` decide a qué tabla enruta `mediaRepository.saveMedia`.
+ */
+export interface Media {
+  id: number
+  entityType:
+    | 'anime'
+    | 'character'
+    | 'staff'
+    | 'producer'
+    | 'episode'
+    | 'music'
+    /** Sin tabla en el DDL de anidev: el router lo avisa y lo descarta. */
+    | 'artist'
+  entityId: number
+  mediaType: string
+  src: string
+  size: string | null
+}
+export type NewMedia = Omit<Media, 'id'> & { id?: number }
 export interface SourceConfig {
   name: string
   maxWorkers: number
@@ -129,37 +147,14 @@ export interface BufferedTask {
 }
 
 export interface SourceRepository {
-  [key: `save${string}`]: (items: ProcessorResult[]) => Promise<number | undefined>
+  [key: `save${string}`]: (
+    items: ProcessorResult[]
+  ) => Promise<number | undefined>
 }
 
-export interface ScrapingTask {
-  id: number
-  taskType: string
-  entityId: string
-  entityType: string
-  priority: number
-  status: string
-  attempts: number
-  error: string | null
-  payload: Record<string, any> | null
-  scheduledAt: Date | null
-  createdAt: Date
-  updatedAt: Date
-}
-export interface NewScrapingTask {
-  id?: number
-  taskType: string
-  entityId: string
-  entityType: string
-  priority: number
-  status: string
-  attempts?: number
-  error?: string | null
-  payload?: Record<string, any> | null
-  scheduledAt?: Date
-  createdAt?: Date
-  updatedAt?: Date
-}
+/** Tarea de la cola `ingest.task` (una fila por unidad de trabajo). */
+export type ScrapingTask = InferSelectModel<typeof ingestTask>
+export type NewScrapingTask = InferInsertModel<typeof ingestTask>
 
 export interface ProxyState {
   url: string

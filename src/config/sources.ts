@@ -100,18 +100,38 @@ const BACKFILL_PROFILES: Record<
   string,
   { maxWorkers: number; rateLimit: { perSecond: number; perMinute: number } }
 > = {
-  jikan: { maxWorkers: 10, rateLimit: { perSecond: 1, perMinute: 40 } },
+  jikan: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 40 } },
   jikanRelations: {
-    maxWorkers: 10,
+    maxWorkers: 30,
     rateLimit: { perSecond: 1, perMinute: 40 },
   },
-  animeThemes: { maxWorkers: 10, rateLimit: { perSecond: 1, perMinute: 60 } },
-  animeMapping: { maxWorkers: 10, rateLimit: { perSecond: 1, perMinute: 50 } },
-  animeEpisodes: { maxWorkers: 10, rateLimit: { perSecond: 1, perMinute: 50 } },
+  animeThemes: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 60 } },
+  animeMapping: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 50 } },
+  animeEpisodes: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 50 } },
   tvdbSeriesArtworks: {
     maxWorkers: 5,
     rateLimit: { perSecond: 1, perMinute: 40 },
   },
+}
+
+/**
+ * Cadencia de refresh por defecto (segundos) cuando `ingest.task_policy` no
+ * tiene entrada para ese taskType. Es la "memoria del barrido rodante" del plan
+ * de fill/refresh: airing semanal, catálogo estable cada meses.
+ */
+export const DEFAULT_REFRESH_SECONDS: Record<string, number> = {
+  anime_page_hydration: 24 * 3600,
+  character_page_hydration: 90 * 86400,
+  staff_page_hydration: 90 * 86400,
+  producer_page_hydration: 90 * 86400,
+  anime_details_hydration: 7 * 86400,
+  anime_characters_hydration: 180 * 86400,
+  anime_staff_hydration: 180 * 86400,
+  anime_themes_hydration: 30 * 86400,
+  artist_hydration: 90 * 86400,
+  anime_mapping_hydration: 180 * 86400,
+  anime_episodes_hydration: 7 * 86400,
+  tvdb_series_artworks: 180 * 86400,
 }
 
 const MAX_WORKERS_ENV = () => Number(process.env.SCRAPER_MAX_WORKERS)

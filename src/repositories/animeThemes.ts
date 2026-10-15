@@ -3,7 +3,7 @@ import { music, musicResolution, musicVersion } from '../schemas/music.js'
 import { artist } from '../schemas/artist.js'
 import { animeMusic } from '../schemas/animeRelations.js'
 import { musicArtist } from '../schemas/musicRelations.js'
-import { media } from '../schemas/media.js'
+import { mediaRepository } from './media.js'
 import { unique } from '../utils/deduplicate.js'
 import { normalizeText } from '../utils/normalize.js'
 import { batchUpsert } from '../shared/batchUpsert.js'
@@ -52,17 +52,35 @@ export const animeThemesRepository = {
       }
     }
 
-    const uMusics = unique(musics, (m) => `${m.id}:${normalizeText(m.title || '')}`)
+    const uMusics = unique(
+      musics,
+      (m) => `${m.id}:${normalizeText(m.title || '')}`
+    )
     const uVersions = unique(versions, (mv) => `${mv.musicId}:${mv.versionId}`)
-    const uResolutions = unique(resolutions, (mr) => `${mr.songId}:${mr.resolution}`)
-    const uMusicArtists = unique(musicArtists, (ma) => `${ma.musicId}:${ma.artistId}`)
-    const uAnimeMusics = unique(animeMusics, (am) => `${am.animeId}:${am.musicId}`)
+    const uResolutions = unique(
+      resolutions,
+      (mr) => `${mr.songId}:${mr.resolution}`
+    )
+    const uMusicArtists = unique(
+      musicArtists,
+      (ma) => `${ma.musicId}:${ma.artistId}`
+    )
+    const uAnimeMusics = unique(
+      animeMusics,
+      (am) => `${am.animeId}:${am.musicId}`
+    )
 
     await db.transaction(async (tx) => {
       await batchUpsert(music, uMusics, 6, 'music', tx)
       await batchUpsert(musicVersion, uVersions, 4, 'music-versions', tx)
       await batchUpsert(animeMusic, uAnimeMusics, 4, 'anime-music', tx)
-      await batchUpsert(musicResolution, uResolutions, 6, 'music-resolutions', tx)
+      await batchUpsert(
+        musicResolution,
+        uResolutions,
+        6,
+        'music-resolutions',
+        tx
+      )
       await batchUpsert(musicArtist, uMusicArtists, 2, 'music-artists', tx)
     })
 
@@ -87,7 +105,7 @@ export const animeThemesRepository = {
           if (artistId) {
             artistMedias.push({
               entityId: artistId,
-              entityType: am.entityType,
+              entityType: am.entityType as NewMedia['entityType'],
               mediaType: am.mediaType,
               src: am.src,
               size: am.size || 'default',
@@ -105,7 +123,7 @@ export const animeThemesRepository = {
 
     await db.transaction(async (tx) => {
       await batchUpsert(artist, uArtists, 3, 'artists', tx)
-      await batchUpsert(media, uMedia, 6, 'artist-media', tx)
+      await mediaRepository.saveMedia(uMedia)
     })
 
     return uArtists.length

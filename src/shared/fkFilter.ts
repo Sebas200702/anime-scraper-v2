@@ -1,7 +1,7 @@
 import { db } from '../libs/db.js'
-import { chunk, SQLITE_MAX_VARIABLES } from '../utils/chunk.js'
+import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 import { inArray } from 'drizzle-orm/sql/expressions/conditions'
-import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
+import type { PgColumn, PgTable } from 'drizzle-orm/pg-core'
 
 /**
  * Filters an array of items to only include those whose FK reference
@@ -21,15 +21,15 @@ import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 export async function filterByExistingFk<T>(
   items: T[],
   getFkId: (item: T) => number,
-  table: SQLiteTable,
-  column: SQLiteColumn
+  table: PgTable,
+  column: PgColumn
 ): Promise<T[]> {
   if (items.length === 0) return []
 
   const uniqueIds = [...new Set(items.map(getFkId))]
 
   const validIds = new Set<number>()
-  for (const batch of chunk(uniqueIds, SQLITE_MAX_VARIABLES)) {
+  for (const batch of chunk(uniqueIds, MAX_PARAMS_PER_STATEMENT)) {
     const existing = await db
       .select({ id: column })
       .from(table)
