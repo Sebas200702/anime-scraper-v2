@@ -55,3 +55,59 @@ describe('proxyManager.allocateForWorkers', () => {
     expect(proxyManager.allocateForWorkers(5)).toEqual([])
   })
 })
+
+describe('proxyManager.acquire (selección por tarea)', () => {
+  test('rota por LRU usando todos los proxies, no siempre el mismo', () => {
+    proxyManager.proxies = [
+      state('http://a:1'),
+      state('http://b:2'),
+      state('http://c:3'),
+    ]
+
+    const picked = [
+      proxyManager.acquire()?.url,
+      proxyManager.acquire()?.url,
+      proxyManager.acquire()?.url,
+      proxyManager.acquire()?.url,
+    ]
+
+    // Ciclo completo antes de repetir (lastUsed se actualiza al adquirir)
+    expect(picked).toEqual([
+      'http://a:1',
+      'http://b:2',
+      'http://c:3',
+      'http://a:1',
+    ])
+  })
+
+  test('salta los que están en cooldown o muertos', () => {
+    proxyManager.proxies = [
+      state('http://muerto:1', { failures: 10 }),
+      state('http://cooldown:2', { cooldownUntil: Date.now() + 30_000 }),
+      state('http://vivo:3'),
+    ]
+
+    // Con un único proxy sano se reutiliza ese, nunca los excluidos.
+    expect(proxyManager.acquire()?.url).toBe('http://vivo:3')
+    expect(proxyManager.acquire()?.url).toBe('http://vivo:3')
+  })
+
+  test('reportSuccess limpia el cooldown y baja los fallos', () => {
+    proxyManager.proxies = [
+      state('http://a:1', { failures: 2, cooldownUntil: 999 }),
+    ]
+    proxyManager.reportSuccess('http://a:1')
+
+    expect(proxyManager.proxies[0]?.failures).toBe(1)
+    expect(proxyManager.proxies[0]?.cooldownUntil).toBe(0)
+  })
+
+  test('reportFailure aplica cooldown creciente', () => {
+    proxyManager.proxies = [state('http://a:1')]
+    proxyManager.reportFailure('http://a:1')
+
+    expect(proxyManager.proxies[0]?.failures).toBe(1)
+    expect(proxyManager.proxies[0]?.cooldownUntil).toBeGreaterThan(Date.now())
+    expect(proxyManager.getAvailableProxies()).toHaveLength(0)
+  })
+})

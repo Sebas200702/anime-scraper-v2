@@ -62,6 +62,18 @@ export const proxyManager = {
    * Each worker gets multiple proxies to rotate through.
    * @returns Array of URL-string arrays, one per worker.
    */
+  /**
+   * Siguiente proxy disponible, por LRU, marcándolo como usado. Es la forma de
+   * que el orquestador reparta tareas entre **todas** las IPs (antes el proxy
+   * se fijaba por worker y `lastUsed` nunca se actualizaba: siempre elegía el
+   * mismo y el resto quedaba ocioso).
+   */
+  acquire(): ProxyState | undefined {
+    const proxy = this.getAvailableProxies()[0]
+    if (proxy) proxy.lastUsed = Date.now()
+    return proxy
+  },
+
   allocateForWorkers(workerCount: number) {
     const available = this.getAvailableProxies()
 
@@ -76,6 +88,11 @@ export const proxyManager = {
     return available.slice(0, workerCount)
   },
 
+  /**
+   * Penaliza un proxy. El llamador debe invocarlo **solo** cuando el fallo es
+   * atribuible al proxy (`FetchError.proxyFault`): un 404, un 429 o credenciales
+   * inválidas son de la fuente (decisión H-07).
+   */
   reportFailure(proxyUrl: string) {
     const proxy = this.proxies.find((p) => p.url === proxyUrl)
     if (!proxy) return
