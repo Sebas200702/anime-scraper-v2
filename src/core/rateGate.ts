@@ -121,6 +121,10 @@ export class RateGate {
   }
 }
 
+/** Clave del gate a partir del host y la IP de salida. */
+export const proxyKey = (host: string, proxy?: string): string =>
+  `${host}|${proxy ?? 'direct'}`
+
 /** Clave del gate: la cuota depende del host **y** de la IP de salida. */
 export const gateKey = (url: string, proxy?: string): string => {
   let host = url
@@ -129,5 +133,5 @@ export const gateKey = (url: string, proxy?: string): string => {
   } catch {
     // URL rara: se usa tal cual como host best-effort
   }
-  return `${host}|${proxy ?? 'direct'}`
+  return proxyKey(host, proxy)
 }
