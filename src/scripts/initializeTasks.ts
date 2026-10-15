@@ -1,4 +1,4 @@
-import type { ProxyAgent } from 'undici'
+import type { ProxyTarget } from '../libs/transport.js'
 import { taskRepository } from '../repositories/tasks.js'
 import {
   fetchAnimePage,
@@ -35,7 +35,7 @@ const fetchEntityMetadata = async (config: {
   name: string
   fetchFunction: (
     page: number,
-    agent?: ProxyAgent
+    agent?: ProxyTarget
   ) => Promise<JikanResponse<DataType>>
   taskType: string
 }) => {

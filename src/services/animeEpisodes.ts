@@ -2,7 +2,7 @@ import { CONFIG } from '../config/config.js'
 import type { ScrapingTask } from 'types/index.js'
 import { fetcher } from '../libs/fetcher.js'
 import type { KitsuEpisodesResponse } from 'types/kitsuApi.js'
-import type { ProxyAgent } from 'undici'
+import type { ProxyTarget } from '../libs/transport.js'
 import { createRateLimiter } from '../utils/rateLimit.js'
 
 const BASE = CONFIG.KITSU_BASE || 'https://kitsu.io/api/edge'
@@ -15,7 +15,7 @@ const kitsuLimiter = createRateLimiter(1, 50)
 
 export const fetchAnimeEpisodes = async (
   task: ScrapingTask,
-  agent: ProxyAgent
+  agent: ProxyTarget
 ) => {
   const { kitsu_id } = task.payload as { kitsu_id: number }
 

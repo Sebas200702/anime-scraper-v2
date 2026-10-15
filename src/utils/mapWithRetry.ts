@@ -1,5 +1,5 @@
 import type { ScrapingTask } from '../types/index.js'
-import type { ProxyAgent } from 'undici'
+import type { ProxyTarget } from '../libs/transport.js'
 import { FetchError } from '../libs/fetcher.js'
 
 const extractId = (json: any) => {
@@ -20,7 +20,7 @@ export const mapWithRetry = async (
   payload: ScrapingTask['payload'],
   mappingFunction: (searchParams: any, agent: any) => Promise<{ json: any }>,
   rateLimiter: (() => Promise<void>) | null,
-  agent: ProxyAgent
+  agent: ProxyTarget
 ) => {
   const { title, title_english, title_japanese, year, type, title_synonyms } =
     payload as {

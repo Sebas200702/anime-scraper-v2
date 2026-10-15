@@ -1,7 +1,7 @@
 import { CONFIG } from '../config/config.js'
 import type { ScrapingTask } from '../types/index.js'
 import { fetcher } from '../libs/fetcher.js'
-import type { ProxyAgent } from 'undici'
+import type { ProxyTarget } from '../libs/transport.js'
 
 const GENERIC_HEADERS = {
   'User-Agent':
@@ -16,21 +16,30 @@ const GENERIC_HEADERS = {
 
 // Fetches the main page of an anime for general details.
 // URL: https://myanimelist.net/anime/:id
-export const fetchAnimeFull = async (task: ScrapingTask, agent?: ProxyAgent ) => {
+export const fetchAnimeFull = async (
+  task: ScrapingTask,
+  agent?: ProxyTarget
+) => {
   const url = `${CONFIG.MAL_BASE}/anime/${task.payload?.animeId}`
   return await fetcher({ url, headers: GENERIC_HEADERS, isJson: false, agent })
 }
 
 // Fetches the characters and voice actors page for an anime.
 // URL: https://myanimelist.net/anime/:id/_/characters
-export const fetchAnimeCharacters = async (task: ScrapingTask, agent?: ProxyAgent) => {
+export const fetchAnimeCharacters = async (
+  task: ScrapingTask,
+  agent?: ProxyTarget
+) => {
   const url = `${CONFIG.MAL_BASE}/anime/${task.payload?.animeId}/_/characters`
   return await fetcher({ url, headers: GENERIC_HEADERS, isJson: false, agent })
 }
 
 // Fetches the staff page for an anime.
 // URL: https://myanimelist.net/anime/:id/_/staff
-export const fetchAnimeStaff = async (task: ScrapingTask, agent?: ProxyAgent) => {
+export const fetchAnimeStaff = async (
+  task: ScrapingTask,
+  agent?: ProxyTarget
+) => {
   const url = `${CONFIG.MAL_BASE}/anime/${task.payload?.animeId}/_/staff`
   return await fetcher({ url, headers: GENERIC_HEADERS, isJson: false, agent })
 }

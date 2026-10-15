@@ -2,13 +2,13 @@ import { fetcher } from '../libs/fetcher.js'
 import { CONFIG } from '../config/config.js'
 import { authenticate } from '../libs/tvdb.js'
 import type { ScrapingTask } from 'types/index.js'
-import type { ProxyAgent } from 'undici'
+import type { ProxyTarget } from '../libs/transport.js'
 import type { TvdbSeriesResponse } from 'types/tvdbSeriesApi.js'
 import type { TvdbMovieResponse } from 'types/tvdbMoviesApi.js'
 
 export const fetchTvdbSeriesArtworks = async (
   task: ScrapingTask,
-  agent: ProxyAgent
+  agent: ProxyTarget
 ) => {
   const { tvdb_id, type } = task.payload as {
     tvdb_id: number

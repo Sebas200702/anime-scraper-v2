@@ -13,4 +13,8 @@ export const CONFIG = {
   ANILIST_BASE: process.env.ANILIST_BASE || 'https://graphql.anilist.co',
   TURSO_DATABASE_URL: process.env.TURSO_DATABASE_URL || '',
   TURSO_AUTH_TOKEN: process.env.TURSO_AUTH_TOKEN || '',
+  // Credenciales para proxies que las requieren (los listados públicos suelen
+  // responder 407 sin ellas, H-18).
+  PROXY_USER: process.env.PROXY_USER,
+  PROXY_PASS: process.env.PROXY_PASS,
 }

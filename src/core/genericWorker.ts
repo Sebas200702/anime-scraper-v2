@@ -1,11 +1,12 @@
 import { parentPort, workerData } from 'node:worker_threads'
-import { ProxyAgent } from 'undici'
 import { createRateLimiter } from '../utils/rateLimit.js'
 import { capitalize } from '../shared/parsers.js'
 import type { WorkerMessage } from 'types/index.js'
 
 const { workerId, tasks, proxy, sourceName, sourceConfig } = workerData
-const agent = new ProxyAgent(proxy.url)
+// El proxy viaja como URL: así enruta también bajo Bun (donde el ProxyAgent de
+// undici es un stub, H-17).
+const proxyUrl: string | undefined = proxy?.url
 
 const rateLimiter = createRateLimiter(
   sourceConfig.rateLimit.perSecond,
@@ -30,7 +31,7 @@ async function run() {
       if (!libModule[fetchFnName])
         throw new Error(`Missing ${fetchFnName} in services/${sourceName}.js`)
 
-      const rawData = await libModule[fetchFnName](task, agent)
+      const rawData = await libModule[fetchFnName](task, proxyUrl)
 
       console.log(
         `Worker ${workerId} fetched data for task ${task.id} (${task.taskType})`

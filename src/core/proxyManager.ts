@@ -1,5 +1,8 @@
 import fs from 'node:fs/promises'
 import type { ProxyState } from 'types/index.js'
+import { CONFIG } from '../config/config.js'
+import { normalizeProxy } from '../libs/transport.js'
+
 const raw = await fs.readFile('./proxies.json', 'utf-8')
 const rawProxies: string[] = JSON.parse(raw)
 
@@ -10,9 +13,20 @@ export const proxyManager = {
   init() {
     if (this.initialized) return
     this.initialized = true
-    console.log(`📡 Loaded ${rawProxies.length} proxies`)
-    this.proxies = rawProxies.map((proxy) => ({
-      url: `http://${proxy}`,
+
+    const credentials = { user: CONFIG.PROXY_USER, pass: CONFIG.PROXY_PASS }
+    const normalized: string[] = []
+    for (const entry of rawProxies) {
+      const url = normalizeProxy(entry, credentials)
+      if (url) normalized.push(url)
+    }
+
+    const skipped = rawProxies.length - normalized.length
+    console.log(
+      `📡 Loaded ${normalized.length} proxies${skipped > 0 ? ` (${skipped} entradas inválidas ignoradas)` : ''}`
+    )
+    this.proxies = normalized.map((url) => ({
+      url,
       failures: 0,
       lastUsed: 0,
       cooldownUntil: 0,

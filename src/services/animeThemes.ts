@@ -1,7 +1,7 @@
 import { fetcher } from '../libs/fetcher.js'
 import { CONFIG } from '../config/config.js'
 import type { ScrapingTask } from 'types/index.js'
-import type { ProxyAgent } from 'undici'
+import type { ProxyTarget } from '../libs/transport.js'
 import type {
   AnimeThemesAnimeAllFile,
   AnimeThemesArtistAllFile,
@@ -9,7 +9,7 @@ import type {
 
 export const fetchAnimeThemes = async (
   task: ScrapingTask,
-  agent: ProxyAgent
+  agent: ProxyTarget
 ) => {
   const { entityId } = task
   const url = `${CONFIG.ANIME_THEMES_BASE}/anime/${entityId}.json`
@@ -26,12 +26,11 @@ export const fetchAnimeThemesSlugs = async () => {
   const response = await fetcher<AnimeThemesAnimeAllFile>({
     url,
     method: 'GET',
-
   })
   return response
 }
 
-export const fetchArtist = async (task: ScrapingTask, agent: ProxyAgent) => {
+export const fetchArtist = async (task: ScrapingTask, agent: ProxyTarget) => {
   const { entityId } = task
   const url = `${CONFIG.ANIME_THEMES_BASE}/artist/${entityId}.json`
   const response = await fetcher({

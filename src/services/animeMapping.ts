@@ -2,7 +2,7 @@ import { kitsuMapping, tvdbMapping } from './mapping.js'
 import { mapWithRetry } from '../utils/mapWithRetry.js'
 import { createRateLimiter } from '../utils/rateLimit.js'
 import type { ScrapingTask } from 'types/index.js'
-import type { ProxyAgent } from 'undici'
+import type { ProxyTarget } from '../libs/transport.js'
 
 // Fase 0: los limiters de módulo son **por worker** (cada thread importa su
 // propia copia), así que se alinean con la cuota de Kitsu (60/min) en vez de
@@ -12,7 +12,7 @@ const tvdbLimiter = createRateLimiter(1, 50)
 
 export const fetchAnimeMapping = async (
   task: ScrapingTask,
-  agent: ProxyAgent
+  agent: ProxyTarget
 ) => {
   const { title, title_english, title_japanese, title_synonyms, year, type } =
     task.payload as {

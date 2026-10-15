@@ -2,7 +2,7 @@ import { CONFIG } from '../config/config.js'
 
 import { kisutTypeMapping, tvDbTypeMapping } from '../utils/typeMapping.js'
 import { fetcher } from '../libs/fetcher.js'
-import type { ProxyAgent } from 'undici/types/index.js'
+import type { ProxyTarget } from '../libs/transport.js'
 import { authenticate } from '../libs/tvdb.js'
 
 export const kitsuMapping = async (
@@ -11,7 +11,7 @@ export const kitsuMapping = async (
     year?: number
     type?: keyof typeof kisutTypeMapping
   },
-  agent?: ProxyAgent
+  agent?: ProxyTarget
 ) => {
   if (!query || !agent) {
     throw new Error('Missing query or agent')
@@ -45,7 +45,7 @@ export const kitsuMapping = async (
 
 export const tvdbMapping = async (
   query?: { title: string; year?: number; type?: keyof typeof tvDbTypeMapping },
-  agent?: ProxyAgent
+  agent?: ProxyTarget
 ) => {
   if (!query || !agent) {
     throw new Error('Missing query or agent')

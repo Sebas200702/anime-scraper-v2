@@ -1,10 +1,10 @@
 import type { ScrapingTask } from 'types/index.js'
-import { ProxyAgent } from 'undici'
+import type { ProxyTarget } from '../libs/transport.js'
 import { fetcher } from '../libs/fetcher.js'
 import { CONFIG } from '../config/config.js'
 export const fetchAnimeDetails = async (
   task: ScrapingTask,
-  agent: ProxyAgent
+  agent: ProxyTarget
 ) => {
   const { animeId } = task.payload as { animeId: number }
   console.log('Fetching anime details for anime ID:', animeId)
@@ -22,7 +22,7 @@ export const fetchAnimeDetails = async (
 
 export const fetchAnimeCharacters = async (
   task: ScrapingTask,
-  agent: ProxyAgent
+  agent: ProxyTarget
 ) => {
   const { animeId } = task.payload as { animeId: number }
   console.log('Fetching anime characters for anime ID:', animeId)
@@ -40,7 +40,7 @@ export const fetchAnimeCharacters = async (
 
 export const fetchAnimeStaff = async (
   task: ScrapingTask,
-  agent: ProxyAgent
+  agent: ProxyTarget
 ) => {
   const { animeId } = task.payload as { animeId: number }
   console.log('Fetching anime staff for anime ID:', animeId)

@@ -1,11 +1,10 @@
-import { ProxyAgent, request } from 'undici'
 import {
   FetchError,
   classifyStatus,
   isChallengeBody,
   parseRetryAfter,
 } from './httpError.js'
-import { warnIfProxyIgnored } from './runtime.js'
+import { type ProxyTarget, send } from './transport.js'
 
 export { FetchError } from './httpError.js'
 export type { FetchErrorKind } from './httpError.js'
@@ -38,7 +37,11 @@ export interface FetcherOptions {
   url: string
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   headers?: Record<string, string>
-  agent?: ProxyAgent
+  /**
+   * URL del proxy (recomendado: enruta bajo Bun y Node) o un `ProxyAgent`
+   * (solo Node; bajo Bun se avisa y se ignora, H-17).
+   */
+  agent?: ProxyTarget
   body?: any
   isJson?: boolean
   /** Presupuesto total (headers + body) de cada intento. */
@@ -82,14 +85,6 @@ const shouldParseAsJson = (text: string, contentType?: string): boolean => {
   if (looksLikeJson(text)) return true
   // Declarado JSON: cubre escalares válidos (`123`, `null`, `"ok"`).
   return Boolean(contentType && JSON_CONTENT_TYPE.test(contentType))
-}
-
-const headerValue = (
-  headers: Record<string, string | string[] | undefined>,
-  name: string
-): string | undefined => {
-  const value = headers[name] ?? headers[name.toLowerCase()]
-  return Array.isArray(value) ? value[0] : value
 }
 
 const normalizeRetry = (policy: RetryPolicy): RetryPolicy => {
@@ -210,41 +205,36 @@ const requestOnce = async <T>(options: FetcherOptions): Promise<T> => {
     ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)])
     : AbortSignal.timeout(timeoutMs)
 
-  warnIfProxyIgnored(agent)
-
-  const fetchOptions = {
-    method,
-    headers: { ...defaultHeaders, ...headers },
-    body,
-    ...(agent ? { dispatcher: agent } : {}),
-    headersTimeout: headersTimeoutMs,
-    bodyTimeout: bodyTimeoutMs,
-    signal,
-  }
-
   let statusCode: number
-  let responseHeaders: Record<string, string | string[] | undefined>
+  let contentType: string | undefined
+  let retryAfter: string | null
   let text: string
 
   try {
-    const response = await request(url, fetchOptions)
-    statusCode = response.statusCode
-    responseHeaders = response.headers
-    text = await response.body.text()
+    const response = await send({
+      url,
+      method,
+      headers: { ...defaultHeaders, ...headers },
+      body,
+      proxy: agent,
+      headersTimeoutMs,
+      bodyTimeoutMs,
+      signal,
+    })
+    statusCode = response.status
+    contentType = response.headers.get('content-type') ?? undefined
+    retryAfter = response.headers.get('retry-after')
+    text = response.text
   } catch (error) {
     throw toFetchError(error, url, timeoutMs, options.signal)
   }
-
-  const contentType = headerValue(responseHeaders, 'content-type')
 
   if (statusCode >= 400) {
     throw new FetchError({
       kind: classifyStatus(statusCode),
       url,
       status: statusCode,
-      retryAfterMs: parseRetryAfter(
-        headerValue(responseHeaders, 'retry-after')
-      ),
+      retryAfterMs: parseRetryAfter(retryAfter),
       snippet: snippetOf(text, contentType),
     })
   }
