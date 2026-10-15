@@ -1,12 +1,12 @@
 import type { SourceConfig } from 'types/index.js'
 
 /**
- * Fase 0 — límites alineados con las cuotas reales de cada fuente.
+ * Configuración de fuentes.
  *
- * El rate limiter se crea **por worker** (`core/genericWorker.ts`), así que la
- * tasa efectiva es `maxWorkers × rateLimit`. Los valores de abajo son la única
- * combinación que respeta las cuotas documentadas; la Fase 1 mueve el límite a
- * un bucket global en el proceso padre y reemplaza esta aritmética.
+ * La cuota efectiva ya **no** se calcula por worker: el `RateGate` la aplica
+ * por `(host, IP de salida)` con los límites de `SOURCE_HOSTS` (una IP por
+ * tarea, ver `core/taskDispatcher.ts`). `rateLimit` queda como presupuesto por
+ * defecto de la fuente (fallback si la fuente no tiene host declarado).
  */
 export const SOURCES: SourceConfig[] = [
   {
@@ -114,7 +114,38 @@ const BACKFILL_PROFILES: Record<
   },
 }
 
-const MAX_WORKERS_ENV = Number(process.env.SCRAPER_MAX_WORKERS)
+const MAX_WORKERS_ENV = () => Number(process.env.SCRAPER_MAX_WORKERS)
+
+/**
+ * Host y cuota por IP de cada fuente. La cuota la aplica el `RateGate` por
+ * (host, IP de salida), porque Jikan/Kitsu la imponen por IP.
+ */
+export const SOURCE_HOSTS: Record<
+  string,
+  { host: string; limits: { perSecond: number; perMinute: number } }
+> = {
+  jikan: { host: 'api.jikan.moe', limits: { perSecond: 3, perMinute: 60 } },
+  jikanRelations: {
+    host: 'api.jikan.moe',
+    limits: { perSecond: 3, perMinute: 60 },
+  },
+  animeThemes: {
+    host: 'animethemes.moe',
+    limits: { perSecond: 2, perMinute: 120 },
+  },
+  animeMapping: { host: 'kitsu.io', limits: { perSecond: 1, perMinute: 60 } },
+  animeEpisodes: { host: 'kitsu.io', limits: { perSecond: 1, perMinute: 60 } },
+  tvdbSeriesArtworks: {
+    host: 'api4.thetvdb.com',
+    limits: { perSecond: 1, perMinute: 30 },
+  },
+}
+
+/**
+ * Fuentes cuya cuota es **por API key**, no por IP: repartirlas entre proxies
+ * no multiplica nada y además arriesga la key, así que van en una sola IP.
+ */
+export const SINGLE_IP_SOURCES = new Set(['tvdbSeriesArtworks'])
 
 export function getSourceConfig(sourceName: string) {
   const config = SOURCES.find((s) => s.name === sourceName)
@@ -124,15 +155,18 @@ export function getSourceConfig(sourceName: string) {
   const profile = BACKFILL_PROFILES[resolved.name]
 
   if (profile && process.env.SCRAPER_MODE === 'backfill') {
+    // Se lee en el momento (no al importar): así el modo también funciona si el
+    // entorno se define después de cargar el módulo.
+    const requested = MAX_WORKERS_ENV()
     const cap =
-      Number.isInteger(MAX_WORKERS_ENV) && MAX_WORKERS_ENV > 0
-        ? MAX_WORKERS_ENV
+      Number.isInteger(requested) && requested > 0
+        ? requested
         : profile.maxWorkers
 
     resolved.maxWorkers = Math.min(cap, profile.maxWorkers)
     resolved.rateLimit = { ...profile.rateLimit }
     console.log(
-      `⚙️  Modo backfill: ${resolved.name} con ${resolved.maxWorkers} workers (1 proxy por worker)`
+      `⚙️  Modo backfill: ${resolved.name} con ${resolved.maxWorkers} tareas en vuelo (una IP por tarea)`
     )
   }
 

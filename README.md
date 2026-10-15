@@ -16,16 +16,28 @@ Ingesta del catálogo de **anidev-v2** (Track D).
 
 ```bash
 bun install
-bun run build            # tsc + tsc-alias → dist/
-bun run start jikanRelations
+bun run dev jikanRelations   # sin build: Bun ejecuta el TS directamente
+bun run build                # tsc + tsc-alias → dist/ (typecheck/CI)
+bun run start jikanRelations # sobre dist/
 ```
 
-`bun run start <source>` corre el inicializador de tareas y luego el manager del
+`bun run dev <source>` corre el inicializador de tareas y luego la ingesta del
 source. Sources disponibles: `jikan`, `jikanRelations`, `animeThemes`,
 `animeMapping`, `animeEpisodes`, `tvdbSeriesArtworks`.
 
-El worker se carga desde `dist/` (`./dist/src/core/genericWorker.js`), por eso
-`bun run build` es obligatorio antes de `start`.
+## Arquitectura de ingesta
+
+Un solo proceso: el **padre** fetchea y mapea, con una **IP por tarea** y la
+cuota aplicada por `(host, IP de salida)` (`core/rateGate.ts` +
+`core/taskDispatcher.ts`). No hay `worker_threads`.
+
+- El pool se alimenta con el resultado real de cada request: éxito limpia el
+  proxy, y solo se penaliza cuando `FetchError.proxyFault` lo justifica (un 404,
+  un 429 o credenciales inválidas no castigan la IP).
+- Un `Retry-After` pausa esa `(host, IP)` concreta, no todas.
+- Cuotas por IP en `SOURCE_HOSTS`: Jikan 3/s y 60/min, Kitsu 60/min,
+  AnimeThemes 2/s, TVDB 1/s y 30/min **en una sola IP** (su cuota es por API
+  key, así que repartirla entre proxies no multiplica nada).
 
 ## Proxies
 
@@ -92,9 +104,6 @@ usa Kitsu si tu red no alcanza `api.jikan.moe`); `--stage1-only` omite la etapa
 > (13%) y **0** pasaron una request JSON real; 11 de ellos devolvieron un body
 > modificado. Los proxies libres no son una base viable para este catálogo.
 
-## Límites de fuentes (Fase 0)
-
-El limiter actual es **por worker**, así que la tasa efectiva es
-`maxWorkers × rateLimit`. Los valores de `src/config/sources.ts` están alineados
-con las cuotas reales (Jikan 3/s y 60/min, Kitsu 60/min); la Fase 1 mueve el
-límite a un bucket global en el proceso padre.
+**La cuota es por IP**: el `RateGate` la aplica por `(host, IP de salida)` con
+los límites de `SOURCE_HOSTS`, y cada tarea usa una IP distinta del pool. TVDB es
+la excepción (cuota por API key): va sin proxy y con una sola tarea en vuelo.

@@ -168,25 +168,6 @@ export interface ProxyState {
   cooldownUntil: number
   totalRequests: number
 }
-export interface WorkerData {
-  workerId: number
-  tasks: ScrapingTask[]
-  /** Array of proxy URL strings for this worker to rotate through */
-  proxyUrls: string[]
-  sourceName: string | undefined
-  sourceConfig: SourceConfig | null
-}
-
-export interface WorkerMessage {
-  workerId: number
-  status: 'done' | 'error' | 'finished' | 'proxy-failure' | 'proxy-success'
-  taskType: string
-  entity?: string
-  taskId: number
-  error?: string
-  data?: ProcessorResult | ProcessorResult[]
-  proxyUrl?: string
-}
 
 export interface AnimeProcessorResult {
   anime: NewAnime

@@ -11,6 +11,7 @@
   "scripts": {
     "build": "tsc --project tsconfig.json && tsc-alias --project tsconfig.json ",
     "start": "bun dist/src/index.js",
+    "dev": "bun src/index.ts",
     "test": "bun test",
     "proxies:probe": "bun src/scripts/probeProxies.ts"
   },

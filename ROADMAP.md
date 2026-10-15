@@ -11,13 +11,12 @@
 >
 > **Estrategia de fill/refresh**: `docs/fill-and-refresh-strategy.md`.
 >
-> **Estado**: planeación cerrada 2026-10-15. **Fase 0** implementada
-> (`fix/fetcher-safe-writes`) y **Fase 1 · PR1** implementado
-> (`fix/fetcher-resilience`) más el transporte de proxies (H-17/H-20/H-21) y el
-> harvester + modo backfill. **Proxies: 100/100 verificados** (trial de
-> ProxyScrape) y `proxies.json` activo; falta medir contra **Jikan desde el
-> VPS** (este sandbox no alcanza `api.jikan.moe`).
-> Falta la corrida de humo de 1.000 tareas.
+> **Estado**: **PR2 (núcleo) implementado**: rate gate por (host, IP), pool con
+> rotación por tarea y reporte de resultado, orquestador con `maxInFlight` y
+> proceso único (sin `worker_threads`). Proxies: **100/100 verificados**
+> (trial de ProxyScrape) y `proxies.json` activo.
+> **Falta**: humo de 1.000 tareas (local; Jikan no es alcanzable desde el
+> sandbox) y la Fase 2 (cola en Postgres) para la reanudación crash-safe.
 
 ---
 
@@ -142,25 +141,19 @@ sin esperar al refactor. Todo config + ~50 líneas.
 
 ### PR2 — `feat/rate-gate` (Opción A, D-S1)
 
-- **Transporte (bloqueante, H-17)**: usar un transporte que **realmente enrute**
-  por proxy: `fetch(url, { proxy })` nativo de Bun (verificado con proxies
-  reales) o, bajo Node, `undici` real (ProxyAgent + CONNECT). El shim de
-  `ProxyAgent` bajo Bun queda prohibido en el camino crítico.
-- **Credenciales de proxy (H-18)**: aceptar `user:pass@ip:port` (y
-  `PROXY_USER`/`PROXY_PASS` por env) al normalizar el listado; los proxies
-  actuales responden 407 sin credenciales.
-- **Inversión**: el padre fetchea (bucket global por host + proxies por request
-  + retries centralizados); el worker solo mapea `{task, rawText} → data`.
-- `core/rateGate.ts`: token bucket por host `{ perSecond, perMinute, burst }`,
-  FIFO, pausa global por host ante `Retry-After`, caps por modo (A/B).
-- Dispatch **pull**: el worker pide la siguiente tarea; el padre espera el
-  bucket, fetchea y responde `{task, raw}` (o `{idle}`). Base natural del
-  claim/lease de Fase 2.
-- Config por host en `config/sources.ts`: jikan `3/s + 60/min`, kitsu
-  `1/s + 60/min`, tvdb/animethemes medidos y documentados.
-- **TVDB**: token único en el padre (H-04), `/login` detrás del bucket.
-- **Criterio**: test de fairness (N llamadores concurrentes ≤ límite del host);
-  tasa medida por host en logs; humo de 1k sin 429.
+- **✅ Implementado**: `core/rateGate.ts` (cuota por `(host, IP)` con FIFO y
+  pausas por `Retry-After`), `core/taskDispatcher.ts` (una IP por tarea,
+  `maxInFlight`, reporte de resultado al pool con `proxyFault`),
+  `proxyManager.acquire()` (rotación LRU real) y `GenericManager` orquestando
+  fetch + mapeo en el padre sin `worker_threads` (§6.6).
+- **Pendiente (Fase 2)**: la cola en Postgres con claim/lease para reanudar sin
+  perder slices; partir las tareas con fan-out interno (paginado de episodios)
+  para que el gate cubra cada request.
+- **Transporte (H-17) — resuelto**: `fetch(url, { proxy })` nativo de Bun
+  (verificado 100/100 con proxies reales); normaliza cualquier proxy string y
+  rechaza SOCKS explícitamente.
+- **Credenciales de proxy (H-18) — resuelto**: `user:pass@ip:port` y
+  `PROXY_USER`/`PROXY_PASS`.
 
 ### PR3 — `fix/proxy-pool`
 
@@ -235,12 +228,30 @@ sin esperar al refactor. Todo config + ~50 líneas.
   (gitignored) está activo con esa lista.
 - **Límites del trial**: 7 días, **10 GB**, **10 conexiones concurrentes** → el
   barrido completo (~3-5 GB) cabe, con techo de 10 slots.
-- **Modo A (backfill)**: `SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run start <source>`.
-  Un proxy por worker ⇒ cada worker usa la cuota completa de la fuente (el
-  bucket por (host, IP) fino llega en PR2).
-- **Modo B (prod, Dokploy)**: sin proxies, una IP, ~3 min/día.
+- **Modo A (backfill)**: `SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev <source>`.
+  Una **IP por tarea** (ya no un proxy fijo por worker), con la cuota completa de
+  cada IP.
+- **Modo B (prod)**: sin proxies, una IP, ~3 min/día.
 - **Pendiente**: medir desde el VPS contra **Jikan** (aquí no es alcanzable) y
   correr el humo de 1.000 tareas con el pool activo.
+
+## 6.6 Arquitectura de ingesta: un solo proceso (2026-10-15)
+
+Decisión refinada de D-S1: **el padre fetchea y mapea**, sin `worker_threads`.
+
+- A las tasas reales (≤ decenas de req/s) el trabajo es I/O y el mapeo es
+  liviano, así que un solo proceso basta.
+- Elimina de raíz: limiter por worker (H-01), un proxy fijo por worker (H-06),
+  workers colgados sin watchdog (H-05), el `dist/` obligatorio (H-15) y la
+  imposibilidad de reportar al pool.
+- El trabajo por tarea se inyecta en `TaskDispatcher` (`run`), así que si el
+  perfilado algún día muestra que el mapeo cuesta CPU, se puede volver a
+  offloadear a threads **sin tocar** el gate, el pool ni la cola.
+- Limpieza hecha: `core/baseManager.ts`, `core/genericWorker.ts` y los tipos
+  `WorkerData`/`WorkerMessage` eliminados.
+- Deuda que queda (Fase 2/PR3): tareas que hacen fan-out interno
+  (`fetchAnimeEpisodes` pagina por dentro) siguen limitadas por su propio limiter
+  por worker; el gate por request completo llega al partir esas tareas en el padre.
 
 ## 7. Verificación por PR
 ```bash

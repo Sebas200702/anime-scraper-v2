@@ -1,30 +1,50 @@
-import { BaseWorkerManager } from './baseManager.js'
 import { taskRepository } from '../repositories/tasks.js'
 import { StatsReporter } from './statsReporter.js'
 import { proxyManager } from './proxyManager.js'
+import { RateGate } from './rateGate.js'
+import { TaskDispatcher, type DispatcherTask } from './taskDispatcher.js'
+import { SINGLE_IP_SOURCES, SOURCE_HOSTS } from '../config/sources.js'
 import { capitalize } from '../shared/parsers.js'
 import { sanitizeError } from '../utils/sanitizeError.js'
 import type {
-  ProxyState,
   ScrapingTask,
   SourceConfig,
-  WorkerMessage,
   BufferedTask,
 } from '../types/index.js'
 
-export class GenericManager extends BaseWorkerManager {
+/**
+ * Una sola puerta de rate para toda la corrida: si se recreara en cada lote, las
+ * ventanas se resetearían y la cuota por (host, IP) no se respetaría.
+ */
+const rateGate = new RateGate()
+
+/**
+ * Ingesta de una fuente: el proceso padre fetchea y mapea (una tarea por IP,
+ * con la cuota por (host, IP) aplicada por el `TaskDispatcher`), bufferiza por
+ * tipo de tarea y guarda en lotes.
+ *
+ * Ya no hay `worker_threads`: a las tasas reales (≤ decenas de req/s) el trabajo
+ * es I/O y el mapeo es liviano, y un solo proceso elimina las clases de fallo
+ * de la etapa anterior (limiter por worker, un proxy fijo por worker, workers
+ * colgados, `dist/` obligatorio, nada que reporte al pool).
+ */
+export class GenericManager {
+  readonly maxWorkers: number
+  readonly source: string
+  sourceConfig: SourceConfig
+  taskQueue: DispatcherTask[] = []
+  pageBatch: number
+  bufferByTaskType = new Map<string, BufferedTask[]>()
+
   private readonly savingByTaskType: Set<string> = new Set()
   private cachedRepository: any = null
+  private cachedModules: { services: any; processors: any } | null = null
   private statsInterval: ReturnType<typeof setInterval> | null = null
-  private workersSpawned = false
   private readonly reporter: StatsReporter
 
   constructor(sourceConfig: SourceConfig) {
-    super({
-      maxWorkers: sourceConfig.maxWorkers,
-      source: sourceConfig.name,
-      workerPath: './dist/src/core/genericWorker.js',
-    })
+    this.maxWorkers = sourceConfig.maxWorkers
+    this.source = sourceConfig.name
     this.sourceConfig = sourceConfig
     this.pageBatch = sourceConfig.pageBatch
     this.reporter = new StatsReporter(sourceConfig.name)
@@ -41,7 +61,17 @@ export class GenericManager extends BaseWorkerManager {
     return this.cachedRepository
   }
 
-  override async getTasks() {
+  private async getModules() {
+    if (!this.cachedModules) {
+      this.cachedModules = {
+        services: await import(`../services/${this.sourceConfig?.name}.js`),
+        processors: await import(`../processors/${this.sourceConfig?.name}.js`),
+      }
+    }
+    return this.cachedModules
+  }
+
+  async getTasks() {
     const batchSize = this.sourceConfig?.taskBatchSize || 2000
     this.taskQueue = await taskRepository.getPendingTasks(
       batchSize,
@@ -49,54 +79,69 @@ export class GenericManager extends BaseWorkerManager {
     )
   }
 
-  override getWorkerData(id: number, tasks: ScrapingTask[], proxy: ProxyState) {
-    console.log(
-      `Spawning worker ${id} with ${tasks.length} tasks and proxy ${proxy.url}`
-    )
-    return {
-      workerId: id,
-      tasks,
-      proxy,
-      sourceName: this.sourceConfig?.name,
-      sourceConfig: this.sourceConfig,
+  /** Fetch + mapeo en el proceso padre, con la IP que decidió el orquestador. */
+  private async runTask(task: ScrapingTask, proxyUrl: string | undefined) {
+    const modules = await this.getModules()
+    const taskConfig = this.sourceConfig?.tasks[task.taskType]
+    if (!taskConfig) throw new Error(`Unknown taskType: ${task.taskType}`)
+
+    const entity = capitalize(taskConfig.entity)
+    const fetchFn = modules.services[`fetch${entity}`]
+    if (typeof fetchFn !== 'function') {
+      throw new Error(`Missing fetch${entity} in services/${this.source}.js`)
     }
-  }
 
-  private sendTasksToWorkers() {
-    const totalTasks = this.taskQueue.length
-    if (!totalTasks || this.workers.length === 0) return
-    const tasksPerWorker = Math.ceil(totalTasks / this.workers.length)
-
-    for (let i = 0; i < this.workers.length; i++) {
-      const slice = this.taskQueue.slice(
-        i * tasksPerWorker,
-        (i + 1) * tasksPerWorker
+    const processFn = modules.processors[`process${entity}`]
+    if (typeof processFn !== 'function') {
+      throw new Error(
+        `Missing process${entity} in processors/${this.source}.js`
       )
-      if (slice.length > 0) {
-        this.workers[i]!.postMessage({ type: 'newTasks', tasks: slice })
-      }
     }
-    console.log(
-      `📨 Sent ${totalTasks} tasks to ${this.workers.length} existing workers`
-    )
+
+    const rawData = await fetchFn(task, proxyUrl)
+    return await processFn(rawData, task)
   }
 
-  private shutdownWorkers() {
-    for (const worker of this.workers) worker.postMessage({ type: 'shutdown' })
-    this.workers = []
-    this.workersSpawned = false
-  }
-
-  override async init() {
+  async init() {
     this.reporter.reset()
     await this.getRepository()
+    await this.getModules()
 
-    const resetCount = await taskRepository.resetStaleTasks(
-      this.sourceConfig?.name
-    )
+    const source = this.sourceConfig?.name ?? this.source
+    const hostLimits = SOURCE_HOSTS[source] ?? {
+      host: source,
+      limits: this.sourceConfig?.rateLimit ?? { perSecond: 1, perMinute: 60 },
+    }
+
+    const resetCount = await taskRepository.resetStaleTasks(source)
     if (resetCount > 0) console.log(`♻️  Reset ${resetCount} stale tasks`)
 
-    console.log(`\n🚀 Starting ${this.sourceConfig?.name}...\n`)
+    proxyManager.init()
+    const singleIp = SINGLE_IP_SOURCES.has(source)
+    const poolSize = proxyManager.getAvailableProxies().length
+    const maxInFlight = singleIp
+      ? 1
+      : Math.min(this.maxWorkers, Math.max(1, poolSize))
+
+    console.log(
+      `\n🚀 Starting ${source} — ${maxInFlight} tareas en vuelo · ` +
+        (singleIp
+          ? 'sin proxy (cuota por API key)\n'
+          : `${poolSize} proxies en el pool\n`)
+    )
+
+    const dispatcher = new TaskDispatcher({
+      maxInFlight,
+      gate: rateGate,
+      acquireProxy: () => (singleIp ? undefined : proxyManager.acquire()),
+      limitsFor: () => hostLimits,
+      reportProxy: (proxyUrl, error) => {
+        if (!proxyUrl) return
+        if (error) proxyManager.reportFailure(proxyUrl)
+        else proxyManager.reportSuccess(proxyUrl)
+      },
+    })
+
     this.statsInterval = setInterval(() => this.reporter.print(), 30_000)
 
     try {
@@ -104,7 +149,7 @@ export class GenericManager extends BaseWorkerManager {
       while (true) {
         await this.getTasks()
         if (this.taskQueue.length === 0) {
-          if (batchNumber === 0) console.log(`✅ No tasks for ${this.source}\n`)
+          if (batchNumber === 0) console.log(`✅ No tasks for ${source}\n`)
           break
         }
         batchNumber++
@@ -112,67 +157,38 @@ export class GenericManager extends BaseWorkerManager {
           `\n📦 Batch ${batchNumber}: ${this.taskQueue.length} tasks\n`
         )
 
-        await taskRepository.markTasksInProgress(
-          this.taskQueue.map((t) => t.id)
+        const summary = await dispatcher.drain(
+          this.taskQueue as DispatcherTask[],
+          {
+            run: async (task, proxyUrl) => {
+              // `in_progress` por tarea, justo antes de usarla: antes se marcaba
+              // el lote completo por adelantado y un crash perdía el resto.
+              await taskRepository.markTaskInProgress(task.id)
+              return await this.runTask(task as ScrapingTask, proxyUrl)
+            },
+            onDone: (task, data) =>
+              this.processWorkerData(task.id, task.taskType, data),
+            onError: (task, error) =>
+              taskRepository.markTaskFailed(
+                task.id,
+                sanitizeError((error as Error)?.message)
+              ),
+          }
         )
-        this.finishedWorkers = 0
-        this.bufferByTaskType = new Map()
-        this.completionPromise = new Promise((r) => {
-          this.resolveCompletion = r
-        })
 
-        if (!this.workersSpawned) {
-          this.distributeTasks()
-          this.workersSpawned = true
-        } else {
-          this.sendTasksToWorkers()
-        }
-        await this.completionPromise
+        console.log(
+          `📦 Batch ${batchNumber}: ${summary.processed} ok · ${summary.failed} fallos ${JSON.stringify(summary.byKind)} · ${summary.proxiesUsed} IPs usadas`
+        )
       }
+
+      await this.flush()
     } finally {
-      this.shutdownWorkers()
       if (this.statsInterval) clearInterval(this.statsInterval)
       this.reporter.print()
       const health = proxyManager.getHealthSummary()
       console.log(
         `📡 Proxies — healthy: ${health.healthy}, cooldown: ${health.cooldown}, dead: ${health.dead}/${health.total}`
       )
-    }
-  }
-
-  override async handleWorkerMessage(
-    id: number,
-    msg: WorkerMessage
-  ): Promise<void> {
-    const { status, taskId, taskType, data, error, proxyUrl } = msg
-
-    if (status === 'proxy-failure' && proxyUrl) {
-      proxyManager.reportFailure(proxyUrl)
-      return
-    }
-    if (status === 'proxy-success' && proxyUrl) {
-      proxyManager.reportSuccess(proxyUrl)
-      return
-    }
-
-    if (status === 'done') {
-      this.reporter.incrementProcessed()
-      await this.processWorkerData(taskId, taskType, data)
-    }
-    if (status === 'error') {
-      this.reporter.incrementErrors()
-      console.error(`Worker ${id} error on task ${taskId}:`, error)
-      await taskRepository.markTaskFailed(taskId, error || 'Unknown error')
-    }
-    if (status === 'finished') {
-      this.finishedWorkers++
-      console.log(
-        `Worker ${id} finished (${this.finishedWorkers}/${this.workers.length})`
-      )
-      if (this.finishedWorkers === this.workers.length) {
-        await this.flush()
-        if (this.resolveCompletion) this.resolveCompletion()
-      }
     }
   }
 
@@ -216,8 +232,7 @@ export class GenericManager extends BaseWorkerManager {
         while (buffer.length > 0)
           await this.saveData(buffer.splice(0, this.pageBatch))
       } catch (error) {
-        // Un tipo que falle no puede abortar el volcado de los demás ni dejar
-        // `resolveCompletion` sin llamar (eso colgaría la corrida entera).
+        // Un tipo que falle no puede abortar el volcado de los demás.
         console.error(`Error flushing ${taskType}:`, error)
       } finally {
         this.savingByTaskType.delete(taskType)
@@ -266,7 +281,7 @@ export class GenericManager extends BaseWorkerManager {
     }
   }
 
-  override printStats() {
+  printStats() {
     this.reporter.print()
   }
 }
