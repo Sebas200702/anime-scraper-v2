@@ -44,6 +44,7 @@ const patchFrom = (
   set('synopsis', 'synopsis')
   set('background', 'background')
   set('source', 'source')
+  set('duration', 'duration')
   set('rank', 'rank')
   set('members', 'members')
   set('broadcastDay', 'broadcastDay')

@@ -21,9 +21,12 @@ describe('processAnimeMalDetails (MAL API oficial → anime + junctions con ids 
         popularity: 2,
         num_list_users: 3400000,
         num_scoring_users: 1800000,
-        genres: [{ id: 1, name: 'Action' }],
-        demographics: [{ id: 27, name: 'Shounen' }],
-        themes: [{ id: 18, name: 'Military' }],
+        // MAL los mezcla: 27 (Shounen) es demográfica, 18 (Military) género.
+        genres: [
+          { id: 1, name: 'Action' },
+          { id: 27, name: 'Shounen' },
+          { id: 18, name: 'Military' },
+        ],
         media_type: 'tv',
         status: 'finished_airing',
         num_episodes: 64,
@@ -58,18 +61,24 @@ describe('processAnimeMalDetails (MAL API oficial → anime + junctions con ids 
       broadcastTime: '17:00',
       broadcastTimezone: 'Asia/Tokyo',
     })
-    expect(result.genres).toEqual([{ malId: 1, name: 'Action' }])
+    expect(result.genres).toEqual([
+      { malId: 1, name: 'Action' },
+      { malId: 18, name: 'Military' },
+    ])
     expect(result.demographics).toEqual([{ malId: 27, name: 'Shounen' }])
-    expect(result.themes).toEqual([{ malId: 18, name: 'Military' }])
+    expect(result.themes).toEqual([])
     expect(result.producers).toEqual([{ malId: 4 }])
     expect(result.animeProducers).toEqual([
       { animeId: 5114, producerId: 4, role: 'studio' },
     ])
-    expect(result.animeGenres).toEqual([{ animeId: 5114, genreId: 1 }])
+    expect(result.animeGenres).toEqual([
+      { animeId: 5114, genreId: 1 },
+      { animeId: 5114, genreId: 18 },
+    ])
     expect(result.animeDemographics).toEqual([
       { animeId: 5114, demographicId: 27 },
     ])
-    expect(result.animeThemes).toEqual([{ animeId: 5114, themeId: 18 }])
+    expect(result.animeThemes).toEqual([])
   })
 
   test('sin campos opcionales no inventa valores (nunca null)', () => {

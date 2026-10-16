@@ -74,16 +74,26 @@ const durationText = (seconds?: number): string | undefined => {
  * animación (`role: 'studio'`); el resto de compañías van como `producer`
  * (los licenciadores reales solo los da el detalle de la compañía).
  */
+/**
+ * MAL devuelve géneros, temas y demográficas juntos en `genres`. Las cuatro
+ * demográficas tienen ids estables (25 Shoujo, 26 Josei, 27 Shounen, 28 Seinen)
+ * y se separan a `demographic`; el resto (incluidos los temas) va a `genre`
+ * **sin perder nada**: comparten ids MAL, así que un split posterior es un
+ * `UPDATE`, no un refetch.
+ */
+const DEMOGRAPHIC_IDS = new Set([25, 26, 27, 28])
+
 export const processAnimeMalDetails = (
   raw: MalAnimeDetails,
   task: ScrapingTask
 ): AnimeMalDetailsProcessorResult => {
   const malId = Number(task.entityId.replace('anime_mal_', ''))
-  const genres = (raw.genres ?? []).map((g) => ({ malId: g.id, name: g.name }))
-  const demographics = (raw.demographics ?? []).map((g) => ({
+  const allGenres = (raw.genres ?? []).map((g) => ({
     malId: g.id,
     name: g.name,
   }))
+  const genres = allGenres.filter((g) => !DEMOGRAPHIC_IDS.has(g.malId))
+  const demographics = allGenres.filter((g) => DEMOGRAPHIC_IDS.has(g.malId))
   const themes = (raw.themes ?? []).map((g) => ({ malId: g.id, name: g.name }))
   const studios = (raw.studios ?? []).map((s) => ({
     malId: s.id,
@@ -113,7 +123,7 @@ export const processAnimeMalDetails = (
       source: raw.source ? SOURCE_MAP[raw.source] : undefined,
       rank: raw.rank ?? undefined,
       members: raw.num_list_users ?? undefined,
-        broadcastDay: day ? WEEKDAYS[day] : undefined,
+      broadcastDay: day ? WEEKDAYS[day] : undefined,
       broadcastTime: raw.broadcast?.start_time ?? undefined,
       broadcastTimezone: day ? 'Asia/Tokyo' : undefined,
     }
