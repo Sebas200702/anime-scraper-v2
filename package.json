@@ -14,11 +14,12 @@
     "dev": "bun src/index.ts",
     "test": "bun test",
     "proxies:probe": "bun src/scripts/probeProxies.ts",
-    "test:integration": "RUN_DB_TESTS=1 bun test tests/queue.integration.test.ts",
+    "test:integration": "RUN_DB_TESTS=1 bun test tests/queue.integration.test.ts tests/promotion.integration.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "schema:mirror": "bun scripts/mirrorSchema.ts",
-    "schema:check": "bun scripts/mirrorSchema.ts --check"
+    "schema:check": "bun scripts/mirrorSchema.ts --check",
+    "promote": "bun src/scripts/promote.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
