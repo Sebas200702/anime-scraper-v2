@@ -26,6 +26,7 @@ export async function initializeTvdbSeriesArtworksTasks() {
       .innerJoin(anime, eq(animeExternalIds.animeId, anime.malId))
       .where(isNotNull(animeExternalIds.tvdbId))
       .limit(BATCH_SIZE)
+        .orderBy(animeExternalIds.animeId)
       .offset(offset)
 
     if (!entries.length) break

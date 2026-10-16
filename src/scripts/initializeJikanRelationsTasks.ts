@@ -18,6 +18,7 @@ export const initializeJikanRelationsTasks = async () => {
       .select({ malId: anime.malId })
       .from(anime)
       .limit(BATCH_SIZE)
+        .orderBy(anime.malId)
       .offset(offset)
 
     if (!animes || animes.length === 0) break
