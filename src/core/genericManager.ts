@@ -64,8 +64,20 @@ export class GenericManager {
    */
   private budget?: { acquire: () => Promise<void>; release: () => void }
 
+  private proxyShard?: { index: number; count: number }
+
   useBudget(budget: { acquire: () => Promise<void>; release: () => void }) {
     this.budget = budget
+    return this
+  }
+
+  /**
+   * Asigna a esta fuente un **shard** del pool de proxies (su propia porción de
+   * IPs), para que las fuentes que corren en paralelo no compitan por las mismas
+   * y no se disparen los 429 por IP.
+   */
+  useProxyShard(index: number, count: number) {
+    this.proxyShard = { index, count }
     return this
   }
 
@@ -184,7 +196,15 @@ export class GenericManager {
     const dispatcher = new TaskDispatcher({
       maxInFlight,
       gate: rateGate,
-      acquireProxy: () => (singleIp ? undefined : proxyManager.acquire()),
+      acquireProxy: () =>
+        singleIp
+          ? undefined
+          : this.proxyShard
+            ? proxyManager.acquireShard(
+                this.proxyShard.index,
+                this.proxyShard.count
+              )
+            : proxyManager.acquire(),
       limitsFor: () => hostLimits,
       // Fuentes con cuota por API key (TVDB): una sola clave global, aunque el
       // fetch salga por una IP distinta.

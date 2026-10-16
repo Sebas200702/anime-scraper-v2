@@ -74,6 +74,28 @@ export const proxyManager = {
     return proxy
   },
 
+  /**
+   * Adquiere una IP **de un shard** concreto (`index` de `count`): cada fuente
+   * del backfill recibe su propia porción del pool, así dos fuentes nunca
+   * compiten por la misma IP (que era lo que hacía saltar el 429 por IP).
+   * Dentro del shard se mantiene LRU y el health del pool.
+   */
+  acquireShard(index: number, count: number): ProxyState | undefined {
+    const size = Math.max(1, Math.floor(this.proxies.length / count))
+    const from = index * size
+    const to = index === count - 1 ? this.proxies.length : from + size
+    const slice = this.proxies.slice(from, to)
+    if (slice.length === 0) return this.acquire()
+
+    const now = Date.now()
+    const healthy = slice
+      .filter((p) => p.failures < 10 && now >= p.cooldownUntil)
+      .sort((a, b) => a.lastUsed - b.lastUsed)
+    const proxy = healthy[0] ?? slice.sort((a, b) => a.lastUsed - b.lastUsed)[0]
+    if (proxy) proxy.lastUsed = Date.now()
+    return proxy
+  },
+
   allocateForWorkers(workerCount: number) {
     const available = this.getAvailableProxies()
 

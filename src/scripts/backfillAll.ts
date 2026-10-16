@@ -54,13 +54,9 @@ if (unknown.length > 0) {
   process.exit(1)
 }
 
-const connections = Number(process.env.SCRAPER_CONNECTIONS ?? 10)
-const budget = new ConnectionBudget(
-  Number.isInteger(connections) && connections > 0 ? connections : 10
-)
-
 console.log(
-  `\n🚀 Backfill multi-fuente: ${sources.join(', ')} · ${connections} conexiones compartidas\n`
+  `\n🚀 Backfill multi-fuente: ${sources.join(', ')} · ` +
+    `${process.env.SCRAPER_PROXIES_PER_SOURCE ?? 10} proxies por fuente\n`
 )
 
 // 1) Sembrar (barato: lecturas de DB + algún listado) — secuencial y acotado por
@@ -76,40 +72,42 @@ if (seedOnly) {
   process.exit(0)
 }
 
-// 2) Drenar. Dos grupos que corren **a la vez**:
-//    - proxy: fuentes con cuota por IP → comparten el tope de conexiones del
-//      proveedor (`SCRAPER_CONNECTIONS`, 10 en el trial).
-//    - directo: fuentes con cuota por API key/client id (MAL, TVDB) → sin proxy,
-//      así no consumen ese tope y avanzan en paralelo.
-//    `SCRAPER_SEQUENTIAL=1` drena todo en serie (una fuente a la vez).
+// 2) Drenar. Cada fuente con cuota por IP recibe su **propio shard de IPs** y su
+//    propio presupuesto de conexiones (`SCRAPER_PROXIES_PER_SOURCE`, 10), así
+//    corren en paralelo sin pelearse por las mismas IPs ni por el mismo cupo.
+//    Las fuentes con cuota por credencial (MAL, TVDB) van directas.
+//    `SCRAPER_SEQUENTIAL=1` drena todo en serie.
 const sequential = process.env.SCRAPER_SEQUENTIAL === '1'
+const perSource = Number(process.env.SCRAPER_PROXIES_PER_SOURCE ?? 10)
 
 const proxySources = sources.filter((s) => !SINGLE_IP_SOURCES.has(s))
 const directSources = sources.filter((s) => SINGLE_IP_SOURCES.has(s))
 
-const runGroup = async (group: string[]) => {
-  if (group.length === 0) return
-  if (sequential) {
-    for (const source of group) {
-      console.log(`\n── drenando ${source} ──`)
-      const m = new GenericManager(getSourceConfig(source))
-      if (!SINGLE_IP_SOURCES.has(source)) m.useBudget(budget)
-      await m.init()
-    }
-    return
-  }
-  await Promise.all(
-    group.map((source) => {
-      console.log(`\n── drenando ${source} ──`)
-      const m = new GenericManager(getSourceConfig(source))
-      // Solo las fuentes por IP comparten el tope de conexiones del proveedor.
-      if (!SINGLE_IP_SOURCES.has(source)) m.useBudget(budget)
-      return m.init()
-    })
+const shardCount = Math.max(1, proxySources.length)
+
+const runOne = async (source: string, shardIndex: number) => {
+  console.log(`\n── drenando ${source} ──`)
+  const manager = new GenericManager(getSourceConfig(source))
+  if (SINGLE_IP_SOURCES.has(source)) return await manager.init()
+  manager.useBudget(
+    new ConnectionBudget(
+      Number.isInteger(perSource) && perSource > 0 ? perSource : 10
+    )
   )
+  manager.useProxyShard(shardIndex, shardCount)
+  return await manager.init()
 }
 
-await Promise.all([runGroup(proxySources), runGroup(directSources)])
+const runGroup = async (group: string[], offset: number) => {
+  if (group.length === 0) return
+  if (sequential) {
+    for (const [i, source] of group.entries()) await runOne(source, offset + i)
+    return
+  }
+  await Promise.all(group.map((source, i) => runOne(source, offset + i)))
+}
+
+await Promise.all([runGroup(proxySources, 0), runGroup(directSources, 0)])
 
 console.log('\n✅ Backfill multi-fuente completado\n')
 process.exit(0)

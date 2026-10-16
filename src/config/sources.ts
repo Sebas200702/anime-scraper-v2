@@ -208,7 +208,10 @@ export const SOURCE_HOSTS: Record<
     host: 'graphql.anilist.co',
     limits: { perSecond: 1, perMinute: 25 },
   },
-  mal: { host: 'api.myanimelist.net', limits: { perSecond: 2, perMinute: 90 } },
+  mal: {
+    host: 'api.myanimelist.net',
+    limits: { perSecond: 2, perMinute: 120 },
+  },
 }
 
 /**
