@@ -35,7 +35,7 @@ const patchColumns = (patch: AnimePatch): Record<string, unknown> => {
 
 export const anilistRepository = {
   /** Backfill en bulk: una página trae 50 anime; se guardan todos de una vez. */
-  async saveAniListCatalog(
+  async saveAnilistCatalog(
     results: AnimeCatalogProcessorResult[]
   ): Promise<number> {
     const flat = results.flatMap((r) => r.results ?? [])

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { processAniListCatalog, processAnimeBanners } from '../src/processors/anilist.js'
+import { processAnilistCatalog, processAnimeBanners } from '../src/processors/anilist.js'
 import type { ScrapingTask } from '../src/types/index.js'
 
 const task = { payload: { animeId: 1 } } as unknown as ScrapingTask
@@ -178,9 +178,9 @@ describe('processAnimeBanners (AniList → media + parche anime)', () => {
   })
 })
 
-describe('processAniListCatalog (backfill en bulk, 50/request)', () => {
+describe('processAnilistCatalog (backfill en bulk, 50/request)', () => {
   test('procesa solo los media con idMal y reusa el mapeo por-anime', () => {
-    const result = processAniListCatalog(
+    const result = processAnilistCatalog(
       {
         media: [
           {

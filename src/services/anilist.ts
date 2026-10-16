@@ -87,7 +87,7 @@ export type AniListMedia = NonNullable<
  * porque cada año está muy por debajo; el límite por IP se respeta vía el
  * `RateGate`. Es la vía de backfill: ~500 requests en vez de 30.000.
  */
-export const fetchAniListCatalog = async (
+export const fetchAnilistCatalog = async (
   task: ScrapingTask,
   proxy?: ProxyTarget
 ): Promise<{ media: AniListMedia[] }> => {

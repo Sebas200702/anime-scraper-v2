@@ -185,7 +185,7 @@ export const processAnimeBanners = (
  * (`animeId = idMal`), así el backfill en bulk y el refresh por-anime comparten
  * exactamente la misma semántica.
  */
-export const processAniListCatalog = (
+export const processAnilistCatalog = (
   raw: { media?: AniListMedia[] },
   _task: ScrapingTask
 ): AnimeCatalogProcessorResult => {
