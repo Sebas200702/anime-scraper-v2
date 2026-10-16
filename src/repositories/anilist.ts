@@ -63,13 +63,15 @@ export const anilistRepository = {
       relations,
       (r) => `${r.animeId}:${r.relatedAnimeId}:${r.relationType}`
     )
-    // La junction exige anime en ambos lados: lo que aún no existe queda
-    // `skipped` (self-healing) en vez de romper el lote por FK.
+    // La junction exige anime en ambos lados: lo que aún no existe se descarta
+    // en silencio (no difiere la tarea: la relation es **decorativa**, el
+    // banner/sinopsis/stats de esta tarea sí deben guardarse).
     const validRelations = await filterByExistingFk(
       uniqueRelations,
       (r) => r.relatedAnimeId,
       anime,
-      anime.malId
+      anime.malId,
+      false
     )
 
     const [saved, relSaved] = await Promise.all([

@@ -23,7 +23,15 @@ export async function filterByExistingFk<T>(
   items: T[],
   getFkId: (item: T) => number,
   table: PgTable,
-  column: PgColumn
+  column: PgColumn,
+  /**
+   * Si el padre faltante debe marcar la tarea como diferida (`skipped`,
+   * re-armable). `true` cuando el padre es la razón de ser de la tarea; `false`
+   * para datos **decorativos** (p. ej. relations hacia anime que quizá nunca
+   * estén en el catálogo): ahí lo correcto es descartar la fila, no reintentar
+   * la tarea entera para siempre.
+   */
+  defer = true
 ): Promise<T[]> {
   if (items.length === 0) return []
 
@@ -42,7 +50,7 @@ export async function filterByExistingFk<T>(
     const exists = validIds.has(getFkId(item))
     // Se avisa al manager: si algo quedó fuera por un padre inexistente, la
     // tarea se marca `skipped` para reintentarla cuando el padre llegue.
-    if (!exists) noteDeferredDependency()
+    if (!exists && defer) noteDeferredDependency()
     return exists
   })
 }
