@@ -218,14 +218,23 @@ export const SOURCE_HOSTS: Record<
  * (6k+ series × ~2 llamadas a 40/min = horas). Se paraleliza con el cupo normal
  * y el `RateGate` conserva el límite por host.
  */
-export const SINGLE_IP_SOURCES = new Set<string>()
+/**
+ * Fuentes que van **directo** (sin proxy) porque su cuota es **por API key o
+ * client id**, no por IP: repartirlas entre proxies no multiplica nada y además
+ * no consumen el tope de conexiones del proveedor. Así MAL (client id) y TVDB
+ * (API key) avanzan en paralelo con las fuentes que sí necesitan IPs.
+ */
+export const SINGLE_IP_SOURCES = new Set(['mal', 'tvdbSeriesArtworks'])
 
 /**
  * Hosts cuya cuota es **por API key**: el gate los trata como una sola clave
  * global (ignora la IP de salida). Paralelizar entre proxies no multiplica la
  * cuota y sí la rompería; el límite real es del host, no de la IP.
  */
-export const KEY_SCOPED_HOSTS = new Set(['api4.thetvdb.com'])
+export const KEY_SCOPED_HOSTS = new Set([
+  'api4.thetvdb.com',
+  'api.myanimelist.net',
+])
 
 export function getSourceConfig(sourceName: string) {
   const config = SOURCES.find((s) => s.name === sourceName)

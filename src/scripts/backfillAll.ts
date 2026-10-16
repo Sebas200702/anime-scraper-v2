@@ -12,7 +12,7 @@
  */
 import { ConnectionBudget } from '../core/connectionBudget.js'
 import { GenericManager } from '../core/genericManager.js'
-import { getSourceConfig } from '../config/sources.js'
+import { SINGLE_IP_SOURCES, getSourceConfig } from '../config/sources.js'
 import { initializeTasks } from '../scripts/initializeTasks.js'
 import { initializeJikanRelationsTasks } from '../scripts/initializeJikanRelationsTasks.js'
 import { initializeAnimeThemesTasks } from '../scripts/initializeAnimeThemesTasks.js'
@@ -76,23 +76,40 @@ if (seedOnly) {
   process.exit(0)
 }
 
-// 2) Drenar. `SCRAPER_SEQUENTIAL=1` drena una fuente a la vez, cada una con el
-//    presupuesto completo: predecible y sin que las tareas largas (p. ej. un año
-//    entero de AniList = varias páginas) se arrastren tras las miles de tareas
-//    cortas de otras fuentes.
+// 2) Drenar. Dos grupos que corren **a la vez**:
+//    - proxy: fuentes con cuota por IP → comparten el tope de conexiones del
+//      proveedor (`SCRAPER_CONNECTIONS`, 10 en el trial).
+//    - directo: fuentes con cuota por API key/client id (MAL, TVDB) → sin proxy,
+//      así no consumen ese tope y avanzan en paralelo.
+//    `SCRAPER_SEQUENTIAL=1` drena todo en serie (una fuente a la vez).
 const sequential = process.env.SCRAPER_SEQUENTIAL === '1'
 
-if (sequential) {
-  for (const source of sources) {
-    console.log(`\n── drenando ${source} ──`)
-    await new GenericManager(getSourceConfig(source)).useBudget(budget).init()
+const proxySources = sources.filter((s) => !SINGLE_IP_SOURCES.has(s))
+const directSources = sources.filter((s) => SINGLE_IP_SOURCES.has(s))
+
+const runGroup = async (group: string[]) => {
+  if (group.length === 0) return
+  if (sequential) {
+    for (const source of group) {
+      console.log(`\n── drenando ${source} ──`)
+      const m = new GenericManager(getSourceConfig(source))
+      if (!SINGLE_IP_SOURCES.has(source)) m.useBudget(budget)
+      await m.init()
+    }
+    return
   }
-} else {
-  const managers = sources.map((source) =>
-    new GenericManager(getSourceConfig(source)).useBudget(budget)
+  await Promise.all(
+    group.map((source) => {
+      console.log(`\n── drenando ${source} ──`)
+      const m = new GenericManager(getSourceConfig(source))
+      // Solo las fuentes por IP comparten el tope de conexiones del proveedor.
+      if (!SINGLE_IP_SOURCES.has(source)) m.useBudget(budget)
+      return m.init()
+    })
   )
-  await Promise.all(managers.map((manager) => manager.init()))
 }
+
+await Promise.all([runGroup(proxySources), runGroup(directSources)])
 
 console.log('\n✅ Backfill multi-fuente completado\n')
 process.exit(0)

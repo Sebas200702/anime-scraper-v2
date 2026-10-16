@@ -17,11 +17,15 @@ describe('config de fuentes', () => {
     }
   })
 
-  test('TVDB es cuota por API key (KEY_SCOPED), no por IP', () => {
+  test('las fuentes con cuota por API key van directas y con gate global', () => {
     // Paralelizar entre IPs no multiplica la cuota de una API key y sí la
-    // rompería: el gate la trata como una sola clave global.
+    // rompería: el gate las trata como una sola clave y no consumen el tope de
+    // conexiones del proveedor (van sin proxy).
     expect(KEY_SCOPED_HOSTS.has('api4.thetvdb.com')).toBe(true)
-    expect(SINGLE_IP_SOURCES.size).toBe(0)
+    expect(KEY_SCOPED_HOSTS.has('api.myanimelist.net')).toBe(true)
+    expect(SINGLE_IP_SOURCES.has('mal')).toBe(true)
+    expect(SINGLE_IP_SOURCES.has('tvdbSeriesArtworks')).toBe(true)
+    expect(SINGLE_IP_SOURCES.has('animeMapping')).toBe(false)
   })
 
   test('el presupuesto global evita correr 30 conexiones del trial', () => {

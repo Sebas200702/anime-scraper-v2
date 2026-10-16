@@ -168,14 +168,16 @@ export class GenericManager {
     proxyManager.init()
     const singleIp = SINGLE_IP_SOURCES.has(source)
     const poolSize = proxyManager.getAvailableProxies().length
+    // Fuentes sin proxy (cuota por key/client id): pueden tener varias en vuelo
+    // sin tocar el tope de conexiones del proveedor; el gate por host las acota.
     const maxInFlight = singleIp
-      ? 1
+      ? Math.max(1, this.maxWorkers)
       : Math.min(this.maxWorkers, Math.max(1, poolSize))
 
     console.log(
       `\n🚀 Starting ${source} — ${maxInFlight} tareas en vuelo · ` +
         (singleIp
-          ? 'sin proxy (cuota por API key)\n'
+          ? 'directo (cuota por API key)\n'
           : `${poolSize} proxies en el pool\n`)
     )
 
