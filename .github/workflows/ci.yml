@@ -28,3 +28,46 @@ jobs:
 
       - name: Tests
         run: bun test
+
+      - name: Drift check (solo si hay checkout hermano de anidev-v2)
+        run: |
+          if [ -d ../anidev-v2/src/lib/db/schemas ]; then
+            bun run schema:check
+          else
+            echo "sin checkout de anidev-v2: drift check omitido (se corre en local)"
+          fi
+
+  integration:
+    name: integration (Postgres real)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: anidev
+          POSTGRES_PASSWORD: anidev
+          POSTGRES_DB: scraper_local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://anidev:anidev@localhost:5432/scraper_local
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Migrar DB de integración
+        run: bun run db:migrate
+
+      - name: Tests de integración
+        run: bun run test:integration

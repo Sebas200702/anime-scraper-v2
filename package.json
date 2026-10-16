@@ -17,6 +17,7 @@
     "test:integration": "RUN_DB_TESTS=1 bun test tests/queue.integration.test.ts tests/promotion.integration.test.ts tests/fkFilter.integration.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed-policy": "bun src/scripts/seedTaskPolicy.ts",
     "schema:mirror": "bun scripts/mirrorSchema.ts",
     "schema:check": "bun scripts/mirrorSchema.ts --check",
     "promote": "bun src/scripts/promote.ts"

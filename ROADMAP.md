@@ -11,13 +11,16 @@
 >
 > **Estrategia de fill/refresh**: `docs/fill-and-refresh-strategy.md`.
 >
-> **Estado**: **Fases 0–3 implementadas** (incl. **P3: `skipped` + self-healing**)
-> y **fuente AniList** añadida como primaria de banners (con `source`/`priority`
-> en las tablas de media, DDL aplicado en anidev local).
+> **Estado**: **listo para el backfill** (ver `docs/BACKFILL.md`): Fases 0–3
+> (incl. **P3: `skipped` + self-healing**), **fuente AniList** primaria de
+> banners (con `source`/`priority` en las tablas de media, DDL aplicado en
+> anidev local), `task_policy` sembrable (`bun run db:seed-policy`), re-arme de
+> vencidos al arrancar y CI con integración + drift.
 > Fuentes verificadas en vivo: **AnimeThemes**, **TVDB**, **Kitsu**, **AniList**;
-> falta verificar **Jikan** desde una red que lo alcance.
-> Pendiente: cobertura del catálogo (DDL de anidev) y descubrimiento para el
-> incremental; el closure quirúrgico necesita task types por-id.
+> falta el humo de **Jikan desde tu red** (inaccesible desde el sandbox) antes
+> de la oleada 1.
+> Post-backfill (no bloquean el one-shot): P1 cobertura (DDL de anidev) y P2
+> descubrimiento incremental; el closure quirúrgico necesita task types por-id.
 
 ---
 

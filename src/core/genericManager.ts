@@ -139,6 +139,13 @@ export class GenericManager {
     const resetCount = await taskRepository.resetStaleTasks(source)
     if (resetCount > 0) console.log(`♻️  Reset ${resetCount} stale tasks`)
 
+    // Lo vencido por política vuelve a `pending`: sin esta llamada el refresh
+    // no existiría (las tareas `completed` nunca se re-armarían). Es un UPDATE
+    // barato y solo toca lo que ya venció.
+    const dueCount = await taskRepository.rearmDueTasks(source)
+    if (dueCount > 0)
+      console.log(`🔄 ${dueCount} tareas vencidas re-armadas por política`)
+
     // Lo que quedó `skipped` por dependencia vuelve a intentarse: la dependencia
     // pudo aterrizar en la corrida anterior.
     const rearmed = await taskRepository.rearmSkippedTasks(source)
