@@ -11,13 +11,12 @@
 >
 > **Estrategia de fill/refresh**: `docs/fill-and-refresh-strategy.md`.
 >
-> **Estado**: **Fases 0–2 implementadas**. PR2 (rate gate por (host, IP), pool con
-> rotación por tarea, orquestador con `maxInFlight` y **30 tareas en vuelo** en
-> backfill) y **Fase 2 (cola `ingest.*` en Postgres local, lease/reaper/
-> dead-letter/refresh)** con 9 tests de integración y smoke end-to-end real.
-> Proxies: **100/100 verificados** (trial de ProxyScrape).
-> **Falta**: promoción diff-upsert a prod (Fase 3) y el humo con Jikan real
-> (no es alcanzable desde este sandbox).
+> **Estado**: **Fases 0–2 implementadas** y **Fase 3 (promoción) implementada**;
+> fuentes verificadas en vivo: **AnimeThemes** (buildId dinámico, H-14 resuelto,
+> 7.736 tareas sembradas), **TVDB** (key verificada, 134 artworks) y **Kitsu**;
+> falta verificar **Jikan** desde una red que lo alcance.
+> Pendiente: cobertura del catálogo (DDL de anidev) y descubrimiento para el
+> incremental.
 
 ---
 
@@ -260,6 +259,15 @@ Decisión refinada de D-S1: **el padre fetchea y mapea**, sin `worker_threads`.
 - Deuda que queda (Fase 2/PR3): tareas que hacen fan-out interno
   (`fetchAnimeEpisodes` pagina por dentro) siguen limitadas por su propio limiter
   por worker; el gate por request completo llega al partir esas tareas en el padre.
+
+## 6.7 Fuentes verificadas contra las APIs reales (2026-10-15)
+
+| Fuente | Verificación | Estado |
+|---|---|---|
+| **AnimeThemes** | buildId resuelto del sitio; listado de **5.013 animes**; mapping real (4 musics + 4 resoluciones con audio/video); **7.736 tareas sembradas** en la cola | ✅ funciona (H-14 resuelto) |
+| **TVDB** | `/login` 200, `/search?query=naruto` 50 resultados y `/series/78857/extended` con **134 artworks** (lo que consume el source) | ✅ funciona (key en `.env`, cuota por API key → 1 IP) |
+| **Kitsu** | `/anime/1` 200 (y 100/100 proxies verificados contra él) | ✅ funciona |
+| **Jikan** | **no alcanzable desde el sandbox** (TCP timeout) | ⚠️ verificar desde tu red |
 
 ## 7. Verificación por PR
 ```bash
