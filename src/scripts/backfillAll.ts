@@ -76,12 +76,23 @@ if (seedOnly) {
   process.exit(0)
 }
 
-// 2) Drenar todas a la vez con el presupuesto compartido.
-const managers = sources.map((source) =>
-  new GenericManager(getSourceConfig(source)).useBudget(budget)
-)
+// 2) Drenar. `SCRAPER_SEQUENTIAL=1` drena una fuente a la vez, cada una con el
+//    presupuesto completo: predecible y sin que las tareas largas (p. ej. un año
+//    entero de AniList = varias páginas) se arrastren tras las miles de tareas
+//    cortas de otras fuentes.
+const sequential = process.env.SCRAPER_SEQUENTIAL === '1'
 
-await Promise.all(managers.map((manager) => manager.init()))
+if (sequential) {
+  for (const source of sources) {
+    console.log(`\n── drenando ${source} ──`)
+    await new GenericManager(getSourceConfig(source)).useBudget(budget).init()
+  }
+} else {
+  const managers = sources.map((source) =>
+    new GenericManager(getSourceConfig(source)).useBudget(budget)
+  )
+  await Promise.all(managers.map((manager) => manager.init()))
+}
 
 console.log('\n✅ Backfill multi-fuente completado\n')
 process.exit(0)

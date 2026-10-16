@@ -202,7 +202,7 @@ export const SOURCE_HOSTS: Record<
   animeEpisodes: { host: 'kitsu.io', limits: { perSecond: 1, perMinute: 60 } },
   tvdbSeriesArtworks: {
     host: 'api4.thetvdb.com',
-    limits: { perSecond: 2, perMinute: 100 },
+    limits: { perSecond: 3, perMinute: 150 },
   },
   anilist: {
     host: 'graphql.anilist.co',
