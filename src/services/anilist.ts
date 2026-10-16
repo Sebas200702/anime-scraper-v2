@@ -23,8 +23,11 @@ const BANNER_QUERY = `query ($idMal: Int) {
     coverImage { extraLarge large color }
     trailer { id site }
     source
+    description
     startDate { year month day }
     endDate { year month day }
+    nextAiringEpisode { airingAt episode }
+    relations { edges { relationType node { id type idMal } } }
     title { romaji }
   }
 }`

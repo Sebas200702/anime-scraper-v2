@@ -223,6 +223,8 @@ export interface AnimeBannersProcessorResult {
    * se escribe como null.
    */
   animePatch?: AnimePatch
+  /** Relations tipadas hacia otros anime (solo nodos ANIME con idMal). */
+  animeRelations?: NewAnimeRelatedAnime[]
 }
 
 /**
@@ -237,6 +239,12 @@ export interface AnimePatch {
   /** Fecha ISO `YYYY-MM-DD` (el repo la convierte a timestamptz). */
   airedFrom?: string
   airedTo?: string
+  /** Sinopsis en texto plano (el processor pela el HTML de AniList). */
+  synopsis?: string
+  /** Día de emisión estilo Jikan ("Mondays") derivado del próximo episodio. */
+  broadcastDay?: string
+  broadcastTime?: string
+  broadcastTimezone?: string
 }
 
 export interface ArtworksProcessorResult {

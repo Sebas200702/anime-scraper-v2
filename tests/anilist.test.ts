@@ -97,4 +97,83 @@ describe('processAnimeBanners (AniList → media + parche anime)', () => {
     expect(result.animeMedias).toEqual([])
     expect(result.animePatch).toBeUndefined()
   })
+
+  test('sinopsis pela el HTML y relations solo anime con idMal', () => {
+    const result = processAnimeBanners(
+      {
+        data: {
+          Media: {
+            ...base,
+            bannerImage: null,
+            description:
+              'A: <b>space</b> western.<br><br>Second line &amp; more.',
+            relations: {
+              edges: [
+                {
+                  relationType: 'SEQUEL',
+                  node: { id: 21, type: 'ANIME', idMal: 5 },
+                },
+                {
+                  relationType: 'ADAPTATION',
+                  node: { id: 22, type: 'MANGA', idMal: null },
+                },
+                {
+                  relationType: 'SIDE_STORY',
+                  node: { id: 23, type: 'ANIME', idMal: null },
+                },
+                {
+                  relationType: 'FANFARE',
+                  node: { id: 24, type: 'ANIME', idMal: 6 },
+                },
+                {
+                  relationType: 'PREQUEL',
+                  node: { id: 1, type: 'ANIME', idMal: 1 },
+                },
+              ],
+            },
+          },
+        },
+      },
+      task
+    )
+    expect(result.animePatch?.synopsis).toBe(
+      'A: space western.\nSecond line & more.'
+    )
+    // Solo la sequel con idMal (el manga, el sin idMal, el tipo raro y el
+    // self-loop se descartan).
+    expect(result.animeRelations).toEqual([
+      { animeId: 1, relationType: 'Sequel', relatedAnimeId: 5 },
+    ])
+  })
+
+  test('broadcast sale del próximo episodio en hora JST', () => {
+    // 2026-10-19T15:00:00Z = martes 00:00 JST (convención Jikan: día/hora
+    // normalizados, sin "24:00").
+    const result = processAnimeBanners(
+      {
+        data: {
+          Media: {
+            ...base,
+            bannerImage: null,
+            nextAiringEpisode: { airingAt: 1792422000, episode: 3 },
+          },
+        },
+      },
+      task
+    )
+    expect(result.animePatch).toMatchObject({
+      malId: 1,
+      broadcastDay: 'Tuesdays',
+      broadcastTime: '00:00',
+      broadcastTimezone: 'Asia/Tokyo',
+    })
+  })
+
+  test('sin airing no hay broadcast (terminada)', () => {
+    const result = processAnimeBanners(
+      { data: { Media: { ...base, bannerImage: null } } },
+      task
+    )
+    expect(result.animePatch).toBeUndefined()
+  })
 })

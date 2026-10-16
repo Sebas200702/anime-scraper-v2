@@ -1,6 +1,7 @@
 import type {
   AnimeBannersProcessorResult,
   AnimePatch,
+  NewAnimeRelatedAnime,
   NewMedia,
 } from '../types/index.js'
 import type { AniListBannerResponse, FuzzyDate } from 'types/anilistApi.js'
@@ -19,6 +20,37 @@ const SOURCE_MAP: Record<string, string> = {
   OTHER: 'Other',
 }
 
+/**
+ * AniList → `relation_type` de Jikan (el processor de jikanRelations escribe
+ * los strings de Jikan tal cual). Solo relations entre anime; el resto
+ * (manga fuente, personajes) no cabe en `anime_relation`.
+ */
+const RELATION_MAP: Record<string, string> = {
+  SEQUEL: 'Sequel',
+  PREQUEL: 'Prequel',
+  PARENT: 'Parent story',
+  SIDE_STORY: 'Side story',
+  CHARACTER: 'Character',
+  SUMMARY: 'Summary',
+  ALTERNATIVE: 'Alternative setting',
+  SPIN_OFF: 'Spin-off',
+  ADAPTATION: 'Adaptation',
+  COMPILATION: 'Summary',
+  CONTAINS: 'Other',
+  OTHER: 'Other',
+  SOURCE: 'Other',
+}
+
+const WEEKDAYS = [
+  'Sundays',
+  'Mondays',
+  'Tuesdays',
+  'Wednesdays',
+  'Thursdays',
+  'Fridays',
+  'Saturdays',
+]
+
 const toIsoDate = (d: FuzzyDate | null | undefined): string | undefined => {
   if (!d?.year) return undefined
   const m = String(d.month ?? 1).padStart(2, '0')
@@ -26,10 +58,50 @@ const toIsoDate = (d: FuzzyDate | null | undefined): string | undefined => {
   return `${d.year}-${m}-${day}`
 }
 
+/** AniList devuelve HTML (`<br>`, `<i>`…): la sinopsis se guarda en plano. */
+const stripHtml = (html: string): string | undefined => {
+  const text = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/?[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .split('\n')
+    .map((line) => line.trim().replace(/[ \t]+/g, ' '))
+    .filter(Boolean)
+    .join('\n')
+  return text.length > 0 ? text : undefined
+}
+
 /**
- * Mapea el Media de AniList a `anime_media` (banner + poster) y a un parche
- * disperso de `anime` (tráiler, origen, fechas). El `source`/`priority` los
- * pone `mediaRepository.saveMedia` (AniList = 10).
+ * Día/hora de emisión estilo Jikan desde el próximo episodio. `airingAt` es
+ * unix en UTC del horario JST: se convierte a Asia/Tokyo antes de partir.
+ */
+const broadcastFromAiringAt = (
+  airingAt: number | null | undefined
+): Pick<
+  AnimePatch,
+  'broadcastDay' | 'broadcastTime' | 'broadcastTimezone'
+> | null => {
+  if (!airingAt) return null
+  const jst = new Date((airingAt + 9 * 3600) * 1000)
+  const day = WEEKDAYS[jst.getUTCDay()]
+  if (!day) return null
+  return {
+    broadcastDay: day,
+    broadcastTime: `${String(jst.getUTCHours()).padStart(2, '0')}:${String(
+      jst.getUTCMinutes()
+    ).padStart(2, '0')}`,
+    broadcastTimezone: 'Asia/Tokyo',
+  }
+}
+
+/**
+ * Mapea el Media de AniList a `anime_media` (banner + poster), un parche
+ * disperso de `anime` (tráiler, origen, fechas, sinopsis, broadcast) y las
+ * relations tipadas. Todo sale de **1 request** (misma task de banners).
  */
 export const processAnimeBanners = (
   rawData: AniListBannerResponse,
@@ -74,9 +146,33 @@ export const processAnimeBanners = (
   if (airedFrom) patch.airedFrom = airedFrom
   const airedTo = toIsoDate(media.endDate)
   if (airedTo) patch.airedTo = airedTo
+  if (media.description) {
+    const synopsis = stripHtml(media.description)
+    if (synopsis) patch.synopsis = synopsis
+  }
+  const broadcast = broadcastFromAiringAt(media.nextAiringEpisode?.airingAt)
+  if (broadcast) Object.assign(patch, broadcast)
+
+  // Relations: solo anime→anime con idMal (la junction exige FK a `anime` en
+  // ambos lados; el manga fuente y rarezas sin idMal se descartan aquí y lo
+  // que falte en `anime` lo filtra el repo por FK existente).
+  const animeRelations: NewAnimeRelatedAnime[] = []
+  for (const edge of media.relations?.edges ?? []) {
+    const node = edge?.node
+    const relationType =
+      (edge?.relationType && RELATION_MAP[edge.relationType]) ?? null
+    if (node?.type !== 'ANIME' || !node.idMal || !relationType) continue
+    if (node.idMal === animeId) continue
+    animeRelations.push({
+      animeId,
+      relationType,
+      relatedAnimeId: node.idMal,
+    })
+  }
 
   return {
     animeMedias,
     ...(Object.keys(patch).length > 1 ? { animePatch: patch } : {}),
+    ...(animeRelations.length > 0 ? { animeRelations } : {}),
   }
 }
