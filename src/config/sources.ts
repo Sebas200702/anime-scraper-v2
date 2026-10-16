@@ -94,6 +94,8 @@ export const SOURCES: SourceConfig[] = [
     rateLimit: { perSecond: 1, perMinute: 25 },
     tasks: {
       anime_banner_hydration: { entity: 'animeBanners', needsPayload: true },
+      // Backfill en bulk: 1 tarea por año, la fuente pagina (50/request).
+      anilist_year_hydration: { entity: 'anilistCatalog', needsPayload: true },
     },
   },
   {
@@ -161,6 +163,7 @@ export const DEFAULT_REFRESH_SECONDS: Record<string, number> = {
   anime_episodes_hydration: 7 * 86400,
   tvdb_series_artworks: 180 * 86400,
   anime_banner_hydration: 180 * 86400,
+  anilist_year_hydration: 30 * 86400,
   anime_mal_details_hydration: 30 * 86400,
 }
 

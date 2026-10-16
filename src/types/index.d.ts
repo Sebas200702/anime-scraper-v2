@@ -290,6 +290,11 @@ export interface AnimePatch {
   broadcastTimezone?: string
 }
 
+/** Resultado del catálogo en bulk (una página = 50 anime). */
+export interface AnimeCatalogProcessorResult {
+  results: AnimeBannersProcessorResult[]
+}
+
 export interface ArtworksProcessorResult {
   artworks: NewMedia[]
 }

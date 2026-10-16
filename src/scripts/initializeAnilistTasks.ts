@@ -20,7 +20,7 @@ export const initializeAnilistTasks = async () => {
       .select({ malId: anime.malId })
       .from(anime)
       .limit(BATCH_SIZE)
-        .orderBy(anime.malId)
+      .orderBy(anime.malId)
       .offset(offset)
 
     if (!animes || animes.length === 0) break
@@ -49,4 +49,24 @@ export const initializeAnilistTasks = async () => {
   console.log(
     `✓ Created ${total} new anilist banner tasks (${existing.size} already existed)`
   )
+
+  // Backfill en bulk: una tarea por año (la fuente pagina internamente, 50 por
+  // request) → ~87 tareas y ~500 requests en vez de 30.561/30.000.
+  const existingYears = await taskRepository.getExistingEntityIds('anilist')
+  const thisYear = new Date().getUTCFullYear()
+  const yearTasks = []
+  for (let year = 1940; year <= thisYear; year++) {
+    const entityId = `anilist_year_${year}`
+    if (existingYears.has(entityId)) continue
+    yearTasks.push({
+      source: 'anilist',
+      entityId,
+      taskType: 'anilist_year_hydration',
+      priority: 20,
+      status: 'pending',
+      payload: { year },
+    })
+  }
+  if (yearTasks.length > 0) await taskRepository.createManyTasks(yearTasks)
+  console.log(`✓ Created ${yearTasks.length} anilist catalog year tasks`)
 }

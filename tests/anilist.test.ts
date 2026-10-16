@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { processAnimeBanners } from '../src/processors/anilist.js'
+import { processAniListCatalog, processAnimeBanners } from '../src/processors/anilist.js'
 import type { ScrapingTask } from '../src/types/index.js'
 
 const task = { payload: { animeId: 1 } } as unknown as ScrapingTask
@@ -175,5 +175,45 @@ describe('processAnimeBanners (AniList → media + parche anime)', () => {
       task
     )
     expect(result.animePatch).toBeUndefined()
+  })
+})
+
+describe('processAniListCatalog (backfill en bulk, 50/request)', () => {
+  test('procesa solo los media con idMal y reusa el mapeo por-anime', () => {
+    const result = processAniListCatalog(
+      {
+        media: [
+          {
+            id: 1,
+            idMal: 1,
+            bannerImage: 'https://x/b.jpg',
+            coverImage: { extraLarge: 'https://x/c.jpg' },
+            description: 'Hola<br>mundo',
+          },
+          // Sin ficha MAL: se salta.
+          { id: 2, idMal: null, bannerImage: 'https://x/y.jpg' },
+        ],
+      },
+      { payload: {} } as unknown as ScrapingTask
+    )
+
+    expect(result.results).toHaveLength(1)
+    expect(result.results[0]?.animeMedias).toEqual([
+      {
+        entityType: 'anime',
+        entityId: 1,
+        mediaType: 'banner',
+        src: 'https://x/b.jpg',
+        size: null,
+      },
+      {
+        entityType: 'anime',
+        entityId: 1,
+        mediaType: 'poster',
+        src: 'https://x/c.jpg',
+        size: null,
+      },
+    ])
+    expect(result.results[0]?.animePatch?.synopsis).toBe('Hola\nmundo')
   })
 })

@@ -8,6 +8,7 @@ import { mediaRepository } from './media.js'
 import { unique } from '../utils/deduplicate.js'
 import type {
   AnimeBannersProcessorResult,
+  AnimeCatalogProcessorResult,
   AnimePatch,
   NewAnimeRelatedAnime,
   NewMedia,
@@ -33,6 +34,14 @@ const patchColumns = (patch: AnimePatch): Record<string, unknown> => {
 }
 
 export const anilistRepository = {
+  /** Backfill en bulk: una página trae 50 anime; se guardan todos de una vez. */
+  async saveAniListCatalog(
+    results: AnimeCatalogProcessorResult[]
+  ): Promise<number> {
+    const flat = results.flatMap((r) => r.results ?? [])
+    return await this.saveAnimeBanners(flat)
+  },
+
   async saveAnimeBanners(
     results: AnimeBannersProcessorResult[]
   ): Promise<number> {

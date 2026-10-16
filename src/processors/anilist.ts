@@ -1,10 +1,12 @@
 import type {
   AnimeBannersProcessorResult,
+  AnimeCatalogProcessorResult,
   AnimePatch,
   NewAnimeRelatedAnime,
   NewMedia,
 } from '../types/index.js'
 import type { AniListBannerResponse, FuzzyDate } from 'types/anilistApi.js'
+import type { AniListMedia } from '../services/anilist.js'
 import type { ScrapingTask } from '../types/index.js'
 
 /** AniList → vocabulario de `anime.source` (el de Jikan, para un diff limpio). */
@@ -175,4 +177,26 @@ export const processAnimeBanners = (
     ...(Object.keys(patch).length > 1 ? { animePatch: patch } : {}),
     ...(animeRelations.length > 0 ? { animeRelations } : {}),
   }
+}
+
+/**
+ * Procesa una página de catálogo (`fetchAniListCatalogYear`, 50 anime) reusando
+ * el mapeo por-anime: cada media se trata como si fuera su propia tarea
+ * (`animeId = idMal`), así el backfill en bulk y el refresh por-anime comparten
+ * exactamente la misma semántica.
+ */
+export const processAniListCatalog = (
+  raw: { media?: AniListMedia[] },
+  _task: ScrapingTask
+): AnimeCatalogProcessorResult => {
+  const results: AnimeBannersProcessorResult[] = []
+  for (const media of raw.media ?? []) {
+    if (!media?.idMal) continue
+    results.push(
+      processAnimeBanners({ data: { Media: media } }, {
+        payload: { animeId: media.idMal },
+      } as ScrapingTask)
+    )
+  }
+  return { results }
 }
