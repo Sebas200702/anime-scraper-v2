@@ -10,7 +10,7 @@ import { music } from './music.js'
 import { character } from './character.js'
 import { producer } from './producer.js'
 import { staff } from './staff.js'
-import { integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
+import { index, integer, pgTable, primaryKey, text } from 'drizzle-orm/pg-core'
 import { demographic, genre, theme } from './animeTaxonomy.js'
 
 export const animeStaff = pgTable(
@@ -75,8 +75,12 @@ export const animeProducer = pgTable(
     producerId: integer('producer_id')
       .notNull()
       .references(() => producer.malId, { onDelete: 'cascade' }),
+    role: text('role').notNull().default('producer'),
   },
-  (t) => [primaryKey({ columns: [t.animeId, t.producerId] })]
+  (t) => [
+    primaryKey({ columns: [t.animeId, t.producerId, t.role] }),
+    index('anime_producer_role_idx').on(t.role, t.producerId),
+  ]
 )
 
 export const animeGenre = pgTable(

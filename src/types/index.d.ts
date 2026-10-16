@@ -227,6 +227,49 @@ export interface AnimeBannersProcessorResult {
   animeRelations?: NewAnimeRelatedAnime[]
 }
 
+/** Resultado de la fuente `mal` (API oficial v2). */
+export interface AnimeMalDetailsProcessorResult {
+  /** Fila `anime` con stats/descriptivos (MAL es la fuente canónica). */
+  animeStats?: {
+    malId: number
+    titleEnglish?: string
+    titleJapanese?: string
+    type?: string
+    status?: string
+    episodes?: number
+    score?: number
+    scoredBy?: number
+    popularityRank?: number
+    rating?: string
+    year?: number
+    season?: string
+    synopsis?: string
+    background?: string
+    airedFrom?: string
+    airedTo?: string
+    duration?: string
+    source?: string
+    rank?: number
+    members?: number
+    broadcastDay?: string
+    broadcastTime?: string
+    broadcastTimezone?: string
+  }
+  genres: { malId: number; name: string }[]
+  demographics: { malId: number; name: string }[]
+  themes: { malId: number; name: string }[]
+  /** Compañías de animación (`producer` solo tiene `mal_id`). */
+  producers: { malId: number }[]
+  animeGenres: { animeId: number; genreId: number }[]
+  animeDemographics: { animeId: number; demographicId: number }[]
+  animeThemes: { animeId: number; themeId: number }[]
+  animeProducers: {
+    animeId: number
+    producerId: number
+    role: 'studio' | 'licensor' | 'producer'
+  }[]
+}
+
 /**
  * Subconjunto escribible de `anime` desde AniList. `malId` es la clave;
  * el resto son opcionales y el repositorio solo actualiza los presentes.

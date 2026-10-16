@@ -177,7 +177,7 @@ export const PROMOTION_PLAN: PromotionPlan[] = [
   {
     table: 'anime_producer',
     strategy: 'upsert',
-    key: ['anime_id', 'producer_id'],
+    key: ['anime_id', 'producer_id', 'role'],
   },
   {
     table: 'anime_staff',

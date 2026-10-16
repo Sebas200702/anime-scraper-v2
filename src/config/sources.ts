@@ -96,6 +96,21 @@ export const SOURCES: SourceConfig[] = [
       anime_banner_hydration: { entity: 'animeBanners', needsPayload: true },
     },
   },
+  {
+    name: 'mal',
+    // MAL API oficial v2: requiere client_id; cuota pública ~3 req/s por IP.
+    // Es la fuente **canónica** de stats, studios/licensors y taxonomía con ids
+    // MAL (lo que Jikan daba y no vuelve).
+    maxWorkers: 8,
+    pageBatch: 200,
+    rateLimit: { perSecond: 1, perMinute: 40 },
+    tasks: {
+      anime_mal_details_hydration: {
+        entity: 'animeMalDetails',
+        needsPayload: true,
+      },
+    },
+  },
 ]
 
 export { capitalize } from '../shared/parsers.js'
@@ -124,6 +139,7 @@ const BACKFILL_PROFILES: Record<
     rateLimit: { perSecond: 1, perMinute: 40 },
   },
   anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
+  mal: { maxWorkers: 30, rateLimit: { perSecond: 2, perMinute: 90 } },
 }
 
 /**
@@ -145,6 +161,7 @@ export const DEFAULT_REFRESH_SECONDS: Record<string, number> = {
   anime_episodes_hydration: 7 * 86400,
   tvdb_series_artworks: 180 * 86400,
   anime_banner_hydration: 180 * 86400,
+  anime_mal_details_hydration: 30 * 86400,
 }
 
 /**
@@ -188,6 +205,7 @@ export const SOURCE_HOSTS: Record<
     host: 'graphql.anilist.co',
     limits: { perSecond: 1, perMinute: 25 },
   },
+  mal: { host: 'api.myanimelist.net', limits: { perSecond: 2, perMinute: 90 } },
 }
 
 /**

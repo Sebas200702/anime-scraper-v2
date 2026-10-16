@@ -10,6 +10,10 @@ export const CONFIG = {
   KITSU_BASE: process.env.KITSU_BASE || 'https://kitsu.io/api/edge',
   ANILIST_BASE: process.env.ANILIST_BASE || 'https://graphql.anilist.co',
 
+  /** MAL API oficial v2 (requiere client_id gratuito de myanimelist.net/apiconfig). */
+  MAL_API_BASE: process.env.MAL_API_BASE || 'https://api.myanimelist.net/v2',
+  MAL_CLIENT_ID: process.env.MAL_CLIENT_ID,
+
   /** Postgres de ingesta (cola `ingest.*` + catálogo). Local por defecto. */
   DATABASE_URL:
     process.env.DATABASE_URL ||

@@ -20,6 +20,7 @@ import { initializeAnimeMappingTasks } from '../scripts/initializeAnimeMappingTa
 import { initializeAnimeEpisodesTasks } from '../scripts/initializeAnimeEpisodesTasks.js'
 import { initializeTvdbSeriesArtworksTasks } from '../scripts/initializeTvdbSeriesArtworksTasks.js'
 import { initializeAnilistTasks } from '../scripts/initializeAnilistTasks.js'
+import { initializeMalDetailsTasks } from '../scripts/initializeMalDetailsTasks.js'
 
 const INITIALIZERS: Record<string, () => Promise<void>> = {
   jikan: initializeTasks,
@@ -29,6 +30,7 @@ const INITIALIZERS: Record<string, () => Promise<void>> = {
   animeEpisodes: initializeAnimeEpisodesTasks,
   tvdbSeriesArtworks: initializeTvdbSeriesArtworksTasks,
   anilist: initializeAnilistTasks,
+  mal: initializeMalDetailsTasks,
 }
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'))
@@ -41,8 +43,7 @@ const sources =
         'animeEpisodes',
         'tvdbSeriesArtworks',
         'anilist',
-        'jikan',
-        'jikanRelations',
+        'mal',
         'animeThemes',
       ]
 
