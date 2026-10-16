@@ -1,4 +1,5 @@
 import { fetcher } from '../libs/fetcher.js'
+import { SkippedTaskError } from '../libs/skippedTaskError.js'
 import { CONFIG } from '../config/config.js'
 import { authenticate } from '../libs/tvdb.js'
 import type { ScrapingTask } from 'types/index.js'
@@ -16,7 +17,8 @@ export const fetchTvdbSeriesArtworks = async (
   }
 
   if (!tvdb_id) {
-    throw new Error('Task payload missing tvdb_id')
+    // Igual que KitSu: sin tvdb_id (lo aporta animeMapping) no hay endpoint.
+    throw new SkippedTaskError('missing:tvdb_id')
   }
 
   const token = await authenticate()

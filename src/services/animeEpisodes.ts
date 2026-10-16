@@ -1,4 +1,5 @@
 import { CONFIG } from '../config/config.js'
+import { SkippedTaskError } from '../libs/skippedTaskError.js'
 import type { ScrapingTask } from 'types/index.js'
 import { fetcher } from '../libs/fetcher.js'
 import type { KitsuEpisodesResponse } from 'types/kitsuApi.js'
@@ -20,7 +21,9 @@ export const fetchAnimeEpisodes = async (
   const { kitsu_id } = task.payload as { kitsu_id: number }
 
   if (!kitsu_id) {
-    throw new Error('Task payload missing kitsu_id')
+    // Sin id cruzado no hay nada que pedir: se re-armará cuando el mapping
+    // (animeMapping) lo resuelva.
+    throw new SkippedTaskError('missing:kitsu_id')
   }
 
   const allEpisodes = []

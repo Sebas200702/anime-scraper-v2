@@ -18,7 +18,7 @@ const reset = async () => {
 
 const rawStatus = async (ids: number[]) => {
   const rows = await db.execute(sql`
-    SELECT id, status, attempts, leased_until, refresh_after, last_error
+    SELECT id, status, attempts, leased_until, refresh_after, last_error, skip_reason
     FROM ingest.task WHERE id IN (${sql.join(
       ids.map((id) => sql`${id}`),
       sql`, `
@@ -32,6 +32,7 @@ const rawStatus = async (ids: number[]) => {
     leased_until: string | null
     refresh_after: string | null
     last_error: string | null
+    skip_reason: string | null
   }[]
 }
 
@@ -186,6 +187,30 @@ describe.skipIf(!RUN)('cola ingest.* (Postgres local)', () => {
       sql`SELECT count(*)::int AS n FROM ingest.task WHERE source = ${SOURCE}`
     )
     expect((rows.rows[0] as { n: number }).n).toBe(5)
+  })
+
+  test('skipped no consume reintentos y se re-arma en la corrida siguiente', async () => {
+    await reset()
+    await seed(2)
+    const claimed = await taskRepository.claimTasks(2, SOURCE)
+    const target = claimed[0]!
+
+    await taskRepository.skipTasks([target.id], 'missing:kitsu_id')
+
+    const [row] = await rawStatus([target.id])
+    expect(row?.status).toBe('skipped')
+    expect(row?.skip_reason).toBe('missing:kitsu_id')
+    expect(row?.leased_until).toBeNull()
+    expect(row?.attempts).toBe(1) // ya se había contado al claimear; skipped no suma
+
+    // mientras está skipped no se claima
+    const duringSkip = await taskRepository.claimTasks(5, SOURCE)
+    expect(duringSkip.map((t) => t.id)).not.toContain(target.id)
+
+    // la siguiente corrida lo re-arma (self-healing)
+    expect(await taskRepository.rearmSkippedTasks(SOURCE)).toBe(1)
+    const after = await taskRepository.claimTasks(5, SOURCE)
+    expect(after.map((t) => t.id)).toContain(target.id)
   })
 
   test('stats resume la cola por estado', async () => {

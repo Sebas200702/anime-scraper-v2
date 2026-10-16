@@ -8,6 +8,8 @@ import { DEFAULT_REFRESH_SECONDS } from '../config/sources.js'
 import { capitalize } from '../shared/parsers.js'
 import { sanitizeError } from '../utils/sanitizeError.js'
 import { FetchError } from '../libs/httpError.js'
+import { SkippedTaskError } from '../libs/skippedTaskError.js'
+import { takeDeferredDependencies } from '../shared/dependencyTracker.js'
 import type {
   ScrapingTask,
   SourceConfig,
@@ -137,6 +139,11 @@ export class GenericManager {
     const resetCount = await taskRepository.resetStaleTasks(source)
     if (resetCount > 0) console.log(`♻️  Reset ${resetCount} stale tasks`)
 
+    // Lo que quedó `skipped` por dependencia vuelve a intentarse: la dependencia
+    // pudo aterrizar en la corrida anterior.
+    const rearmed = await taskRepository.rearmSkippedTasks(source)
+    if (rearmed > 0) console.log(`⏸️→▶ ${rearmed} tareas skipped re-armadas`)
+
     proxyManager.init()
     const singleIp = SINGLE_IP_SOURCES.has(source)
     const poolSize = proxyManager.getAvailableProxies().length
@@ -188,6 +195,12 @@ export class GenericManager {
             onDone: (task, data) =>
               this.processWorkerData(task.id, task.taskType, data),
             onError: async (task, error) => {
+              // Dependencia pendiente: se marca `skipped` (re-armable), no como
+              // fallo. Consumir reintentos aquí acabaría en dead_letter.
+              if (error instanceof SkippedTaskError) {
+                await taskRepository.skipTasks([task.id], error.reason)
+                return
+              }
               await taskRepository.failTasks(
                 [task.id],
                 sanitizeError((error as Error)?.message),
@@ -281,6 +294,22 @@ export class GenericManager {
     try {
       const repository = await this.getRepository()
       const totalSaved = (await repository[saveFnName](items)) ?? items.length
+
+      // Si el filtro de FK dejó filas fuera (padre inexistente), el lote queda
+      // `skipped`: se escribió lo válido y se reintenta cuando el padre exista.
+      const deferred = takeDeferredDependencies()
+      if (deferred > 0) {
+        await taskRepository.skipTasks(
+          taskIds,
+          `missing:dependency (${deferred} filas diferidas)`
+        )
+        this.reporter.recordSaved(entity, totalSaved, 0)
+        console.log(
+          `⏸️  ${entity}: ${totalSaved} guardados, ${deferred} diferidos por dependencia (tareas re-armables)`
+        )
+        return
+      }
+
       await taskRepository.completeTasks(
         taskIds,
         await this.refreshSeconds(first.taskType)

@@ -2,6 +2,7 @@ import { db } from '../libs/db.js'
 import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 import { inArray } from 'drizzle-orm/sql/expressions/conditions'
 import type { PgColumn, PgTable } from 'drizzle-orm/pg-core'
+import { noteDeferredDependency } from './dependencyTracker.js'
 
 /**
  * Filters an array of items to only include those whose FK reference
@@ -37,5 +38,11 @@ export async function filterByExistingFk<T>(
     for (const row of existing) validIds.add(row.id as number)
   }
 
-  return items.filter((item) => validIds.has(getFkId(item)))
+  return items.filter((item) => {
+    const exists = validIds.has(getFkId(item))
+    // Se avisa al manager: si algo quedó fuera por un padre inexistente, la
+    // tarea se marca `skipped` para reintentarla cuando el padre llegue.
+    if (!exists) noteDeferredDependency()
+    return exists
+  })
 }

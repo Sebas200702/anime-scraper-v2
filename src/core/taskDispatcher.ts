@@ -8,6 +8,7 @@
  */
 import type { ProxyState } from 'types/index.js'
 import { FetchError } from '../libs/httpError.js'
+import { SkippedTaskError } from '../libs/skippedTaskError.js'
 import { type RateLimits, RateGate, proxyKey } from './rateGate.js'
 
 export interface DispatcherTask {
@@ -121,7 +122,10 @@ export class TaskDispatcher {
         this.options.gate.pause(key, fetchError.retryAfterMs)
       }
 
-      const kind = fetchError?.kind ?? 'unknown'
+      const kind =
+        error instanceof SkippedTaskError
+          ? 'skipped'
+          : (fetchError?.kind ?? 'unknown')
       summary.byKind[kind] = (summary.byKind[kind] ?? 0) + 1
       summary.failed++
 

@@ -1,12 +1,14 @@
 import { db } from '../libs/db.js'
 import { music, musicResolution, musicVersion } from '../schemas/music.js'
 import { artist } from '../schemas/artist.js'
+import { anime } from '../schemas/anime.js'
 import { animeMusic } from '../schemas/animeRelations.js'
 import { musicArtist } from '../schemas/musicRelations.js'
 import { mediaRepository } from './media.js'
 import { unique } from '../utils/deduplicate.js'
 import { normalizeText } from '../utils/normalize.js'
 import { batchUpsert } from '../shared/batchUpsert.js'
+import { filterByExistingFk } from '../shared/fkFilter.js'
 
 import { resolveArtistIds } from '../shared/artistResolver.js'
 import type {
@@ -70,10 +72,20 @@ export const animeThemesRepository = {
       (am) => `${am.animeId}:${am.musicId}`
     )
 
+    // El anime puede no existir todavía en la DB (el listado de Jikan va antes):
+    // se filtra y se avisa al manager, que marcará la tarea `skipped` en vez de
+    // romper por FK y perder la música.
+    const validAnimeMusics = await filterByExistingFk(
+      uAnimeMusics,
+      (am) => am.animeId,
+      anime,
+      anime.malId
+    )
+
     await db.transaction(async (tx) => {
       await batchUpsert(music, uMusics, 6, 'music', tx)
       await batchUpsert(musicVersion, uVersions, 4, 'music-versions', tx)
-      await batchUpsert(animeMusic, uAnimeMusics, 4, 'anime-music', tx)
+      await batchUpsert(animeMusic, validAnimeMusics, 4, 'anime-music', tx)
       await batchUpsert(
         musicResolution,
         uResolutions,

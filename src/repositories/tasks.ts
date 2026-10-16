@@ -194,6 +194,36 @@ export const taskRepository = {
     return new Set(rows.map((r) => r.entityId))
   },
 
+  /**
+   * Marca tareas `skipped`: les falta una dependencia, así que no consumen
+   * reintentos ni acaban en dead_letter. `rearmSkippedTasks` las devuelve a
+   * `pending` en la siguiente corrida (self-healing).
+   */
+  async skipTasks(taskIds: number[], reason: string): Promise<number> {
+    if (taskIds.length === 0) return 0
+    const result = await db
+      .update(ingestTask)
+      .set({
+        status: 'skipped',
+        skipReason: reason,
+        leasedUntil: null,
+        updatedAt: sql`now()`,
+      })
+      .where(inArray(ingestTask.id, taskIds))
+      .returning({ id: ingestTask.id })
+    return result.length
+  },
+
+  /** Re-arma lo `skipped`: la dependencia pudo aparecer en la corrida anterior. */
+  async rearmSkippedTasks(source?: string): Promise<number> {
+    const result = await db.execute(sql`
+      UPDATE ingest.task
+      SET status = 'pending', scheduled_at = now(), updated_at = now()
+      WHERE status = 'skipped' ${sourceFilter(source)}
+    `)
+    return result.rowCount ?? 0
+  },
+
   /** Cadencia de refresh declarada en la DB (si existe). */
   async refreshSecondsFor(
     source: string,

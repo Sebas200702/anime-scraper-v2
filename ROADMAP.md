@@ -11,12 +11,12 @@
 >
 > **Estrategia de fill/refresh**: `docs/fill-and-refresh-strategy.md`.
 >
-> **Estado**: **Fases 0–2 implementadas** y **Fase 3 (promoción) implementada**;
-> fuentes verificadas en vivo: **AnimeThemes** (buildId dinámico, H-14 resuelto,
+> **Estado**: **Fases 0–3 implementadas** (incl. **P3: `skipped` + self-healing**).
+> Fuentes verificadas en vivo: **AnimeThemes** (buildId dinámico, H-14 resuelto,
 > 7.736 tareas sembradas), **TVDB** (key verificada, 134 artworks) y **Kitsu**;
 > falta verificar **Jikan** desde una red que lo alcance.
 > Pendiente: cobertura del catálogo (DDL de anidev) y descubrimiento para el
-> incremental.
+> incremental; el closure quirúrgico necesita task types por-id.
 
 ---
 
@@ -268,6 +268,29 @@ Decisión refinada de D-S1: **el padre fetchea y mapea**, sin `worker_threads`.
 | **TVDB** | `/login` 200, `/search?query=naruto` 50 resultados y `/series/78857/extended` con **134 artworks** (lo que consume el source) | ✅ funciona (key en `.env`, cuota por API key → 1 IP) |
 | **Kitsu** | `/anime/1` 200 (y 100/100 proxies verificados contra él) | ✅ funciona |
 | **Jikan** | **no alcanzable desde el sandbox** (TCP timeout) | ⚠️ verificar desde tu red |
+
+## 6.8 Tareas sin dependencia: `skipped` + self-healing (P3, 2026-10-15)
+
+Una tarea que no puede ejecutarse **todavía** (le falta un id cruzado o una fila
+padre) ya no es un fallo: va a `skipped` con `skip_reason`, **no consume
+reintentos** y se **re-arma al inicio de la siguiente corrida**.
+
+- `libs/skippedTaskError.ts`: los services lo lanzan cuando falta la dependencia
+  (`missing:kitsu_id` en episodios, `missing:tvdb_id` en artworks).
+- `shared/dependencyTracker.ts` + `shared/fkFilter.ts`: el filtro de FK avisa de
+  las filas que dejó fuera; el manager marca el lote `skipped` en vez de
+  `completed` (antes: relación perdida en silencio, o fallo por FK → 3 intentos
+  → dead_letter).
+- `repositories/tasks.ts`: `skipTasks` / `rearmSkippedTasks` (self-healing).
+- El dispatcher lo cuenta como `skipped` y **no penaliza al proxy**.
+- Caso concreto que cierra: `animeThemes` sin filas de `anime` (el listado de
+  Jikan va antes) ya no rompe por FK; el mapper filtra, avisa y la tarea se
+  reintenta cuando el anime exista.
+
+**Pendiente (closure quirúrgico)**: encolar el *padre* concreto que falta. Hoy
+no es posible para las entidades de Jikan porque sus tasks son **por página**
+(no hay hidratación por id). Requiere añadir task types por-id (`/characters/{id}/full`,
+etc.) — cambio propio, no bloqueante.
 
 ## 7. Verificación por PR
 ```bash

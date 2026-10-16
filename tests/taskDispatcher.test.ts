@@ -6,6 +6,7 @@ import {
   TaskDispatcher,
 } from '../src/core/taskDispatcher.js'
 import { FetchError } from '../src/libs/httpError.js'
+import { SkippedTaskError } from '../src/libs/skippedTaskError.js'
 
 const proxy = (
   url: string,
@@ -230,6 +231,33 @@ describe('TaskDispatcher', () => {
     expect(summary.processed).toBe(2)
     expect(summary.failed).toBe(1)
     expect(summary.byKind.unknown).toBe(1)
+  })
+
+  test('una dependencia pendiente se cuenta como skipped y no penaliza al proxy', async () => {
+    const reported: unknown[] = []
+
+    const dispatcher = new TaskDispatcher({
+      maxInFlight: 1,
+      gate: new RateGate(fakeTime()),
+      acquireProxy: () => proxy('http://a:1'),
+      limitsFor: () => noLimits,
+      reportProxy: (...args) => reported.push(args),
+    })
+
+    const errors: string[] = []
+    const summary = await dispatcher.drain([task(1)], {
+      run: async () => {
+        throw new SkippedTaskError('missing:kitsu_id')
+      },
+      onDone: () => {},
+      onError: (_t, error) => {
+        errors.push((error as SkippedTaskError).reason)
+      },
+    })
+
+    expect(summary.byKind.skipped).toBe(1)
+    expect(errors).toEqual(['missing:kitsu_id'])
+    expect(reported).toHaveLength(0) // no es culpa del proxy
   })
 
   test('el éxito limpia el proxy (sin error en reportProxy)', async () => {
