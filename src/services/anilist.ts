@@ -6,8 +6,11 @@ import type { ScrapingTask } from 'types/index.js'
 import type { ProxyTarget } from '../libs/transport.js'
 
 /**
- * AniList (GraphQL): fuente **primaria de banners**. `idMal` cruza directo con
- * nuestro `mal_id`, así que no hace falta búsqueda por título.
+ * AniList (GraphQL): fuente de banners (primaria) + datos que Jikan no puede
+ * dar mientras esté caído (tráiler, origen, fechas de emisión, poster).
+ *
+ * `idMal` cruza directo con nuestro `mal_id`, así que no hace falta búsqueda
+ * por título. Todo sale en **1 request por anime** (sin task type nuevo).
  *
  * Cuota real: 30 req/min por IP (cabecera `x-ratelimit-limit`), así que el
  * `RateGate` la aplica por (host, IP) y los proxies multiplican la cuota.
@@ -18,6 +21,10 @@ const BANNER_QUERY = `query ($idMal: Int) {
     idMal
     bannerImage
     coverImage { extraLarge large color }
+    trailer { id site }
+    source
+    startDate { year month day }
+    endDate { year month day }
     title { romaji }
   }
 }`

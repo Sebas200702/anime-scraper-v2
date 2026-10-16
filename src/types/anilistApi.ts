@@ -1,4 +1,4 @@
-/** Respuesta de la API GraphQL de AniList para el banner de un anime. */
+/** Respuesta de la API GraphQL de AniList para un anime (por `idMal`). */
 export interface AniListBannerResponse {
   data?: {
     Media?: {
@@ -10,8 +10,19 @@ export interface AniListBannerResponse {
         large?: string | null
         color?: string | null
       } | null
+      trailer?: { id?: string | null; site?: string | null } | null
+      source?: string | null
+      startDate?: FuzzyDate | null
+      endDate?: FuzzyDate | null
       title?: { romaji?: string | null } | null
     } | null
   }
   errors?: { message: string }[]
+}
+
+/** Fecha parcial de AniList (año/mes/día opcionales). */
+export interface FuzzyDate {
+  year?: number | null
+  month?: number | null
+  day?: number | null
 }

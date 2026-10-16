@@ -15,6 +15,13 @@
       "when": 1792118775339,
       "tag": "0001_quiet_joseph",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792157859527,
+      "tag": "0002_closed_pet_avengers",
+      "breakpoints": true
     }
   ]
 }

@@ -329,7 +329,16 @@ const upsertBatch = async (
     return `(${placeholders.join(', ')})`
   })
 
-  // Solo actualiza si algo cambió de verdad: idempotente por construcción.
+  // Un null del origen es "desconocido", nunca "borrado": las fuentes añaden
+  // conocimiento (el seed del dump offline es disperso por diseño) y un null
+  // jamás puede pisar un valor que otra fuente ya aportó. Sin esto, promover
+  // filas dispersas sobre filas ricas sería pérdida de datos.
+  const setClause = setColumns
+    .map(
+      (c) =>
+        `${quote(c)} = COALESCE(excluded.${quote(c)}, ${quote(table)}.${quote(c)})`
+    )
+    .join(', ')
   const changedPredicate =
     setColumns.length > 0
       ? `WHERE (${setColumns.map((c) => `${quote(table)}.${quote(c)}`).join(', ')})
@@ -342,7 +351,7 @@ const upsertBatch = async (
     ON CONFLICT (${key.map(quote).join(', ')})
     ${
       setColumns.length > 0
-        ? `DO UPDATE SET ${setColumns.map((c) => `${quote(c)} = excluded.${quote(c)}`).join(', ')}
+        ? `DO UPDATE SET ${setClause}
            ${changedPredicate}`
         : 'DO NOTHING'
     }

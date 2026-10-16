@@ -16,8 +16,10 @@
 | Vocabulario `media_type` normalizado al enum de la app | ✅ verificado en vivo |
 | `task_policy` sembrada por script (`bun run db:seed-policy`) | ✅ |
 | Re-arme de vencidos al arrancar (`rearmDueTasks`) | ✅ |
-| Promoción diff-upsert FK-safe + `--dry-run` + rollback | ✅ 4 tests herméticos |
+| Promoción diff-upsert FK-safe + `--dry-run` + rollback (nulls del origen jamás pisan valores del destino) | ✅ 5 tests herméticos |
 | Espejo de DDL al día (`bun run schema:check`) | ✅ 19 fuentes |
+| Seed offline del catálogo: 30.561 animes + 216.728 sinónimos + 18.858 `anilist_id` + 19.700 `kitsu_id` (cuota 0) | ✅ verificado en local |
+| AniList extendido: banner + poster + tráiler/origen/fechas en 1 request; 30.553 tareas pre-sembradas | ✅ humo en vivo OK |
 | CI: typecheck + build + unit + integración (Postgres real) + drift | ✅ |
 | Gates locales | ✅ 120+ unit, 15 integración |
 
@@ -75,18 +77,38 @@ bun run db:seed-policy
 ## 5. Oleadas (orden FK-safe; cada comando = sembrar faltantes + drenar)
 
 ```bash
-# Oleada 1 — padres (anime primero: todo lo demás cuelga de anime.mal_id)
+# Oleada 0 — seed offline (ya corrida en local, cuota 0, idempotente):
+# 30.561 animes + sinónimos + anilist_id/kitsu_id desde anime-offline-database
+DUMP_FILE=/tmp/opencode/offline.jsonl bun run db:seed-dump
+# Descarga del dump (una vez, 6 MB):
+#   curl -sL -o /tmp/opencode/offline.jsonl.zst https://github.com/manami-project/anime-offline-database/releases/download/2026-27/anime-offline-database.jsonl.zst
+#   zstd -d -c /tmp/opencode/offline.jsonl.zst > /tmp/opencode/offline.jsonl
+# (la URL `weekly` está muerta: usar el tag de la release)
+
+# Oleada 1 — padres
+# ⚠️ jikan/jikanRelations NECESITAN Jikan (caído desde 2026-10-15): bloqueados
+# hasta que `proxies:probe --check-url https://api.jikan.moe/v4/anime/1` dé ≥1.
+# Sin Jikan el orden que sí corre:
+SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev animeThemes  # independiente
+SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev anilist      # 30.553 tareas ya sembradas; banner+poster+tráiler/origen/fechas en 1 req
+# Cuando Jikan vuelva:
 SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev jikan
 SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev jikanRelations
-SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev animeMapping
-SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev animeThemes  # independiente, cuando quieras
+SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev animeMapping  # Kitsu por título; confirma kitsu_id y resuelve tvdb_id
 
 # Oleada 2 — derivadas (necesitan lo de la oleada 1)
 #  episodios: necesita kitsuId del mapping · tvdb: necesita tvdbId + type · anilist: necesita mal_id
 SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev animeEpisodes
 SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev tvdbSeriesArtworks
-SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev anilist
+# anilist ya drena en oleada 1 (solo necesita mal_id del seed offline)
 ```
+
+## 5b. Qué queda bloqueado hasta Jikan (y por qué no bloquea el resto)
+
+- **Fluye sin Jikan**: seed offline → AniList (banner/poster/tráiler/origen/fechas) → mapping Kitsu/TVDB por título → episodios → artworks TVDB → themes/música. Todo verificado o con humo en vivo.
+- **Bloqueado**: listing de Jikan (descubrimiento de ids nuevos), `jikanRelations` (sinopsis, personajes/staff/VAs, studios/licensors, géneros, stats MAL, relations). Las columnas que los esperan ya existen y son nullables (migración `0004` en anidev + espejo): cuando Jikan vuelva se rellenan solas sin refill.
+- `relatedAnime` del dump no trae tipos de relación → relations también esperan a Jikan.
+- Productoras por nombre (dump) no se siembran: la junction exige `producer.mal_id`. Mismo caso géneros/temas (ids MAL).
 
 - Re-correr el mismo comando es seguro (idempotente: solo crea lo que falta y
   drena lo `pending`; al arrancar re-arma leases vencidos, `skipped` y

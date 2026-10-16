@@ -189,6 +189,30 @@ describe.skipIf(!RUN)('promoción diff-upsert (Modo A → prod)', () => {
     ).toBe(1)
   })
 
+  test('un null del origen jamás pisa un valor del destino (seed disperso)', async () => {
+    // El destino enriqueció la fila; el origen sigue disperso (synopsis null).
+    await target.query(
+      `UPDATE anime SET synopsis = 'Sinopsis rica' WHERE mal_id = $1`,
+      [ANIME_A]
+    )
+    await source.query(
+      `UPDATE anime SET title = 'Test Anime A v3' WHERE mal_id = $1`,
+      [ANIME_A]
+    )
+
+    const report = await promote({ source, target, log: () => {} })
+    const anime = report.tables.find((t) => t.table === 'anime')
+    expect(anime?.updated).toBe(1)
+
+    const row = await target.query(
+      `SELECT title, synopsis FROM anime WHERE mal_id = $1`,
+      [ANIME_A]
+    )
+    // El título sí viaja; la sinopsis que el origen no conoce se conserva.
+    expect(row.rows[0]?.title).toBe('Test Anime A v3')
+    expect(row.rows[0]?.synopsis).toBe('Sinopsis rica')
+  })
+
   test('dryRun valida sin escribir', async () => {
     await source.query(
       `INSERT INTO anime (mal_id, title) VALUES (990003, 'Test Dry Run')

@@ -217,6 +217,26 @@ export interface AnimeStaffProcessorResult {
 /** Resultado del processor de banners (AniList). */
 export interface AnimeBannersProcessorResult {
   animeMedias: NewMedia[]
+  /**
+   * Parche disperso para la fila `anime`: solo trae las columnas que AniList
+   * conoce (tráiler, origen, fechas de emisión). Lo ausente se omite, nunca
+   * se escribe como null.
+   */
+  animePatch?: AnimePatch
+}
+
+/**
+ * Subconjunto escribible de `anime` desde AniList. `malId` es la clave;
+ * el resto son opcionales y el repositorio solo actualiza los presentes.
+ */
+export interface AnimePatch {
+  malId: number
+  trailerYoutubeId?: string
+  trailerEmbedUrl?: string
+  source?: string
+  /** Fecha ISO `YYYY-MM-DD` (el repo la convierte a timestamptz). */
+  airedFrom?: string
+  airedTo?: string
 }
 
 export interface ArtworksProcessorResult {

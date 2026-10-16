@@ -5,7 +5,7 @@
  * No editar a mano: `bun run schema:mirror` (drift check: `bun run schema:mirror --check`).
  */
 
-import { integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { index, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 import { anime } from './anime.js'
 
 export const animeExternalIds = pgTable('anime_external_ids', {
@@ -16,6 +16,7 @@ export const animeExternalIds = pgTable('anime_external_ids', {
   animeThemesSlug: text('anime_themes_slug'),
   kitsuId: integer('kitsu_id'),
   tvdbId: integer('tvdb_id'),
+  anilistId: integer('anilist_id'),
   createdAt: timestamp('created_at')
     .notNull()
     .$defaultFn(() => new Date()),

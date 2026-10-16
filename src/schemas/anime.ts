@@ -5,7 +5,7 @@
  * No editar a mano: `bun run schema:mirror` (drift check: `bun run schema:mirror --check`).
  */
 
-import { index, integer, pgTable, real, serial, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import { index, integer, pgTable, real, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 
 export const anime = pgTable(
   'anime',
@@ -25,6 +25,22 @@ export const anime = pgTable(
     season: text('season'),
     synopsis: text('synopsis'),
     background: text('background'),
+    // Cobertura del catálogo (change `catalog-coverage-fields`): todo nullable,
+    // lo puebla el pipeline (Modo A promoción o Modo B incremental), nunca
+    // request-time. `rank`/`members`/`favorites` son stats de MAL (Jikan);
+    // `trailer*`/`source`/aired los puede adelantar AniList.
+    broadcastDay: text('broadcast_day'),
+    broadcastTime: text('broadcast_time'),
+    broadcastTimezone: text('broadcast_timezone'),
+    airedFrom: timestamp('aired_from', { withTimezone: true }),
+    airedTo: timestamp('aired_to', { withTimezone: true }),
+    trailerYoutubeId: text('trailer_youtube_id'),
+    trailerEmbedUrl: text('trailer_embed_url'),
+    duration: text('duration'),
+    source: text('source'),
+    rank: integer('rank'),
+    members: integer('members'),
+    favorites: integer('favorites'),
   },
   (t) => [
     index('anime_year_idx').on(t.year),
@@ -33,6 +49,7 @@ export const anime = pgTable(
     index('anime_status_idx').on(t.status),
     index('anime_type_idx').on(t.type),
     index('anime_rating_idx').on(t.rating),
+    index('anime_broadcast_day_idx').on(t.broadcastDay),
   ]
 )
 export const animeTitleSynonym = pgTable(
