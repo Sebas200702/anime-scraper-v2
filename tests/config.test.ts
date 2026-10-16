@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import {
+  KEY_SCOPED_HOSTS,
   SINGLE_IP_SOURCES,
   SOURCES,
   SOURCE_HOSTS,
@@ -16,10 +17,18 @@ describe('config de fuentes', () => {
     }
   })
 
-  test('ninguna fuente sin proxy queda fuera de SINGLE_IP_SOURCES por error', () => {
-    // TVDB es cuota por API key: repartirla entre IPs no multiplica nada.
-    expect(SINGLE_IP_SOURCES.has('tvdbSeriesArtworks')).toBe(true)
-    expect(SINGLE_IP_SOURCES.size).toBe(1)
+  test('TVDB es cuota por API key (KEY_SCOPED), no por IP', () => {
+    // Paralelizar entre IPs no multiplica la cuota de una API key y sí la
+    // rompería: el gate la trata como una sola clave global.
+    expect(KEY_SCOPED_HOSTS.has('api4.thetvdb.com')).toBe(true)
+    expect(SINGLE_IP_SOURCES.size).toBe(0)
+  })
+
+  test('el presupuesto global evita correr 30 conexiones del trial', () => {
+    process.env.SCRAPER_MODE = 'backfill'
+    const config = getSourceConfig('anilist')
+    delete process.env.SCRAPER_MODE
+    expect(config.maxWorkers).toBe(30)
   })
 
   test('modo backfill sube la concurrencia sin tocar la cuota por IP', () => {

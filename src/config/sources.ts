@@ -120,7 +120,7 @@ const BACKFILL_PROFILES: Record<
   animeMapping: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 50 } },
   animeEpisodes: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 50 } },
   tvdbSeriesArtworks: {
-    maxWorkers: 5,
+    maxWorkers: 10,
     rateLimit: { perSecond: 1, perMinute: 40 },
   },
   anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
@@ -182,7 +182,7 @@ export const SOURCE_HOSTS: Record<
   animeEpisodes: { host: 'kitsu.io', limits: { perSecond: 1, perMinute: 60 } },
   tvdbSeriesArtworks: {
     host: 'api4.thetvdb.com',
-    limits: { perSecond: 1, perMinute: 30 },
+    limits: { perSecond: 2, perMinute: 100 },
   },
   anilist: {
     host: 'graphql.anilist.co',
@@ -191,10 +191,20 @@ export const SOURCE_HOSTS: Record<
 }
 
 /**
- * Fuentes cuya cuota es **por API key**, no por IP: repartirlas entre proxies
- * no multiplica nada y además arriesga la key, así que van en una sola IP.
+ * Fuentes que NO se reparten entre proxies. TVDB no va aquí: su token es de una
+ * API key y repartir entre IPs no multiplica cuota, pero **tampoco la rompe**
+ * (la cuota es por key, no por IP) y con 1 en vuelo era el cuello del backfill
+ * (6k+ series × ~2 llamadas a 40/min = horas). Se paraleliza con el cupo normal
+ * y el `RateGate` conserva el límite por host.
  */
-export const SINGLE_IP_SOURCES = new Set(['tvdbSeriesArtworks'])
+export const SINGLE_IP_SOURCES = new Set<string>()
+
+/**
+ * Hosts cuya cuota es **por API key**: el gate los trata como una sola clave
+ * global (ignora la IP de salida). Paralelizar entre proxies no multiplica la
+ * cuota y sí la rompería; el límite real es del host, no de la IP.
+ */
+export const KEY_SCOPED_HOSTS = new Set(['api4.thetvdb.com'])
 
 export function getSourceConfig(sourceName: string) {
   const config = SOURCES.find((s) => s.name === sourceName)

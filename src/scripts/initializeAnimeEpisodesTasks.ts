@@ -20,7 +20,7 @@ export async function initializeAnimeEpisodesTasks() {
       .select()
       .from(animeExternalIds)
       .limit(BATCH_SIZE)
-        .orderBy(animeExternalIds.animeId)
+      .orderBy(animeExternalIds.animeId)
       .offset(offset)
 
     if (!animes || animes.length === 0) break

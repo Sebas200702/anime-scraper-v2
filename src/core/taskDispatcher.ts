@@ -52,6 +52,17 @@ export interface TaskDispatcherOptions {
    * con error = fallo atribuible al proxy (`FetchError.proxyFault`).
    */
   reportProxy?: (proxyUrl: string | undefined, error?: FetchError) => void
+  /**
+   * Tope global de conexiones compartido entre fuentes (trial: 10). Se toma
+   * justo antes del fetch y se suelta al terminar; el guardado no lo ocupa.
+   */
+  budget?: { acquire: () => Promise<void>; release: () => void }
+  /**
+   * Clave del gate. Por defecto `host|proxy` (cuota por IP). Fuentes con cuota
+   * por API key (TVDB) pasan una clave que ignora el proxy: paralelizar entre
+   * IPs no multiplica la cuota y sí la rompería.
+   */
+  gateKeyFor?: (host: string, proxyUrl?: string) => string
   onProgress?: (summary: DispatchSummary) => void
 }
 
@@ -98,13 +109,24 @@ export class TaskDispatcher {
     if (proxyUrl) usedProxies.add(proxyUrl)
 
     const { host, limits } = this.options.limitsFor(task)
-    const key = proxyKey(host, proxyUrl)
+    const key = this.options.gateKeyFor
+      ? this.options.gateKeyFor(host, proxyUrl)
+      : proxyKey(host, proxyUrl)
 
     // Cuota por (host, IP): con una IP por tarea, cada una va a su cuota.
     await this.options.gate.acquire(key, limits)
 
     try {
-      const data = await hooks.run(task, proxyUrl)
+      // La conexión se toma para el fetch y se suelta al volver: el mapeo y el
+      // guardado no consumen cupo del proveedor.
+      const budget = this.options.budget
+      if (budget) await budget.acquire()
+      let data: T
+      try {
+        data = await hooks.run(task, proxyUrl)
+      } finally {
+        budget?.release()
+      }
       this.options.reportProxy?.(proxyUrl)
       await hooks.onDone(task, data, proxyUrl)
       summary.processed++

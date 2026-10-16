@@ -19,6 +19,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed-policy": "bun src/scripts/seedTaskPolicy.ts",
     "db:seed-dump": "bun src/scripts/seedAnimeFromDump.ts",
+    "backfill": "bun src/scripts/backfillAll.ts",
     "schema:mirror": "bun scripts/mirrorSchema.ts",
     "schema:check": "bun scripts/mirrorSchema.ts --check",
     "promote": "bun src/scripts/promote.ts"

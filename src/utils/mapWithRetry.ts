@@ -20,7 +20,13 @@ export const mapWithRetry = async (
   payload: ScrapingTask['payload'],
   mappingFunction: (searchParams: any, agent: any) => Promise<{ json: any }>,
   rateLimiter: (() => Promise<void>) | null,
-  agent: ProxyTarget
+  agent: ProxyTarget,
+  /**
+   * Tope de estrategias a probar. `mapWithRetry` genera hasta 9 (título/año,
+   * inglés, japonés y 3 sinónimos, con y sin año); en backfill se acota para no
+   * gastar 9 requests por título sin coincidencia.
+   */
+  maxStrategies = Number.POSITIVE_INFINITY
 ) => {
   const { title, title_english, title_japanese, year, type, title_synonyms } =
     payload as {
@@ -61,7 +67,10 @@ export const mapWithRetry = async (
   ].filter(Boolean)
 
   // Primero intentar con año, luego sin año
-  const strategies = [...strategiesWithYear, ...strategiesWithoutYear]
+  const strategies = [...strategiesWithYear, ...strategiesWithoutYear].slice(
+    0,
+    maxStrategies
+  )
 
   for (let attempt = 0; attempt < strategies.length; attempt++) {
     const searchParams = strategies[attempt]

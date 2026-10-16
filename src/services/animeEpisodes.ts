@@ -10,9 +10,9 @@ const BASE = CONFIG.KITSU_BASE || 'https://kitsu.io/api/edge'
 
 // El limiter del worker se consume una vez por tarea, pero esta tarea pagina
 // (20 eps/página) y una serie larga son decenas de requests seguidos: el gate
-// real tiene que estar por página. Al ser módulo-por-worker y con 1 worker,
-// acota el agregado contra Kitsu (60/min).
-const kitsuLimiter = createRateLimiter(1, 50)
+// real tiene que estar por página. Techo agregado para el backfill (10 IPs);
+// la cuota por IP (Kitsu 60/min) la aplica el `RateGate` por (host, IP).
+const kitsuLimiter = createRateLimiter(10, 600)
 
 export const fetchAnimeEpisodes = async (
   task: ScrapingTask,
@@ -42,6 +42,7 @@ export const fetchAnimeEpisodes = async (
         'Content-Type': 'application/json',
       },
       agent,
+      timeoutMs: 10_000,
     })
 
     if (!response.data || response.data.length === 0) {

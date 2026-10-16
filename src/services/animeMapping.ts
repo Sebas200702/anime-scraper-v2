@@ -60,20 +60,36 @@ export const fetchAnimeMapping = async (
     }
   }
 
-  const [kitsuId, tvdbId] = await Promise.all([
-    mapWithRetry(
-      payload,
-      async (params, agent) => ({ json: await kitsuMapping(params, agent) }),
-      kitsuLimiter,
-      agent
-    ).catch(() => null),
-    mapWithRetry(
-      payload,
-      async (params, agent) => ({ json: await tvdbMapping(params, agent) }),
-      tvdbLimiter,
-      agent
-    ).catch(() => null),
-  ])
+  // Slow path (11k sin kitsu_id): buscar SOLO en Kitsu (hasta 3 estrategias) y
+  // sacar el tvdb_id de sus mappings. Antes se hacía además una búsqueda fuzzy
+  // por título en TVDB en paralelo: 9 estrategias × 2 fuentes y, peor, un
+  // `tvdb_id` adivinado por título. Ahora: 1-3 requests a Kitsu + 1 a mappings;
+  // TVDB por título queda solo como último recurso si Kitsu no encuentra nada.
+  const kitsuId = await mapWithRetry(
+    payload,
+    async (params, agent) => ({ json: await kitsuMapping(params, agent) }),
+    kitsuLimiter,
+    agent,
+    3
+  ).catch(() => null)
 
-  return { kitsuId, tvdbId }
+  if (kitsuId) {
+    try {
+      await kitsuLimiter()
+      const json = await kitsuMappingsByAnimeId(kitsuId, agent)
+      return { kitsuId, tvdbId: pickTvdbId(json) }
+    } catch {
+      return { kitsuId, tvdbId: null }
+    }
+  }
+
+  const tvdbId = await mapWithRetry(
+    payload,
+    async (params, agent) => ({ json: await tvdbMapping(params, agent) }),
+    tvdbLimiter,
+    agent,
+    3
+  ).catch(() => null)
+
+  return { kitsuId: null, tvdbId }
 }

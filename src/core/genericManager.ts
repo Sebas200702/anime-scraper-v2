@@ -2,8 +2,10 @@ import { taskRepository } from '../repositories/tasks.js'
 import { StatsReporter } from './statsReporter.js'
 import { proxyManager } from './proxyManager.js'
 import { RateGate } from './rateGate.js'
+import { proxyKey } from './rateGate.js'
 import { TaskDispatcher, type DispatcherTask } from './taskDispatcher.js'
 import { SINGLE_IP_SOURCES, SOURCE_HOSTS } from '../config/sources.js'
+import { KEY_SCOPED_HOSTS } from '../config/sources.js'
 import { DEFAULT_REFRESH_SECONDS } from '../config/sources.js'
 import { capitalize } from '../shared/parsers.js'
 import { sanitizeError } from '../utils/sanitizeError.js'
@@ -53,6 +55,18 @@ export class GenericManager {
     this.sourceConfig = sourceConfig
     this.pageBatch = sourceConfig.pageBatch
     this.reporter = new StatsReporter(sourceConfig.name)
+  }
+
+  /**
+   * Tope global de conexiones compartido entre fuentes (trial: 10). Cuando está
+   * presente, `maxWorker` deja de ser un tope de conexiones (el presupuesto lo
+   * es) y pasa a ser cuántas tareas puede tener en vuelo esta fuente.
+   */
+  private budget?: { acquire: () => Promise<void>; release: () => void }
+
+  useBudget(budget: { acquire: () => Promise<void>; release: () => void }) {
+    this.budget = budget
+    return this
   }
 
   private async getRepository() {
@@ -170,6 +184,11 @@ export class GenericManager {
       gate: rateGate,
       acquireProxy: () => (singleIp ? undefined : proxyManager.acquire()),
       limitsFor: () => hostLimits,
+      // Fuentes con cuota por API key (TVDB): una sola clave global, aunque el
+      // fetch salga por una IP distinta.
+      gateKeyFor: (host, proxyUrl) =>
+        proxyKey(host, KEY_SCOPED_HOSTS.has(host) ? undefined : proxyUrl),
+      budget: this.budget,
       reportProxy: (proxyUrl, error) => {
         if (!proxyUrl) return
         if (error) proxyManager.reportFailure(proxyUrl)
