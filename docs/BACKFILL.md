@@ -103,12 +103,17 @@ SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev tvdbSeriesArtworks
 # anilist ya drena en oleada 1 (solo necesita mal_id del seed offline)
 ```
 
-## 5b. Qué queda bloqueado hasta Jikan (y por qué no bloquea el resto)
+## 5b. Qué sale sin Jikan y qué queda bloqueado de verdad
 
-- **Fluye sin Jikan**: seed offline → AniList (banner/poster/tráiler/origen/fechas) → mapping Kitsu/TVDB por título → episodios → artworks TVDB → themes/música. Todo verificado o con humo en vivo.
-- **Bloqueado**: listing de Jikan (descubrimiento de ids nuevos), `jikanRelations` (sinopsis, personajes/staff/VAs, studios/licensors, géneros, stats MAL, relations). Las columnas que los esperan ya existen y son nullables (migración `0004` en anidev + espejo): cuando Jikan vuelva se rellenan solas sin refill.
-- `relatedAnime` del dump no trae tipos de relación → relations también esperan a Jikan.
-- Productoras por nombre (dump) no se siembran: la junction exige `producer.mal_id`. Mismo caso géneros/temas (ids MAL).
+- **Fluye sin Jikan**: seed offline → AniList (banner/poster/tráiler/origen/fechas **+ sinopsis + relations tipadas + broadcast de emisión**, todo en 1 request) → mapping Kitsu/TVDB por título → episodios → artworks TVDB → themes/música.
+- **Re-drain AniList** (una vez, tras el primero): la query creció (sinopsis/relations/broadcast), así que las 30.561 tareas se re-siembran y drenan de nuevo (~30k requests pequeñas):
+```bash
+export PGPASSWORD=anidev
+psql -h 127.0.0.1 -U anidev -d scraper_local -q -c "DELETE FROM ingest.task WHERE source='anilist'"
+SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev anilist
+```
+- **Bloqueado de verdad hasta Jikan**: personajes/staff/VAs (+ su media), junctions de studios/licensors y de géneros/temas/demográficas (exigen `producer/genre/staff/character.mal_id`), stats MAL (`score/rank/members/favorites`: no se mezclan escalas con AniList) y sinopsis de lo sin ficha AniList. Las columnas ya existen como nullables: entra solo, sin refill.
+- `relatedAnime` del dump no trae tipos → relations salen de AniList (tipadas). Productoras por nombre (dump) no se siembran: la junction exige `producer.mal_id`.
 
 - Re-correr el mismo comando es seguro (idempotente: solo crea lo que falta y
   drena lo `pending`; al arrancar re-arma leases vencidos, `skipped` y

@@ -12,10 +12,10 @@
 > **Estrategia de fill/refresh**: `docs/fill-and-refresh-strategy.md`.
 >
 > **Estado**: **backfill híbrido en marcha (sin Jikan, caído desde 2026-10-15)**:
-> seed offline con 30.561 animes (cuota 0) + AniList extendido (banner/poster/
-> tráiler/origen/fechas en 1 request) + mapping/episodios/TVDB/themes fluyendo;
-> `jikan`/`jikanRelations` (sinopsis, staff/VAs, studios, géneros, stats MAL)
-> esperan a que Jikan vuelva sobre columnas nullables ya migradas (`0004`).
+> seed offline con 30.561 animes (cuota 0) + AniList completo (20.756 ok) y
+> extendido con sinopsis/relations/broadcast (re-drain pendiente) + mapping en
+> curso; episodios/TVDB/themes/promoción después. Solo queda bloqueado de
+> verdad: personajes/staff/VAs, junctions de studios/géneros y stats MAL.
 > Detalle operativo: `docs/BACKFILL.md`.
 
 ---
