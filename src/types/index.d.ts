@@ -105,8 +105,16 @@ export interface Media {
   mediaType: string
   src: string
   size: string | null
+  /** Origen del asset (`anilist`, `tvdb`, `jikan`…). */
+  source: string | null
+  /** Menor = se prefiere al elegir una variante del mismo `mediaType`. */
+  priority: number
 }
-export type NewMedia = Omit<Media, 'id'> & { id?: number }
+export type NewMedia = Omit<Media, 'id' | 'source' | 'priority'> & {
+  id?: number
+  source?: string | null
+  priority?: number
+}
 export interface SourceConfig {
   name: string
   maxWorkers: number
@@ -204,6 +212,11 @@ export interface AnimeCharactersProcessorResult {
 export interface AnimeStaffProcessorResult {
   animeStaffs: NewAnimeStaff[]
   staffMedia: NewMedia[]
+}
+
+/** Resultado del processor de banners (AniList). */
+export interface AnimeBannersProcessorResult {
+  animeMedias: NewMedia[]
 }
 
 export interface ArtworksProcessorResult {

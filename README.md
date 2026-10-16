@@ -46,7 +46,31 @@ bun run start jikanRelations # sobre dist/
 
 `bun run dev <source>` corre el inicializador de tareas y luego la ingesta del
 source. Sources disponibles: `jikan`, `jikanRelations`, `animeThemes`,
-`animeMapping`, `animeEpisodes`, `tvdbSeriesArtworks`.
+`animeMapping`, `animeEpisodes`, `tvdbSeriesArtworks`, `anilist`.
+
+## Banners y variantes de media
+
+Cada asset vive en la tabla de su entidad (`anime_media`, `character_media`, …)
+con dos columnas que permiten **tener varias variantes del mismo tipo y elegir
+una**:
+
+- `source` — de dónde vino (`anilist`, `tvdb`, `jikan`, `animethemes`).
+- `priority` — **menor = se prefiere** (mapa en `MEDIA_SOURCE_PRIORITY`:
+  AniList 10, Jikan 20, TVDB 30, AnimeThemes 40).
+
+AniList es la fuente **primaria de banners** (se consulta por `idMal`, su cuota
+real es 30 req/min por IP). La variante preferida se obtiene con:
+
+```sql
+SELECT source, src FROM anime_media
+WHERE anime_id = $1 AND media_type = 'Banner'
+ORDER BY priority ASC, id ASC
+LIMIT 1;  -- AniList primero, TVDB después
+```
+
+Los banners de AniList y de TVDB **coexisten** (variantes); no se pisa ninguna.
+Si cambia la prioridad de una fuente, las filas ya guardadas se reconcilian en
+la siguiente corrida.
 
 ## Tests
 

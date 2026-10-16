@@ -135,7 +135,7 @@ export const animeThemesRepository = {
 
     await db.transaction(async (tx) => {
       await batchUpsert(artist, uArtists, 3, 'artists', tx)
-      await mediaRepository.saveMedia(uMedia)
+      await mediaRepository.saveMedia(uMedia, 'animethemes')
     })
 
     return uArtists.length

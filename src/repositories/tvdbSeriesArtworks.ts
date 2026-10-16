@@ -8,7 +8,7 @@ export const tvdbSeriesArtworksRepository = {
     try {
       // La media vive por entidad y sin índice único en el DDL: el router
       // descarta lo ya presente, así que re-ejecutar no duplica.
-      return await mediaRepository.saveMedia(tvdbSeriesArtworkEntries)
+      return await mediaRepository.saveMedia(tvdbSeriesArtworkEntries, 'tvdb')
     } catch (e) {
       // Re-lanzar (ver `saveData`): un fallo de escritura no puede contar como
       // tarea completada.

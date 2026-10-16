@@ -1,4 +1,5 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
+import { MEDIA_SOURCE_PRIORITY } from '../config/sources.js'
 import { db } from '../libs/db.js'
 import {
   animeMedia,
@@ -19,6 +20,13 @@ import type { NewMedia } from '../types/index.js'
  */
 
 type MediaTable = typeof animeMedia
+
+const chunkRows = <T>(items: T[], size: number): T[][] => {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size)
+    out.push(items.slice(i, i + size))
+  return out
+}
 
 const mediaWarned = new Set<string>()
 
@@ -82,8 +90,15 @@ const keyOf = (entityId: number, mediaType: string, src: string) =>
   `${entityId}|${mediaType}|${src}`
 
 export const mediaRepository = {
-  async saveMedia(items: NewMedia[]): Promise<number> {
+  /**
+   * Guarda media de **una fuente** (`source`): rellena su `priority` desde
+   * `MEDIA_SOURCE_PRIORITY` para que el catálogo pueda ordenar variantes
+   * (AniList primero para banners) y descarta lo que ya está.
+   */
+  async saveMedia(items: NewMedia[], source: string): Promise<number> {
     if (items.length === 0) return 0
+
+    const priority = MEDIA_SOURCE_PRIORITY[source] ?? 100
 
     // 'artist' u otro tipo sin tabla en el DDL de anidev: se avisa una vez y se
     // descarta (mejor explícito que perderlo en silencio).
@@ -146,10 +161,45 @@ export const mediaRepository = {
           mediaType: row.mediaType,
           src: row.src,
           size: row.size ?? null,
+          source: row.source ?? source,
+          priority: row.priority ?? priority,
         })) as (typeof table.$inferInsert)[]
 
-      if (pending.length === 0) continue
+      // Reconciliación: una fila ya presente pero con otro `source`/`priority`
+      // (p. ej. escrita antes de que existieran esas columnas) se actualiza, así
+      // el orden de preferencia converge sin duplicar media.
+      const reconcile = rows
+        .filter((row) =>
+          present.has(keyOf(row.entityId, row.mediaType, row.src))
+        )
+        .map((row) => ({
+          entityId: row.entityId,
+          mediaType: row.mediaType,
+          src: row.src,
+          source: row.source ?? source,
+          priority: row.priority ?? priority,
+        }))
 
+      for (const chunkItems of chunkRows(reconcile, 200)) {
+        await db.execute(sql`
+          UPDATE ${table}
+          SET source = v.source, priority = v.priority
+          FROM (VALUES ${sql.join(
+            chunkItems.map(
+              (item) =>
+                sql`(${item.entityId}::int, ${item.mediaType}::text, ${item.src}::text, ${item.source}::text, ${item.priority}::int)`
+            ),
+            sql`, `
+          )}) AS v(entity_id, media_type, src, source, priority)
+          WHERE ${column} = v.entity_id
+            AND ${table.mediaType} = v.media_type
+            AND ${table.src} = v.src
+            AND (${table.source} IS DISTINCT FROM v.source
+                 OR ${table.priority} IS DISTINCT FROM v.priority)
+        `)
+      }
+
+      if (pending.length === 0) continue
       const chunkSize = 500
       for (let i = 0; i < pending.length; i += chunkSize) {
         const inserted = await db

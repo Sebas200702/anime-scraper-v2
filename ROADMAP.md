@@ -11,9 +11,10 @@
 >
 > **Estrategia de fill/refresh**: `docs/fill-and-refresh-strategy.md`.
 >
-> **Estado**: **Fases 0–3 implementadas** (incl. **P3: `skipped` + self-healing**).
-> Fuentes verificadas en vivo: **AnimeThemes** (buildId dinámico, H-14 resuelto,
-> 7.736 tareas sembradas), **TVDB** (key verificada, 134 artworks) y **Kitsu**;
+> **Estado**: **Fases 0–3 implementadas** (incl. **P3: `skipped` + self-healing**)
+> y **fuente AniList** añadida como primaria de banners (con `source`/`priority`
+> en las tablas de media, DDL aplicado en anidev local).
+> Fuentes verificadas en vivo: **AnimeThemes**, **TVDB**, **Kitsu**, **AniList**;
 > falta verificar **Jikan** desde una red que lo alcance.
 > Pendiente: cobertura del catálogo (DDL de anidev) y descubrimiento para el
 > incremental; el closure quirúrgico necesita task types por-id.
@@ -267,6 +268,7 @@ Decisión refinada de D-S1: **el padre fetchea y mapea**, sin `worker_threads`.
 | **AnimeThemes** | buildId resuelto del sitio; listado de **5.013 animes**; mapping real (4 musics + 4 resoluciones con audio/video); **7.736 tareas sembradas** en la cola | ✅ funciona (H-14 resuelto) |
 | **TVDB** | `/login` 200, `/search?query=naruto` 50 resultados y `/series/78857/extended` con **134 artworks** (lo que consume el source) | ✅ funciona (key en `.env`, cuota por API key → 1 IP) |
 | **Kitsu** | `/anime/1` 200 (y 100/100 proxies verificados contra él) | ✅ funciona |
+| **AniList** | GraphQL por `idMal`: 200 con `bannerImage` (cuota real 30/min por IP) | ✅ funciona (fuente primaria de banners) |
 | **Jikan** | **no alcanzable desde el sandbox** (TCP timeout) | ⚠️ verificar desde tu red |
 
 ## 6.8 Tareas sin dependencia: `skipped` + self-healing (P3, 2026-10-15)
@@ -291,6 +293,28 @@ reintentos** y se **re-arma al inicio de la siguiente corrida**.
 no es posible para las entidades de Jikan porque sus tasks son **por página**
 (no hay hidratación por id). Requiere añadir task types por-id (`/characters/{id}/full`,
 etc.) — cambio propio, no bloqueante.
+
+## 6.9 AniList: fuente primaria de banners y variantes ordenadas (2026-10-15)
+
+- **Nueva fuente `anilist`** (`anime_banner_hydration`): consulta GraphQL por
+  `idMal` (cruce directo con nuestro `mal_id`, sin búsqueda por título) y mapea
+  `bannerImage` → `anime_media (media_type='Banner')`. Cuota real medida: **30
+  req/min por IP** (`x-ratelimit-limit`), aplicada por el `RateGate` por
+  (host, IP) → los proxies multiplican la cuota.
+- **DDL (anidev, migración `0003_violet_bastion.sql`)**: las **6 tablas de
+  media** ganaron `source text` y `priority integer not null default 100`, con el
+  índice extendido a `(fk, media_type, priority)` para la consulta de "mejor
+  variante". El scraper refleja el cambio con `bun run schema:mirror`
+  (drift check idéntico).
+- **Contrato de orden**: varias fuentes escriben el mismo `media_type` (AniList y
+  TVDB escriben banners) y el catálogo elige con
+  `ORDER BY priority ASC, id ASC` → **AniList primero** (10) y TVDB después (30).
+- **Convergencia**: `mediaRepository.saveMedia` inserta lo que falta y
+  **reconcilia** `source`/`priority` de las filas ya presentes (antes, la media
+  escrita sin esas columnas no se actualizaba).
+- **Oportunidad anotada**: la misma consulta de AniList devuelve `Media.id`
+  (id de AniList), así que cuando exista `anime_external_ids.anilist_id` (change
+  `catalog-coverage-fields`) esta fuente lo puede llenar sin costo extra.
 
 ## 7. Verificación por PR
 ```bash

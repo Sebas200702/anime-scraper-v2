@@ -141,7 +141,7 @@ export const jikanRelationsRepository = {
 
     await Promise.all([
       batchUpsert(animeStaff, validStaff, 3, 'anime-staff'),
-      mediaRepository.saveMedia(uMedia),
+      mediaRepository.saveMedia(uMedia, 'jikan'),
     ])
 
     return validStaff.length + uMedia.length

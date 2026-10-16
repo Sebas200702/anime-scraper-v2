@@ -69,7 +69,7 @@ export const jikanRepository = {
       batchUpsert(demographic, uniqueDemographics, 3, 'demographics'),
       batchUpsert(theme, uniqueThemes, 3, 'themes'),
       batchUpsert(animeTitleSynonym, uniqueTitleSynonyms, 3, 'title-synonyms'),
-      mediaRepository.saveMedia(uniqueAnimeMedia),
+      mediaRepository.saveMedia(uniqueAnimeMedia, 'jikan'),
     ])
 
     return uniqueAnimes.length
@@ -100,7 +100,7 @@ export const jikanRepository = {
     await batchUpsert(character, uniqueCharacters, 5, 'characters')
     await Promise.all([
       batchUpsert(characterNickname, uniqueNicknames, 3, 'nicknames'),
-      mediaRepository.saveMedia(uniqueMedia),
+      mediaRepository.saveMedia(uniqueMedia, 'jikan'),
     ])
 
     return uniqueCharacters.length

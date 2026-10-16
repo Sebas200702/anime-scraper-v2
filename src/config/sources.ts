@@ -58,7 +58,7 @@ export const SOURCES: SourceConfig[] = [
     pageBatch: 2000,
     rateLimit: { perSecond: 1, perMinute: 40 },
     tasks: {
-      anime_mapping: { entity: 'animeMapping', needsPayload: true },
+      anime_mapping_hydration: { entity: 'animeMapping', needsPayload: true },
     },
   },
   {
@@ -83,6 +83,17 @@ export const SOURCES: SourceConfig[] = [
         entity: 'tvdbSeriesArtworks',
         useEntityIdDirectly: true,
       },
+    },
+  },
+  {
+    name: 'anilist',
+    // Cuota real de AniList: 30 req/min por IP (x-ratelimit-limit), con headroom.
+    // Es la fuente PRIMARIA de banners (priority 10 en MEDIA_SOURCE_PRIORITY).
+    maxWorkers: 8,
+    pageBatch: 200,
+    rateLimit: { perSecond: 1, perMinute: 25 },
+    tasks: {
+      anime_banner_hydration: { entity: 'animeBanners', needsPayload: true },
     },
   },
 ]
@@ -112,6 +123,7 @@ const BACKFILL_PROFILES: Record<
     maxWorkers: 5,
     rateLimit: { perSecond: 1, perMinute: 40 },
   },
+  anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
 }
 
 /**
@@ -132,6 +144,19 @@ export const DEFAULT_REFRESH_SECONDS: Record<string, number> = {
   anime_mapping_hydration: 180 * 86400,
   anime_episodes_hydration: 7 * 86400,
   tvdb_series_artworks: 180 * 86400,
+  anime_banner_hydration: 180 * 86400,
+}
+
+/**
+ * Prioridad de media por fuente (menor = se prefiere al elegir una variante del
+ * mismo `media_type`). AniList es la fuente **primaria** de banners.
+ */
+export const MEDIA_SOURCE_PRIORITY: Record<string, number> = {
+  anilist: 10,
+  jikan: 20,
+  mal: 25,
+  tvdb: 30,
+  animethemes: 40,
 }
 
 const MAX_WORKERS_ENV = () => Number(process.env.SCRAPER_MAX_WORKERS)
@@ -158,6 +183,10 @@ export const SOURCE_HOSTS: Record<
   tvdbSeriesArtworks: {
     host: 'api4.thetvdb.com',
     limits: { perSecond: 1, perMinute: 30 },
+  },
+  anilist: {
+    host: 'graphql.anilist.co',
+    limits: { perSecond: 1, perMinute: 25 },
   },
 }
 

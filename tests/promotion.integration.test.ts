@@ -13,9 +13,13 @@ import { promote } from '../src/libs/promotion.js'
  */
 const RUN = Boolean(process.env.RUN_DB_TESTS)
 const TARGET_DB = 'promote_target'
+// Origen propio: si se usa la DB de desarrollo (con datos reales), los conteos
+// exactos del test dejan de ser deterministas.
+const SOURCE_DB = 'promote_source'
 const BASE = CONFIG.DATABASE_URL
 const adminUrl = BASE.replace(/\/[^/]+$/, '/postgres')
 const targetUrl = BASE.replace(/\/[^/]+$/, `/${TARGET_DB}`)
+const sourceUrl = BASE.replace(/\/[^/]+$/, `/${SOURCE_DB}`)
 
 const ANIME_A = 990001
 const ANIME_B = 990002
@@ -23,54 +27,23 @@ const ANIME_B = 990002
 let source: Pool
 let target: Pool
 
-const cleanupSource = async () => {
-  await source.query(
-    'DELETE FROM episode_source WHERE episode_id IN (SELECT id FROM episode WHERE anime_id IN ($1,$2))',
-    [ANIME_A, ANIME_B]
-  )
-  await source.query('DELETE FROM episode WHERE anime_id IN ($1,$2)', [
-    ANIME_A,
-    ANIME_B,
-  ])
-  await source.query('DELETE FROM anime_media WHERE anime_id IN ($1,$2)', [
-    ANIME_A,
-    ANIME_B,
-  ])
-  await source.query(
-    'DELETE FROM anime_title_synonym WHERE anime_id IN ($1,$2)',
-    [ANIME_A, ANIME_B]
-  )
-  await source.query('DELETE FROM anime_genre WHERE anime_id IN ($1,$2)', [
-    ANIME_A,
-    ANIME_B,
-  ])
-  await source.query('DELETE FROM anime WHERE mal_id IN ($1,$2)', [
-    ANIME_A,
-    ANIME_B,
-  ])
-  await source.query(
-    "DELETE FROM music_artist WHERE artist_id IN (SELECT id FROM artist WHERE name LIKE 'Test Artist%')"
-  )
-  await source.query("DELETE FROM artist WHERE name LIKE 'Test Artist%'")
-  await source.query("DELETE FROM music WHERE title LIKE 'Test Song%'")
-}
-
 beforeAll(async () => {
   if (!RUN) return
 
   const admin = new Pool({ connectionString: adminUrl })
-  await admin.query(`DROP DATABASE IF EXISTS ${TARGET_DB} WITH (FORCE)`)
-  await admin.query(`CREATE DATABASE ${TARGET_DB}`)
+  for (const db of [TARGET_DB, SOURCE_DB]) {
+    await admin.query(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`)
+    await admin.query(`CREATE DATABASE ${db}`)
+  }
   await admin.end()
 
   target = new Pool({ connectionString: targetUrl })
   await target.query('CREATE EXTENSION IF NOT EXISTS pg_trgm')
   await migrate(drizzle(target), { migrationsFolder: './drizzle' })
 
-  source = new Pool({ connectionString: BASE })
-
-  // limpieza previa + datos de prueba
-  await cleanupSource()
+  source = new Pool({ connectionString: sourceUrl })
+  await source.query('CREATE EXTENSION IF NOT EXISTS pg_trgm')
+  await migrate(drizzle(source), { migrationsFolder: './drizzle' })
   await source.query(
     `INSERT INTO anime (mal_id, title) VALUES ($1, 'Test Anime A'), ($2, 'Test Anime B')
      ON CONFLICT (mal_id) DO NOTHING`,
@@ -139,11 +112,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!RUN) return
-  await cleanupSource()
   await source.end()
   await target.end()
   const admin = new Pool({ connectionString: adminUrl })
-  await admin.query(`DROP DATABASE IF EXISTS ${TARGET_DB} WITH (FORCE)`)
+  for (const db of [TARGET_DB, SOURCE_DB]) {
+    await admin.query(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`)
+  }
   await admin.end()
 })
 

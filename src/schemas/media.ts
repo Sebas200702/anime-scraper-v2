@@ -23,8 +23,10 @@ export const animeMedia = pgTable(
     mediaType: text('media_type').notNull(),
     src: text('src').notNull(),
     size: text('size'),
+    source: text('source'),
+    priority: integer('priority').notNull().default(100),
   },
-  (t) => [index('anime_media_anime_id_type_idx').on(t.animeId, t.mediaType)]
+  (t) => [index('anime_media_anime_id_type_priority_idx').on(t.animeId, t.mediaType, t.priority)]
 )
 
 export const characterMedia = pgTable(
@@ -37,11 +39,13 @@ export const characterMedia = pgTable(
     mediaType: text('media_type').notNull(),
     src: text('src').notNull(),
     size: text('size'),
+    source: text('source'),
+    priority: integer('priority').notNull().default(100),
   },
   (t) => [
-    index('character_media_character_id_type_idx').on(
+    index('character_media_character_id_type_priority_idx').on(
       t.characterId,
-      t.mediaType
+      t.mediaType, t.priority
     ),
   ]
 )
@@ -56,8 +60,10 @@ export const staffMedia = pgTable(
     mediaType: text('media_type').notNull(),
     src: text('src').notNull(),
     size: text('size'),
+    source: text('source'),
+    priority: integer('priority').notNull().default(100),
   },
-  (t) => [index('staff_media_staff_id_type_idx').on(t.staffId, t.mediaType)]
+  (t) => [index('staff_media_staff_id_type_priority_idx').on(t.staffId, t.mediaType, t.priority)]
 )
 
 export const producerMedia = pgTable('producer_media', {
@@ -68,7 +74,11 @@ export const producerMedia = pgTable('producer_media', {
   mediaType: text('media_type').notNull(),
   src: text('src').notNull(),
   size: text('size'),
-})
+  source: text('source'),
+  priority: integer('priority').notNull().default(100),
+}, (t) => [
+  index('producer_media_producer_id_type_priority_idx').on(t.producerId, t.mediaType, t.priority),
+])
 
 export const musicMedia = pgTable(
   'music_media',
@@ -80,8 +90,10 @@ export const musicMedia = pgTable(
     mediaType: text('media_type').notNull(),
     src: text('src').notNull(),
     size: text('size'),
+    source: text('source'),
+    priority: integer('priority').notNull().default(100),
   },
-  (t) => [index('music_media_music_id_type_idx').on(t.musicId, t.mediaType)]
+  (t) => [index('music_media_music_id_type_priority_idx').on(t.musicId, t.mediaType, t.priority)]
 )
 
 export const episodeMedia = pgTable(
@@ -94,8 +106,10 @@ export const episodeMedia = pgTable(
     mediaType: text('media_type').notNull(),
     src: text('src').notNull(),
     size: text('size'),
+    source: text('source'),
+    priority: integer('priority').notNull().default(100),
   },
   (t) => [
-    index('episode_media_episode_id_type_idx').on(t.episodeId, t.mediaType),
+    index('episode_media_episode_id_type_priority_idx').on(t.episodeId, t.mediaType, t.priority),
   ]
 )
