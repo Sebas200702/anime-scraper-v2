@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { processAnimeMalDetails } from '../src/processors/malDetails.js'
+import { processAnimeMalDetails } from '../src/processors/mal.js'
 import type { ScrapingTask } from '../src/types/index.js'
 
 const task = { entityId: 'anime_mal_5114' } as unknown as ScrapingTask
