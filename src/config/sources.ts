@@ -237,6 +237,10 @@ export const SOURCE_HOSTS: Record<
     host: 'api.myanimelist.net',
     limits: { perSecond: 2, perMinute: 120 },
   },
+  malHtml: {
+    host: 'myanimelist.net',
+    limits: { perSecond: 1, perMinute: 40 },
+  },
 }
 
 /**
