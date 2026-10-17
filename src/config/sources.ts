@@ -141,7 +141,7 @@ const BACKFILL_PROFILES: Record<
     rateLimit: { perSecond: 1, perMinute: 40 },
   },
   anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
-  mal: { maxWorkers: 5, rateLimit: { perSecond: 2, perMinute: 120 } },
+  mal: { maxWorkers: 5, rateLimit: { perSecond: 3, perMinute: 180 } },
 }
 
 /**
@@ -210,7 +210,7 @@ export const SOURCE_HOSTS: Record<
   },
   mal: {
     host: 'api.myanimelist.net',
-    limits: { perSecond: 2, perMinute: 120 },
+    limits: { perSecond: 3, perMinute: 180 },
   },
 }
 
