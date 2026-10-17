@@ -119,6 +119,8 @@ SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev tvdbSeriesArtworks
 - Correr bajo **systemd user** (`anime-backfill.service`), no en el shell del agente: el shell mata los procesos hijos al terminar y los leases quedan vivos.
 - `lease expirado` en `dead_letter` = reinicio/reaper, no fallo real: re-encolar con `status='pending', attempts=0`.
 - Timeout de un fetch **debe ser corto** (8s): con 30s y reintentos, una fuente throttled deja miles de filas con lease vivo y todas las fuentes muestran `Processed: 0`.
+- **Índices únicos de media**: al convivir variantes, la unicidad natural es `(entidad, media_type, src)`. Si se quita sin reemplazo, `ON CONFLICT DO NOTHING` pasa a ser un error (y los inserts idempotentes se pierden).
+- **Secuencias tras promover**: copiar filas con `id` explícito deja la secuencia atrás (`anime_media`: max 48762 vs secuencia 73) y **todo insert nuevo choca con el PK**; con `ON CONFLICT DO NOTHING` se descarta en silencio. `promote` ahora ejecuta `setval` en las 15 tablas serial al terminar.
 
 - Re-correr el mismo comando es seguro (idempotente: solo crea lo que falta y
   drena lo `pending`; al arrancar re-arma leases vencidos, `skipped` y

@@ -11,12 +11,13 @@
 >
 > **Estrategia de fill/refresh**: `docs/fill-and-refresh-strategy.md`.
 >
-> **Estado**: **backfill híbrido ejecutado (sin Jikan)**. Seed offline con 30.561
-> animes (cuota 0), **AniList y MAL en bulk** (50 y 500 anime por request: ~600
-> requests en total), mapping/episodios/TVDB/themes completos, `anidev`
-> `source`/`priority` + cobertura + `role` en prod local, y promoción validada
-> en `--dry-run` (715k filas, 0 errores). Solo falta de Jikan: personajes/staff/
-> VAs y licenciadores. Detalle y notas de operación: `docs/BACKFILL.md`.
+> **Estado**: **backfill ejecutado y promovido a la DB local de la app**
+> (724.288 filas, idempotente). 30.565 anime, 267.845 episodios, 30.281
+> sinopsis, 21.167 géneros (ids MAL), 6.615 studios con rol, 18.034 relations,
+> 48.639 assets (banners de AniList primero por `priority`), 20.402 con score.
+> AniList y MAL se traen **en bulk** (50 y 500 anime por request: ~600 requests
+> en total). Solo pendiente de Jikan: personajes/staff/VAs y licenciadores.
+> Notas de operación en `docs/BACKFILL.md`.
 
 ---
 
