@@ -12,7 +12,7 @@ import type { ScrapingTask } from 'types/index.js'
  * Se pide con gzip (Bun lo negocia solo): ~35-48 KB por ficha, así que las
  * ~30.5k fichas caben en el trial (~1.1 GB de los 10 GB).
  */
-export const fetchMalAnimeHtml = async (
+export const fetchMalCharacters = async (
   task: ScrapingTask,
   proxy?: ProxyTarget
 ): Promise<{ html: string; animeId: number }> => {
