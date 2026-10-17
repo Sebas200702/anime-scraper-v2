@@ -105,15 +105,20 @@ SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev tvdbSeriesArtworks
 
 ## 5b. Qué sale sin Jikan y qué queda bloqueado de verdad
 
-- **Fluye sin Jikan**: seed offline → AniList (banner/poster/tráiler/origen/fechas **+ sinopsis + relations tipadas + broadcast de emisión**, todo en 1 request) → mapping Kitsu/TVDB por título → episodios → artworks TVDB → themes/música.
-- **Re-drain AniList** (una vez, tras el primero): la query creció (sinopsis/relations/broadcast), así que las 30.561 tareas se re-siembran y drenan de nuevo (~30k requests pequeñas):
-```bash
-export PGPASSWORD=anidev
-psql -h 127.0.0.1 -U anidev -d scraper_local -q -c "DELETE FROM ingest.task WHERE source='anilist'"
-SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev anilist
-```
-- **Bloqueado de verdad hasta Jikan**: personajes/staff/VAs (+ su media), junctions de studios/licensors y de géneros/temas/demográficas (exigen `producer/genre/staff/character.mal_id`), stats MAL (`score/rank/members/favorites`: no se mezclan escalas con AniList) y sinopsis de lo sin ficha AniList. Las columnas ya existen como nullables: entra solo, sin refill.
-- `relatedAnime` del dump no trae tipos → relations salen de AniList (tipadas). Productoras por nombre (dump) no se siembran: la junction exige `producer.mal_id`.
+- **Fluye sin Jikan**: seed offline → AniList **en bulk** (1 request = 50 anime, ~500 en total) → mapping Kitsu/TVDB (1 request/anime vía `kitsu_id` del dump) → episodios → **MAL API oficial en bulk** (1 request = 500 anime, ~60 en total) → artworks TVDB → themes/música.
+- **Bulk descubierto midiendo**: los dos endpoints de listado devuelven los mismos campos que el detalle:
+  - AniList `Page(perYear, perPage:50)` → banner, poster, sinopsis, tráiler, source, aired, broadcast, relations.
+  - MAL `/anime/ranking?limit=500` → stats (mean/rank/popularity/members), géneros (ids MAL), studios (ids MAL), broadcast, duración, sinopsis.
+  Eso convierte backfills de ~30.000 requests en ~600, y evita el límite por IP de MAL (que en detalle se saturaba y colgaba lotes).
+- **Rutas**: fuentes con cuota **por IP** (Kitsu, AniList, AnimeThemes, MAL) van por proxy, cada una con su **shard de 10 IPs** y presupuesto propio; fuentes con cuota **por API key** (TVDB) van directas. FilterByExistingFk sostiene las FK.
+- **Bloqueado de verdad hasta Jikan**: personajes/staff/VAs (+ su media), junctions de licenciadores (solo studios viene de MAL) y sinopsis de lo sin ficha ni en AniList ni en MAL.
+- `relatedAnime` del dump no trae tipos → relations salen de AniList (tipadas).
+
+### Notas de operación (lo que costó sangre)
+- **El trial no corta a 10 conexiones**: medido 30→100% ok, 60→92%, 100→86-95%. Pero **varias instancias del backfill a la vez sí lo tumban** (cada una abre su propio cupo): correr siempre **una** instancia.
+- Correr bajo **systemd user** (`anime-backfill.service`), no en el shell del agente: el shell mata los procesos hijos al terminar y los leases quedan vivos.
+- `lease expirado` en `dead_letter` = reinicio/reaper, no fallo real: re-encolar con `status='pending', attempts=0`.
+- Timeout de un fetch **debe ser corto** (8s): con 30s y reintentos, una fuente throttled deja miles de filas con lease vivo y todas las fuentes muestran `Processed: 0`.
 
 - Re-correr el mismo comando es seguro (idempotente: solo crea lo que falta y
   drena lo `pending`; al arrancar re-arma leases vencidos, `skipped` y
