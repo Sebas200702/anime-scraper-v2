@@ -95,7 +95,7 @@ export const fetchAnimeMalDetails = async (
         'X-MAL-CLIENT-ID': clientId,
       },
       agent: proxy,
-      timeoutMs: 15_000,
+      timeoutMs: 30_000,
     })
   void url
 

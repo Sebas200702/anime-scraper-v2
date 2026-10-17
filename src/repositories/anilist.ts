@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { db } from '../libs/db.js'
 import { anime } from '../schemas/anime.js'
 import { animeRelatedAnime } from '../schemas/animeRelations.js'
@@ -6,6 +6,7 @@ import { batchUpsert } from '../shared/batchUpsert.js'
 import { filterByExistingFk } from '../shared/fkFilter.js'
 import { mediaRepository } from './media.js'
 import { unique } from '../utils/deduplicate.js'
+import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 import type {
   AnimeBannersProcessorResult,
   AnimeCatalogProcessorResult,
@@ -34,12 +35,41 @@ const patchColumns = (patch: AnimePatch): Record<string, unknown> => {
 }
 
 export const anilistRepository = {
+  /** Ids de `anime` que existen (el bulk trae anime fuera de nuestro catálogo). */
+  async knownAnimeIds(ids: number[]): Promise<Set<number>> {
+    const known = new Set<number>()
+    const uniqueIds = [...new Set(ids)]
+    for (const batch of chunk(uniqueIds, MAX_PARAMS_PER_STATEMENT)) {
+      const rows = await db
+        .select({ malId: anime.malId })
+        .from(anime)
+        .where(inArray(anime.malId, batch))
+      for (const row of rows) known.add(row.malId)
+    }
+    return known
+  },
+
   /** Backfill en bulk: una página trae 50 anime; se guardan todos de una vez. */
   async saveAnilistCatalog(
     results: AnimeCatalogProcessorResult[]
   ): Promise<number> {
     const flat = results.flatMap((r) => r.results ?? [])
-    return await this.saveAnimeBanners(flat)
+    // AniList conoce anime que nuestro catálogo (MAL) no tiene: sus filas
+    // romperían las FK de `anime_media`/`anime_relation` (y hacían fallar la
+    // tarea entera). Se descartan antes de escribir.
+    const idOf = (r: AnimeBannersProcessorResult): number | undefined =>
+      r.animePatch?.malId ??
+      r.animeMedias[0]?.entityId ??
+      r.animeRelations?.[0]?.animeId
+    const known = await this.knownAnimeIds(
+      flat.map(idOf).filter((id): id is number => typeof id === 'number')
+    )
+    const filtered = flat.filter((r) => {
+      const id = idOf(r)
+      return id === undefined || known.has(id)
+    })
+
+    return await this.saveAnimeBanners(filtered)
   },
 
   async saveAnimeBanners(
