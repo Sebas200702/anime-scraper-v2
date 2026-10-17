@@ -5,7 +5,7 @@
  * No editar a mano: `bun run schema:mirror` (drift check: `bun run schema:mirror --check`).
  */
 
-import { index, integer, pgTable, serial, text } from 'drizzle-orm/pg-core'
+import { index, integer, pgTable, serial, text, uniqueIndex } from 'drizzle-orm/pg-core'
 import { anime } from './anime.js'
 import { character } from './character.js'
 import { staff } from './staff.js'
@@ -26,7 +26,12 @@ export const animeMedia = pgTable(
     source: text('source'),
     priority: integer('priority').notNull().default(100),
   },
-  (t) => [index('anime_media_anime_id_type_priority_idx').on(t.animeId, t.mediaType, t.priority)]
+  (t) => [
+    index('anime_media_anime_id_type_priority_idx').on(t.animeId, t.mediaType, t.priority),
+    // Identidad natural: una fila por (entidad, tipo, url); las variantes
+    // conviven porque cambia `src`. Da un target valido a ON CONFLICT.
+    uniqueIndex('anime_media_entity_type_src_unique').on(t.animeId, t.mediaType, t.src),
+  ]
 )
 
 export const characterMedia = pgTable(
@@ -47,6 +52,11 @@ export const characterMedia = pgTable(
       t.characterId,
       t.mediaType, t.priority
     ),
+    uniqueIndex('character_media_entity_type_src_unique').on(
+      t.characterId,
+      t.mediaType,
+      t.src
+    ),
   ]
 )
 
@@ -63,7 +73,12 @@ export const staffMedia = pgTable(
     source: text('source'),
     priority: integer('priority').notNull().default(100),
   },
-  (t) => [index('staff_media_staff_id_type_priority_idx').on(t.staffId, t.mediaType, t.priority)]
+  (t) => [
+    index('staff_media_staff_id_type_priority_idx').on(t.staffId, t.mediaType, t.priority),
+    // Identidad natural: una fila por (entidad, tipo, url); las variantes
+    // conviven porque cambia `src`. Da un target valido a ON CONFLICT.
+    uniqueIndex('staff_media_entity_type_src_unique').on(t.staffId, t.mediaType, t.src),
+  ]
 )
 
 export const producerMedia = pgTable('producer_media', {
@@ -78,6 +93,7 @@ export const producerMedia = pgTable('producer_media', {
   priority: integer('priority').notNull().default(100),
 }, (t) => [
   index('producer_media_producer_id_type_priority_idx').on(t.producerId, t.mediaType, t.priority),
+  uniqueIndex('producer_media_entity_type_src_unique').on(t.producerId, t.mediaType, t.src),
 ])
 
 export const musicMedia = pgTable(
@@ -93,7 +109,12 @@ export const musicMedia = pgTable(
     source: text('source'),
     priority: integer('priority').notNull().default(100),
   },
-  (t) => [index('music_media_music_id_type_priority_idx').on(t.musicId, t.mediaType, t.priority)]
+  (t) => [
+    index('music_media_music_id_type_priority_idx').on(t.musicId, t.mediaType, t.priority),
+    // Identidad natural: una fila por (entidad, tipo, url); las variantes
+    // conviven porque cambia `src`. Da un target valido a ON CONFLICT.
+    uniqueIndex('music_media_entity_type_src_unique').on(t.musicId, t.mediaType, t.src),
+  ]
 )
 
 export const episodeMedia = pgTable(
@@ -111,5 +132,6 @@ export const episodeMedia = pgTable(
   },
   (t) => [
     index('episode_media_episode_id_type_priority_idx').on(t.episodeId, t.mediaType, t.priority),
+    uniqueIndex('episode_media_entity_type_src_unique').on(t.episodeId, t.mediaType, t.src),
   ]
 )
