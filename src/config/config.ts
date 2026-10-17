@@ -22,6 +22,9 @@ export const CONFIG = {
   /** Lease del claim: si el proceso muere, el reaper lo devuelve a `pending`. */
   TASK_LEASE_SECONDS: Number(process.env.TASK_LEASE_SECONDS || 900),
 
+  /** Timeout por intento de fetch (ms). Un cuelgue no debe ocupar un slot. */
+  FETCH_TIMEOUT_MS: Number(process.env.FETCH_TIMEOUT_MS || 15000),
+
   // Credenciales para proxies que las requieren (los listados públicos suelen
   // responder 407 sin ellas, H-18).
   PROXY_USER: process.env.PROXY_USER,

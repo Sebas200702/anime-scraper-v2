@@ -100,12 +100,14 @@ export const SOURCES: SourceConfig[] = [
   },
   {
     name: 'mal',
-    // MAL API oficial v2: requiere client_id; cuota pública ~3 req/s por IP.
-    // Es la fuente **canónica** de stats, studios/licensors y taxonomía con ids
-    // MAL (lo que Jikan daba y no vuelve).
+    // MAL API oficial v2: su throttle es **por IP**, así que va por proxies
+    // (verificado: en directo se satura y por proxy responde en <1s).
+    // `pageBatch`/`taskBatchSize` chicos: un lote grande de tareas que hacen
+    // timeout deja miles de filas con lease vivo (se vio con 10k colgadas).
     maxWorkers: 8,
-    pageBatch: 200,
-    rateLimit: { perSecond: 1, perMinute: 40 },
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 1, perMinute: 60 },
     tasks: {
       anime_mal_details_hydration: {
         entity: 'animeMalDetails',
@@ -141,7 +143,7 @@ const BACKFILL_PROFILES: Record<
     rateLimit: { perSecond: 1, perMinute: 40 },
   },
   anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
-  mal: { maxWorkers: 30, rateLimit: { perSecond: 2, perMinute: 120 } },
+  mal: { maxWorkers: 8, rateLimit: { perSecond: 2, perMinute: 120 } },
 }
 
 /**
