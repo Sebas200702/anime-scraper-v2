@@ -23,7 +23,7 @@ describe('config de fuentes', () => {
     // conexiones del proveedor (van sin proxy).
     expect(KEY_SCOPED_HOSTS.has('api4.thetvdb.com')).toBe(true)
     expect(KEY_SCOPED_HOSTS.has('api.myanimelist.net')).toBe(true)
-    expect(SINGLE_IP_SOURCES.has('mal')).toBe(true)
+    expect(SINGLE_IP_SOURCES.has('mal')).toBe(false) // throttle por IP
     expect(SINGLE_IP_SOURCES.has('tvdbSeriesArtworks')).toBe(true)
     expect(SINGLE_IP_SOURCES.has('animeMapping')).toBe(false)
   })

@@ -141,7 +141,7 @@ const BACKFILL_PROFILES: Record<
     rateLimit: { perSecond: 1, perMinute: 40 },
   },
   anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
-  mal: { maxWorkers: 5, rateLimit: { perSecond: 3, perMinute: 180 } },
+  mal: { maxWorkers: 30, rateLimit: { perSecond: 2, perMinute: 120 } },
 }
 
 /**
@@ -210,7 +210,7 @@ export const SOURCE_HOSTS: Record<
   },
   mal: {
     host: 'api.myanimelist.net',
-    limits: { perSecond: 3, perMinute: 180 },
+    limits: { perSecond: 2, perMinute: 120 },
   },
 }
 
@@ -222,12 +222,13 @@ export const SOURCE_HOSTS: Record<
  * y el `RateGate` conserva el límite por host.
  */
 /**
- * Fuentes que van **directo** (sin proxy) porque su cuota es **por API key o
- * client id**, no por IP: repartirlas entre proxies no multiplica nada y además
- * no consumen el tope de conexiones del proveedor. Así MAL (client id) y TVDB
- * (API key) avanzan en paralelo con las fuentes que sí necesitan IPs.
+ * Fuentes que van **directo** (sin proxy) porque su cuota es **por credencial**
+ * (API key), no por IP: TVDB. Repartirla entre proxies no multiplica nada.
+ *
+ * MAL **no** va aquí: su throttle es por IP (verificado: se satura en directo y
+ * responde bien por proxy), así que se reparte entre IPs como Kitsu/AniList.
  */
-export const SINGLE_IP_SOURCES = new Set(['mal', 'tvdbSeriesArtworks'])
+export const SINGLE_IP_SOURCES = new Set(['tvdbSeriesArtworks'])
 
 /**
  * Hosts cuya cuota es **por API key**: el gate los trata como una sola clave
