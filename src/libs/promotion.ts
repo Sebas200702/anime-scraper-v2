@@ -417,6 +417,36 @@ const insertMissingBatch = async (
   return { inserted: inserted.length, skipped: rows.length - inserted.length }
 }
 
+/**
+ * Resincroniza las secuencias de las tablas con `id` serial tras copiar filas
+ * con id explícito. Sin esto, el próximo insert del origen choca con el PK y —
+ * si usa `ON CONFLICT DO NOTHING` — se pierde en silencio.
+ */
+export const resyncSequences = async (
+  client: { query: Pool['query'] },
+  plan: PromotionPlan[]
+): Promise<string[]> => {
+  const resynced: string[] = []
+  for (const entry of plan) {
+    try {
+      const { rows } = await client.query<{ name: string | null }>(
+        `SELECT pg_get_serial_sequence($1, 'id') AS name`,
+        [entry.table]
+      )
+      const sequence = rows[0]?.name
+      if (!sequence) continue
+      await client.query(
+        `SELECT setval($1, COALESCE((SELECT max(id) FROM ${quote(entry.table)}), 1))`,
+        [sequence]
+      )
+      resynced.push(entry.table)
+    } catch {
+      // Tabla sin id/seq: se ignora.
+    }
+  }
+  return resynced
+}
+
 export const promote = async ({
   source,
   target,
@@ -542,6 +572,11 @@ export const promote = async ({
       log('\n(dry-run) ROLLBACK: no se escribió nada')
     } else {
       await client.query('COMMIT')
+      // Las tablas con `id` serial reciben filas CON id explícito (se copia del
+      // origen): la secuencia queda atrás y **todo insert nuevo choca con el PK**
+      // (y con `ON CONFLICT DO NOTHING` se descarta en silencio). Se resincroniza.
+      const resynced = await resyncSequences(client, plan)
+      log(`🔢 Secuencias resincronizadas: ${resynced.join(', ') || 'ninguna'}`)
     }
 
     return { dryRun, tables: reports }
