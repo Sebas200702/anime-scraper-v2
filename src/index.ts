@@ -9,6 +9,7 @@ import { initializeAnimeEpisodesTasks } from './scripts/initializeAnimeEpisodesT
 import { initializeTvdbSeriesArtworksTasks } from './scripts/initializeTvdbSeriesArtworksTasks.js'
 import { initializeAnilistTasks } from './scripts/initializeAnilistTasks.js'
 import { initializeMalDetailsTasks } from './scripts/initializeMalDetailsTasks.js'
+import { initializeMalHtmlTasks } from './scripts/initializeMalHtmlTasks.js'
 const INITIALIZERS: Record<string, () => Promise<void>> = {
   jikan: initializeTasks,
   jikanRelations: initializeJikanRelationsTasks,
@@ -18,6 +19,7 @@ const INITIALIZERS: Record<string, () => Promise<void>> = {
   tvdbSeriesArtworks: initializeTvdbSeriesArtworksTasks,
   anilist: initializeAnilistTasks,
   mal: initializeMalDetailsTasks,
+  malHtml: initializeMalHtmlTasks,
 }
 async function main() {
   const arg = process.argv[2] || 'jikan'

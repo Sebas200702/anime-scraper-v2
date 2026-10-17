@@ -14,6 +14,9 @@ export const CONFIG = {
   MAL_API_BASE: process.env.MAL_API_BASE || 'https://api.myanimelist.net/v2',
   MAL_CLIENT_ID: process.env.MAL_CLIENT_ID,
 
+  /** Web de MAL (HTML): personajes/seiyuus/staff, que la API no expone. */
+  MAL_WEB_BASE: process.env.MAL_WEB_BASE || 'https://myanimelist.net',
+
   /** Postgres de ingesta (cola `ingest.*` + catálogo). Local por defecto. */
   DATABASE_URL:
     process.env.DATABASE_URL ||

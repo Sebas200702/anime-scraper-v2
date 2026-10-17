@@ -290,6 +290,23 @@ export interface AnimePatch {
   broadcastTimezone?: string
 }
 
+/** Resultado de la fuente `malHtml` (ficha HTML: personajes/staff/seiyuus). */
+export interface MalCharactersProcessorResult {
+  characters: { malId: number; name: string }[]
+  staff: { malId: number; name: string }[]
+  animeCharacters: { animeId: number; characterId: number; role: string }[]
+  animeStaff: { animeId: number; staffId: number; role: string }[]
+  characterVoiceActors: {
+    characterId: number
+    staffId: number
+    language: string
+  }[]
+  /** Seiyuus que deben existir como `staff` antes de la junction de VAs. */
+  voiceActorStaff: { malId: number; name: string }[]
+  characterMedia: { entityId: number; src: string; mediaType: string }[]
+  staffMedia: { entityId: number; src: string; mediaType: string }[]
+}
+
 /** Resultado del catálogo en bulk (una página = 50 anime). */
 export interface AnimeCatalogProcessorResult {
   results: AnimeBannersProcessorResult[]

@@ -104,7 +104,7 @@ export const SOURCES: SourceConfig[] = [
     // (verificado: en directo se satura y por proxy responde en <1s).
     // `pageBatch`/`taskBatchSize` chicos: un lote grande de tareas que hacen
     // timeout deja miles de filas con lease vivo (se vio con 10k colgadas).
-    maxWorkers: 20,
+    maxWorkers: 8,
     pageBatch: 50,
     taskBatchSize: 200,
     rateLimit: { perSecond: 1, perMinute: 60 },
@@ -116,6 +116,21 @@ export const SOURCES: SourceConfig[] = [
       // Bulk: 1 tarea por tipo de ranking, la fuente pagina (500/request).
       anime_mal_ranking_hydration: {
         entity: 'malRanking',
+        needsPayload: true,
+      },
+    },
+  },
+  {
+    name: 'malHtml',
+    // Web de MAL (HTML): ~35-48 KB gzip por ficha, ~1.1 GB para todo el
+    // catálogo (cabe en el trial). Su throttle es por IP y agresivo.
+    maxWorkers: 8,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 1, perMinute: 60 },
+    tasks: {
+      anime_mal_html_hydration: {
+        entity: 'malCharacters',
         needsPayload: true,
       },
     },
@@ -149,6 +164,7 @@ const BACKFILL_PROFILES: Record<
   },
   anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
   mal: { maxWorkers: 8, rateLimit: { perSecond: 2, perMinute: 120 } },
+  malHtml: { maxWorkers: 8, rateLimit: { perSecond: 1, perMinute: 40 } },
 }
 
 /**
@@ -173,6 +189,7 @@ export const DEFAULT_REFRESH_SECONDS: Record<string, number> = {
   anilist_year_hydration: 30 * 86400,
   anime_mal_details_hydration: 30 * 86400,
   anime_mal_ranking_hydration: 7 * 86400,
+  anime_mal_html_hydration: 90 * 86400,
 }
 
 /**
