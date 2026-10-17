@@ -19,14 +19,17 @@ export const animeMappingRepository = {
           // Merge, no `DO NOTHING`: la vía rápida trae ids curados de Kitsu y
           // debe rellenar `tvdb_id` de filas ya existentes. COALESCE conserva
           // lo ya resuelto y solo añade huecos.
+          // SQL literal: drizzle cualificaría la columna interpolada y
+          // `excluded."tabla"."col"` es inválido (`excluded."col"` no).
           await tx
             .insert(animeExternalIds)
             .values(batch)
             .onConflictDoUpdate({
               target: [animeExternalIds.animeId],
               set: {
-                kitsuId: sql`COALESCE(${animeExternalIds.kitsuId}, excluded.${animeExternalIds.kitsuId})`,
-                tvdbId: sql`COALESCE(${animeExternalIds.tvdbId}, excluded.${animeExternalIds.tvdbId})`,
+                kitsuId: sql`COALESCE("anime_external_ids"."kitsu_id", excluded."kitsu_id")`,
+                tvdbId: sql`COALESCE("anime_external_ids"."tvdb_id", excluded."tvdb_id")`,
+                anilistId: sql`COALESCE("anime_external_ids"."anilist_id", excluded."anilist_id")`,
                 updatedAt: sql`now()`,
               },
             })
