@@ -89,7 +89,7 @@ export const SOURCES: SourceConfig[] = [
     name: 'anilist',
     // Cuota real de AniList: 30 req/min por IP (x-ratelimit-limit), con headroom.
     // Es la fuente PRIMARIA de banners (priority 10 en MEDIA_SOURCE_PRIORITY).
-    maxWorkers: 8,
+    maxWorkers: 20,
     pageBatch: 200,
     rateLimit: { perSecond: 1, perMinute: 25 },
     tasks: {
@@ -104,13 +104,18 @@ export const SOURCES: SourceConfig[] = [
     // (verificado: en directo se satura y por proxy responde en <1s).
     // `pageBatch`/`taskBatchSize` chicos: un lote grande de tareas que hacen
     // timeout deja miles de filas con lease vivo (se vio con 10k colgadas).
-    maxWorkers: 8,
+    maxWorkers: 20,
     pageBatch: 50,
     taskBatchSize: 200,
     rateLimit: { perSecond: 1, perMinute: 60 },
     tasks: {
       anime_mal_details_hydration: {
         entity: 'animeMalDetails',
+        needsPayload: true,
+      },
+      // Bulk: 1 tarea por tipo de ranking, la fuente pagina (500/request).
+      anime_mal_ranking_hydration: {
+        entity: 'malRanking',
         needsPayload: true,
       },
     },
@@ -167,6 +172,7 @@ export const DEFAULT_REFRESH_SECONDS: Record<string, number> = {
   anime_banner_hydration: 180 * 86400,
   anilist_year_hydration: 30 * 86400,
   anime_mal_details_hydration: 30 * 86400,
+  anime_mal_ranking_hydration: 7 * 86400,
 }
 
 /**

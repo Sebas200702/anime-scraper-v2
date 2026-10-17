@@ -106,3 +106,76 @@ export const fetchAnimeMalDetails = async (
     return await call(FIELDS_MIN)()
   }
 }
+
+/**
+ * MAL API oficial v2, endpoint de **listado**: trae 500 anime por request con
+ * los mismos campos que el detalle (géneros, studios, stats, sinopsis,
+ * broadcast…). Es lo que hace viable el backfill completo: ~60 requests en vez
+ * de 30.000 y sin acercarse al límite por IP.
+ */
+const RANKING_FIELDS = [
+  'id',
+  'title',
+  'alternative_titles',
+  'start_date',
+  'end_date',
+  'synopsis',
+  'mean',
+  'rank',
+  'popularity',
+  'num_list_users',
+  'num_scoring_users',
+  'genres',
+  'media_type',
+  'status',
+  'num_episodes',
+  'start_season',
+  'broadcast',
+  'source',
+  'average_episode_duration',
+  'rating',
+  'studios',
+].join(',')
+
+/** Tipos de ranking que se recorren para maximizar cobertura del catálogo. */
+export const MAL_RANKING_TYPES = [
+  'all',
+  'bypopularity',
+  'favorite',
+  'airing',
+  'upcoming',
+] as const
+
+interface MalRankingResponse {
+  data?: { node: MalAnimeDetails }[]
+}
+
+export const fetchMalRanking = async (
+  task: ScrapingTask,
+  proxy?: ProxyTarget
+): Promise<{ nodes: MalAnimeDetails[] }> => {
+  const { rankingType } = task.payload as { rankingType?: string }
+  if (!rankingType) throw new SkippedTaskError('missing:rankingType')
+  const clientId = CONFIG.MAL_CLIENT_ID
+  if (!clientId) throw new SkippedTaskError('missing:MAL_CLIENT_ID')
+
+  const limit = 500
+  const nodes: MalAnimeDetails[] = []
+  for (let offset = 0; ; offset += limit) {
+    const response = await fetcher<MalRankingResponse>({
+      url:
+        `${CONFIG.MAL_API_BASE}/anime/ranking?ranking_type=${rankingType}` +
+        `&limit=${limit}&offset=${offset}&fields=${RANKING_FIELDS}`,
+      method: 'GET',
+      headers: { Accept: 'application/json', 'X-MAL-CLIENT-ID': clientId },
+      agent: proxy,
+      timeoutMs: 20_000,
+    })
+
+    const batch = (response.data ?? []).map((d) => d.node).filter(Boolean)
+    nodes.push(...batch)
+    if (batch.length < limit) break
+  }
+
+  return { nodes }
+}

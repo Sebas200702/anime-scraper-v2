@@ -149,3 +149,24 @@ export const processAnimeMalDetails = (
     animeProducers,
   }
 }
+
+/**
+ * Procesa una página/tipo de ranking de MAL (500 anime por request) reusando el
+ * mapeo por-anime: cada node se trata como su propia unidad (`anime_mal_{id}`),
+ * así el bulk y el detalle comparten exactamente la misma semántica.
+ */
+export const processMalRanking = (
+  raw: { nodes?: MalAnimeDetails[] },
+  _task: ScrapingTask
+): { results: AnimeMalDetailsProcessorResult[] } => {
+  const results: AnimeMalDetailsProcessorResult[] = []
+  for (const node of raw.nodes ?? []) {
+    if (!node?.id) continue
+    results.push(
+      processAnimeMalDetails(node, {
+        entityId: `anime_mal_${node.id}`,
+      } as ScrapingTask)
+    )
+  }
+  return { results }
+}

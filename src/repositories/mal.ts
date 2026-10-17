@@ -136,6 +136,18 @@ export const malRepository = {
       uProducers.length
     )
   },
+
+  /**
+   * Guarda una tanda de ranking (cientos de anime por request). Reusa el guardado
+   * por-anime: parche disperso + junctions idempotentes.
+   */
+  async saveMalRanking(
+    results: { results?: AnimeMalDetailsProcessorResult[] }[]
+  ): Promise<number> {
+    const flat = results.flatMap((r) => r.results ?? [])
+    return await this.saveAnimeMalDetails(flat)
+  },
 }
 
 // (sin `sql` crudo: todo va por el query builder de drizzle)
+
