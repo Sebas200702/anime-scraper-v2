@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { db } from '../libs/db.js'
 import { anime } from '../schemas/anime.js'
 import { producer } from '../schemas/producer.js'
@@ -10,6 +10,7 @@ import {
   animeTheme,
 } from '../schemas/animeRelations.js'
 import { batchUpsert } from '../shared/batchUpsert.js'
+import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 import { unique } from '../utils/deduplicate.js'
 import type {
   AnimeMalDetailsProcessorResult,
@@ -140,14 +141,33 @@ export const malRepository = {
   /**
    * Guarda una tanda de ranking (cientos de anime por request). Reusa el guardado
    * por-anime: parche disperso + junctions idempotentes.
+   *
+   * El ranking de MAL incluye anime que **no** están en nuestro catálogo (la
+   * lista se mueve más rápido que el seed): sus junctions romperían la FK de
+   * `anime_*` y tumbarían el lote entero (fue lo que dejó a One Piece sin
+   * géneros). Se filtran contra `anime` antes de escribir.
    */
   async saveMalRanking(
     results: { results?: AnimeMalDetailsProcessorResult[] }[]
   ): Promise<number> {
     const flat = results.flatMap((r) => r.results ?? [])
-    return await this.saveAnimeMalDetails(flat)
+    const ids = flat.map((r) => r.animeStats?.malId).filter((id) => !!id)
+    const known = new Set<number>()
+    for (const batch of chunk(
+      [...new Set(ids as number[])],
+      MAX_PARAMS_PER_STATEMENT
+    )) {
+      const rows = await db
+        .select({ malId: anime.malId })
+        .from(anime)
+        .where(inArray(anime.malId, batch))
+      for (const row of rows) known.add(row.malId)
+    }
+    const filtered = flat.filter(
+      (r) => !r.animeStats?.malId || known.has(r.animeStats.malId)
+    )
+    return await this.saveAnimeMalDetails(filtered)
   },
 }
 
 // (sin `sql` crudo: todo va por el query builder de drizzle)
-
