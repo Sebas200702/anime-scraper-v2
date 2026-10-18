@@ -198,6 +198,7 @@ export const DEFAULT_REFRESH_SECONDS: Record<string, number> = {
  */
 export const MEDIA_SOURCE_PRIORITY: Record<string, number> = {
   anilist: 10,
+  kitsu: 15,
   jikan: 20,
   mal: 25,
   tvdb: 30,

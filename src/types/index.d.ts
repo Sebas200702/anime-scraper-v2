@@ -342,4 +342,10 @@ export interface AnimeExternalIdsProcessorResult {
 
 export interface EpisodeProcessorResult {
   episodes: NewEpisode[]
+  /**
+   * Miniaturas de episodio. No se pueden insertar con el episodio (su fila
+   * `episode_media` necesita el `id` surrogate que asigna la DB), así que van
+   * aparte y el repositorio las resuelve por `(anime_id, number)`.
+   */
+  episodeMedia?: { animeId: number; number: number; src: string }[]
 }
