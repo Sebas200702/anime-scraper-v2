@@ -120,6 +120,8 @@ SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev tvdbSeriesArtworks
 - `lease expirado` en `dead_letter` = reinicio/reaper, no fallo real: re-encolar con `status='pending', attempts=0`.
 - Timeout de un fetch **debe ser corto** (8s): con 30s y reintentos, una fuente throttled deja miles de filas con lease vivo y todas las fuentes muestran `Processed: 0`.
 - **Índices únicos de media**: al convivir variantes, la unicidad natural es `(entidad, media_type, src)`. Si se quita sin reemplazo, `ON CONFLICT DO NOTHING` pasa a ser un error (y los inserts idempotentes se pierden).
+- **Bulks que traen más anime del que tenemos**: AniList y el ranking de MAL devuelven entradas que no están en el seed; sus junctions rompen la FK de `anime_*` y **tumban el lote entero** (así se perdieron los géneros de ~22k animes, One Piece incluido). Los dos repos filtran contra `anime` antes de escribir.
+- **Caché de la app**: el endpoint de detalle cachea en Redis (`anime:details:{id}`, `anime:full:{id}`); tras promover hay que invalidar esas claves o la API sigue sirviendo `genres: []`.
 - **Secuencias tras promover**: copiar filas con `id` explícito deja la secuencia atrás (`anime_media`: max 48762 vs secuencia 73) y **todo insert nuevo choca con el PK**; con `ON CONFLICT DO NOTHING` se descarta en silencio. `promote` ahora ejecuta `setval` en las 15 tablas serial al terminar.
 
 - Re-correr el mismo comando es seguro (idempotente: solo crea lo que falta y
