@@ -164,7 +164,7 @@ const BACKFILL_PROFILES: Record<
   },
   anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
   mal: { maxWorkers: 8, rateLimit: { perSecond: 2, perMinute: 120 } },
-  malHtml: { maxWorkers: 8, rateLimit: { perSecond: 1, perMinute: 40 } },
+  malHtml: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
 }
 
 /**
