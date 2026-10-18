@@ -396,7 +396,16 @@ const insertMissingBatch = async (
     existing.rows.map((row: Record<string, unknown>) => encode(row))
   )
 
-  const missing = rows.filter((row) => !present.has(encode(row)))
+  // El origen puede traer la misma clave repetida (p. ej. media duplicada antes
+  // de tener índice único local): se dedupe antes de insertar, o el lote choca
+  // contra el índice único del destino.
+  const seen = new Set<string>()
+  const missing = rows.filter((row) => {
+    const id = encode(row)
+    if (present.has(id) || seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
   if (missing.length === 0) return { inserted: 0, skipped: rows.length }
 
   const values: unknown[] = []
