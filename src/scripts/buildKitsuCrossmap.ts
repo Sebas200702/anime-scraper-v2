@@ -35,6 +35,9 @@ interface MappingRow {
   externalSite: string
   externalId: string
   itemId: string
+  /** `anime` o `manga`: Kitsu tiene mappings cruzados (un `myanimelist/anime`
+   *  puede apuntar a un manga por error de datos). Solo sirve `anime`. */
+  itemType: string
 }
 
 const outIdx = process.argv.indexOf('--out')
@@ -72,6 +75,7 @@ const fetchPage = async (
       externalSite: m.attributes?.externalSite ?? site,
       externalId: String(m.attributes?.externalId ?? ''),
       itemId: String(m.relationships?.item?.data?.id ?? ''),
+      itemType: String(m.relationships?.item?.data?.type ?? ''),
     }))
     .filter((r) => r.itemId && r.externalId)
   return { rows, count: json.meta?.count ?? 0 }
@@ -85,7 +89,8 @@ const main = async () => {
   const byItem = new Map<string, Record<string, string>>()
   let requests = 0
   let cursor = 0
-  const nextProxy = (): string => proxies[cursor++ % proxies.length] ?? proxies[0]!
+  const nextProxy = (): string =>
+    proxies[cursor++ % proxies.length] ?? proxies[0]!
 
   for (const site of SITES) {
     const first = await fetchPage(site, 0, nextProxy() ?? '')
@@ -97,6 +102,9 @@ const main = async () => {
 
     const absorb = (rows: MappingRow[]) => {
       for (const row of rows) {
+        // Sin este filtro se colaban ids de MANGA como si fueran animes: sus
+        // `/anime/{id}/episodes` dan 404 y el anime quedaba sin episodios.
+        if (row.itemType !== 'anime') continue
         const entry = byItem.get(row.itemId) ?? {}
         // TVDB viene en dos formas (`78857` y `78857/1`): la serie es lo de antes.
         const value = site.startsWith('thetvdb')
@@ -153,6 +161,53 @@ const main = async () => {
       tvdbId: Number(ext['thetvdb/series'] ?? ext['thetvdb']) || null,
     }
   }
+
+  // Verificación de liveness: Kitsu tiene mappings que apuntan a animes
+  // **borrados** (`/anime/3341` → 404 con la fila de mapping aún viva), así que
+  // el cruce por sí solo no basta: sin este filtro el anime quedaba con un
+  // `kitsu_id` que no se puede fetchear (1.567 animes murieron así).
+  const kitsuIds = [...new Set(Object.values(byMal).map((v) => v.kitsuId))]
+  const vivos = new Set<number>()
+  const pendientes = [...kitsuIds]
+  let probados = 0
+  const verificadores = Array.from({ length: CONCURRENCY }, async () => {
+    while (pendientes.length > 0) {
+      const id = pendientes.shift() as number
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await fetcher({
+            url: `${BASE}/anime/${id}?fields[id]`,
+            method: 'GET',
+            headers: { Accept: 'application/vnd.api+json' },
+            agent: nextProxy(),
+            timeoutMs: 15_000,
+          })
+          vivos.add(id)
+          break
+        } catch (error: any) {
+          // 404 ⇒ el anime ya no existe en Kitsu; cualquier otro fallo se
+          // reintenta y, si persiste, se trata como vivo (no perder el id).
+          if (error?.status === 404 || /404/.test(String(error?.message))) break
+          if (attempt === 3) vivos.add(id)
+        }
+      }
+      if (++probados % 1000 === 0)
+        console.log(`  … ${probados}/${kitsuIds.length} verificados`)
+    }
+  })
+  await Promise.all(verificadores)
+  requests += kitsuIds.length
+
+  let muertos = 0
+  for (const [mal, entry] of Object.entries(byMal)) {
+    if (!vivos.has(entry.kitsuId)) {
+      delete byMal[mal]
+      muertos++
+    }
+  }
+  console.log(
+    `⏱  liveness Kitsu: ${kitsuIds.length} probados · ${muertos} animes cruzados a entidades borradas (descartados)`
+  )
 
   await writeFile(
     OUT,

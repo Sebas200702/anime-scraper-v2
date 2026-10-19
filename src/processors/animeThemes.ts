@@ -16,7 +16,9 @@ export function extractMalId(
 
   if (!malResource?.link) return null
 
-  const regex = /myanimelist\.net\/(?:\w+)\/(\d+)/
+  // Solo `/anime/{id}`: aceptar cualquier segmento colaba ids de manga
+  // (`/manga/123`) como si fueran del anime 123.
+  const regex = /myanimelist\.net\/anime\/(\d+)/
   const match = regex.exec(malResource.link)
 
   if (!match) return null
@@ -25,15 +27,20 @@ export function extractMalId(
 }
 
 // Generate audio URL from basename
-export function generateAudioUrl(basename: string) {
-  if (!basename) return null
-  return `https://animethemes.moe/audio/${basename}`
+//
+// Ojo con el host y el basename: el audio vive en `a.animethemes.moe/{ogg}` y el
+// vídeo en `v.animethemes.moe/{basename}`. La versión anterior armaba
+// `animethemes.moe/audio/{basename del video}` y **todas** las filas daban 404
+// (además el basename era el del vídeo, no el del audio: `video.audio.basename`).
+export function generateAudioUrl(audioBasename?: string | null) {
+  if (!audioBasename) return null
+  return `https://a.animethemes.moe/${audioBasename}`
 }
 
 // Generate video URL from basename
 export function generateVideoUrl(basename: string) {
   if (!basename) return null
-  return `https://animethemes.moe/video/${basename}`
+  return `https://v.animethemes.moe/${basename}`
 }
 export const processArtist = (
   rawData: AnimeThemesArtistNextData,
@@ -97,7 +104,9 @@ export const processAnimeThemes = (
             musicVersionId: entry.id,
 
             resolution: String(video.resolution),
-            audioUrl: generateAudioUrl(video.basename) || '',
+            // El audio es un archivo propio (`video.audio.basename`, .ogg): usar
+            // el basename del vídeo apuntaba a un 404.
+            audioUrl: generateAudioUrl(video.audio?.basename) || '',
             videoUrl: generateVideoUrl(video.basename) || '',
           }))
         )

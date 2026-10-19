@@ -34,6 +34,41 @@ export interface ParsedStaff {
   roles: string[]
 }
 
+/**
+ * Tema musical (OP/ED) de la ficha de anime de MAL.
+ *
+ * MAL es la fuente de canciones con **más cobertura** del catálogo (AnimeThemes
+ * solo lista ~5.013 anime): la misma página que ya se descarga para personajes
+ * y staff trae la tabla de openings/endings con el nº de tema, el título, el
+ * artista, el rango de episodios y los enlaces de Spotify/Apple/Amazon. El id
+ * `malSongId` es la clave estable de MAL para la canción (dedupe entre series).
+ *
+ * De aquí sale además el id de Apple Music (`appleTrackId`), que con el lookup
+ * público de iTunes (sin API key) devuelve un **preview de 30 s reproducible**
+ * y la carátula.
+ */
+export interface ParsedTheme {
+  kind: 'OP' | 'ED'
+  /** Nº de tema dentro de su tipo (1 = OP1/ED1). */
+  sequence: number | null
+  title: string
+  artist: string | null
+  /** Id de la canción en MAL (el de `openMusicLinkPopup`). */
+  malSongId: number | null
+  spotifyUrl: string | null
+  appleUrl: string | null
+  appleTrackId: number | null
+  amazonUrl: string | null
+  /** Rango de episodios tal cual lo publica MAL (`1-30`, `1-`). */
+  episodes: string | null
+  /** MAL tiene una página `/video` para este tema. */
+  hasVideo: boolean
+}
+
+export interface ParsedMalAnime extends ParsedMalCharacters {
+  themes: ParsedTheme[]
+}
+
 export interface ParsedMalCharacters {
   animeCharacters: ParsedCharacter[]
   animeStaff: ParsedStaff[]
@@ -147,3 +182,95 @@ export const parseMalAnimeCharacters = (html: string): ParsedMalCharacters => {
 
   return { animeCharacters, animeStaff }
 }
+
+/** Id de canción de MAL desde el popup de la fila (`sid`). */
+const songIdFromRow = ($: cheerio.CheerioAPI, $row: cheerio.Cheerio<any>) => {
+  const popup = $row.find('a[href*="openMusicLinkPopup"]').attr('href') ?? ''
+  const fromPopup = popup.match(/openMusicLinkPopup\('(\d+)'/)
+  if (fromPopup) return Number(fromPopup[1])
+  const fromInput = $row
+    .find('input[id^="spotify_url_"], input[id^="apple_url_"]')
+    .attr('id')
+    ?.match(/_(\d+)$/)
+  return fromInput ? Number(fromInput[1]) : null
+}
+
+const trackIdFromAppleUrl = (url: string | null): number | null => {
+  if (!url) return null
+  const id = url.match(/[?&]i=(\d+)/)?.[1]
+  return id ? Number(id) : null
+}
+
+/**
+ * Temas musicales (`OP`/`ED`) de la ficha de anime.
+ *
+ * `MAL` escribe el contenedor de openings con la errata `js-theme-songs
+ * opnening` y el de endings como `... ending`, así que el tipo se decide por la
+ * clase (con el `<h2>` anterior como respaldo). Dentro, cada `<tr>` trae el
+ * índice, el título entrecomillado, el artista y los `input hidden` con los
+ * enlaces de Spotify/Apple/Amazon.
+ */
+export const parseMalThemes = (html: string): ParsedTheme[] => {
+  const $ = cheerio.load(html)
+  const themes: ParsedTheme[] = []
+
+  $('div.theme-songs').each((_, el) => {
+    const $box = $(el)
+    const heading = $box.closest('div.di-tc').find('h2').first().text().trim()
+    const kind: 'OP' | 'ED' = $box.hasClass('ending')
+      ? 'ED'
+      : heading.toLowerCase().startsWith('ending')
+        ? 'ED'
+        : 'OP'
+
+    $box.find('tr, li').each((__, row) => {
+      const $row = $(row)
+      const rawTitle = $row.find('.theme-song-title').text().trim()
+      if (!rawTitle) return // filas de encabezado o temas sin datos en MAL
+
+      const title = rawTitle.replace(/^"|"$/g, '').trim()
+      if (!title) return
+
+      const rawArtist = $row.find('.theme-song-artist').text().trim()
+      const artist = rawArtist.replace(/^by\s+/i, '').trim() || null
+      const episodes =
+        $row
+          .find('.theme-song-episode')
+          .text()
+          .trim()
+          .replace(/^\(|\)$/g, '') || null
+      const sequence = Number.parseInt(
+        $row.find('.theme-song-index').text().replace(/\D/g, ''),
+        10
+      )
+      const spotifyUrl =
+        $row.find('input[id^="spotify_url_"]').attr('value')?.trim() || null
+      const appleUrl =
+        $row.find('input[id^="apple_url_"]').attr('value')?.trim() || null
+      const amazonUrl =
+        $row.find('input[id^="amazon_url_"]').attr('value')?.trim() || null
+
+      themes.push({
+        kind,
+        sequence: Number.isFinite(sequence) ? sequence : null,
+        title,
+        artist,
+        malSongId: songIdFromRow($, $row),
+        spotifyUrl,
+        appleUrl,
+        appleTrackId: trackIdFromAppleUrl(appleUrl),
+        amazonUrl,
+        episodes,
+        hasVideo: $row.find('a[href$="/video"]').length > 0,
+      })
+    })
+  })
+
+  return themes
+}
+
+/** Personajes, staff y temas musicales de una ficha de anime. */
+export const parseMalAnimePage = (html: string): ParsedMalAnime => ({
+  ...parseMalAnimeCharacters(html),
+  themes: parseMalThemes(html),
+})

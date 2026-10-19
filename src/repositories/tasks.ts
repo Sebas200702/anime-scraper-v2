@@ -273,16 +273,24 @@ export const taskRepository = {
   },
 
   /**
-   * Re-encola artworks de TVDB con el `tvdb_id` corregido (o los retira si el
-   * anime ya no tiene serie de TVDB: su media quedó descartada aparte).
+   * Re-encola artworks de TVDB con el `tvdb_id` corregido.
+   *
+   * Dos pasos: (1) las tareas que ya existen para ese anime se renombran al
+   * nuevo `entity_id` y vuelven a `pending`; (2) las que no existían se crean
+   * (el initializer solo sembró las que había en su momento). El índice único
+   * `(source, task_type, entity_id)` se respeta: si el `tvdb_id` nuevo ya tiene
+   * tarea, esa sirve (misma serie ⇒ mismos artworks).
    */
   async rearmTvdbArtworkTasks(
     items: { animeId: number; tvdbId: number | null }[]
   ): Promise<number> {
-    if (items.length === 0) return 0
+    const withId = items.filter(
+      (i): i is { animeId: number; tvdbId: number } => i.tvdbId !== null
+    )
+    if (withId.length === 0) return 0
+
     let touched = 0
-    // Los `entity_id` son por `tvdb_id` (no por anime): hay que renombrarlos.
-    for (const batch of chunkArray(items, 500)) {
+    for (const batch of chunkArray(withId, 500)) {
       const values = sql.join(
         batch.map(
           (i) =>
@@ -292,7 +300,8 @@ export const taskRepository = {
         ),
         sql`, `
       )
-      const result = await db.execute(sql`
+
+      const updated = await db.execute(sql`
         UPDATE ingest.task AS t
         SET entity_id = v.entity_id,
             payload = v.payload,
@@ -305,13 +314,27 @@ export const taskRepository = {
             updated_at = now()
         FROM (VALUES ${values}) AS v(tvdb_id, anime_id, entity_id, payload)
         WHERE t.source = 'tvdbSeriesArtworks'
-          AND (t.entity_id LIKE 'tvdb_artworks_%')
-          AND (
-            t.entity_id = v.entity_id
-            OR t.payload->>'anime_id' = v.anime_id::text
+          AND t.payload->>'anime_id' = v.anime_id::text
+          AND NOT EXISTS (
+            SELECT 1 FROM ingest.task x
+            WHERE x.source = 'tvdbSeriesArtworks'
+              AND x.entity_id = v.entity_id
+              AND x.id <> t.id
           )
       `)
-      touched += result.rowCount ?? 0
+      touched += updated.rowCount ?? 0
+
+      const inserted = await db.execute(sql`
+        INSERT INTO ingest.task (source, task_type, entity_id, payload, priority, status)
+        SELECT 'tvdbSeriesArtworks', 'tvdb_series_artworks', v.entity_id, v.payload, 5, 'pending'
+        FROM (VALUES ${values}) AS v(tvdb_id, anime_id, entity_id, payload)
+        WHERE NOT EXISTS (
+          SELECT 1 FROM ingest.task x
+          WHERE x.source = 'tvdbSeriesArtworks' AND x.entity_id = v.entity_id
+        )
+        ON CONFLICT (source, task_type, entity_id) DO NOTHING
+      `)
+      touched += inserted.rowCount ?? 0
     }
     return touched
   },
