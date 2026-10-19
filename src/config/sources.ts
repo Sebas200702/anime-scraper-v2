@@ -174,7 +174,8 @@ const BACKFILL_PROFILES: Record<
     rateLimit: { perSecond: 1, perMinute: 40 },
   },
   anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
-  mal: { maxWorkers: 8, rateLimit: { perSecond: 2, perMinute: 120 } },
+  // 20 en vuelo: la cuota de MAL es por IP y hay 30 proxies.
+  mal: { maxWorkers: 20, rateLimit: { perSecond: 2, perMinute: 120 } },
   // 30 en vuelo: el presupuesto de conexiones por fuente es 30 y la
   // latencia (no el ancho de banda) es lo que manda en estas fichas.
   malHtml: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 40 } },
@@ -284,10 +285,15 @@ export const SINGLE_IP_SOURCES = new Set(['tvdbSeriesArtworks'])
  * global (ignora la IP de salida). Paralelizar entre proxies no multiplica la
  * cuota y sí la rompería; el límite real es del host, no de la IP.
  */
-export const KEY_SCOPED_HOSTS = new Set([
-  'api4.thetvdb.com',
-  'api.myanimelist.net',
-])
+/**
+ * Hosts cuya cuota es por **credencial**, no por IP: el gate se cuenta global.
+ *
+ * `api.myanimelist.net` **no** va aquí: medido con el mismo client-id, 60
+ * requests concurrentes repartidos por 30 IPs dieron 0 respuestas 429 (su
+ * límite es por IP). Contarlo como global limitaba la fuente a 2 req/s
+ * (30.561 fichas = 4,2 h) cuando con los proxies da ~20 req/s (~25 min).
+ */
+export const KEY_SCOPED_HOSTS = new Set(['api4.thetvdb.com'])
 
 export function getSourceConfig(sourceName: string) {
   const config = SOURCES.find((s) => s.name === sourceName)

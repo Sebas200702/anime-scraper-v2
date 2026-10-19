@@ -24,7 +24,35 @@ export const initializeMalDetailsTasks = async () => {
   }
   console.log(`✓ Created ${rankingTasks.length} mal ranking tasks`)
 
-  // El detalle por-anime NO se siembra en backfill: el ranking ya trae
-  // los mismos campos (500 por request). El taskType queda declarado para el
-  // refresh quirúrgico del Modo B.
+  // El detalle por-anime **no** está en el ranking: `broadcast` y
+  // `duration` solo vienen aquí, y `studios`/géneros llegan incompletos. Con
+  // la cuota de MAL por IP (ver `KEY_SCOPED_HOSTS`) son ~25 min para las
+  // 30.561 fichas, así que se siembra completo.
+  // `SCRAPER_MAL_DETAILS=0` lo desactiva (el ranking basta para un refresh).
+  if (process.env.SCRAPER_MAL_DETAILS === '0') {
+    console.log('· detalle por-anime desactivado (SCRAPER_MAL_DETAILS=0)')
+    return
+  }
+
+  const existingDetails = await taskRepository.getExistingEntityIds('mal')
+  const animeRows = await db
+    .select({ malId: anime.malId })
+    .from(anime)
+    .orderBy(anime.malId)
+  const detailTasks = animeRows
+    .filter((a) => !existingDetails.has(`mal_details_${a.malId}`))
+    .map((a) => ({
+      source: 'mal',
+      entityId: `mal_details_${a.malId}`,
+      taskType: 'anime_mal_details_hydration',
+      priority: 15,
+      status: 'pending' as const,
+      payload: { animeId: a.malId },
+    }))
+  if (detailTasks.length > 0) {
+    for (let i = 0; i < detailTasks.length; i += 5000) {
+      await taskRepository.createManyTasks(detailTasks.slice(i, i + 5000))
+    }
+  }
+  console.log(`✓ Created ${detailTasks.length} mal detail tasks`)
 }
