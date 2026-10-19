@@ -26,6 +26,7 @@
     "taxonomy:build": "bun src/scripts/buildMalTaxonomyMap.ts",
     "taxonomy:reclassify": "bun src/scripts/reclassifyMalTaxonomy.ts",
     "kitsu:crossmap": "bun src/scripts/buildKitsuCrossmap.ts",
+    "music:fix-urls": "bun src/scripts/fixAnimeThemesUrls.ts",
     "mappings:repair": "bun src/scripts/repairAnimeMappings.ts"
   },
   "dependencies": {
