@@ -184,7 +184,10 @@ export const animeThemesRepository = {
           UPDATE artist a
           SET mal_id = v.mal_id
           FROM (VALUES ${values}) AS v(mal_id, name)
-          WHERE a.name = v.name
+          -- Normalizado: las performances y la ficha del artista pueden
+          -- diferir en mayúsculas o espacios ("Beat Crusaders" vs
+          -- "BEAT CRUSADERS").
+          WHERE lower(trim(a.name)) = lower(trim(v.name))
             AND a.mal_id IS DISTINCT FROM v.mal_id
             AND EXISTS (SELECT 1 FROM staff s WHERE s.mal_id = v.mal_id)
         `)
