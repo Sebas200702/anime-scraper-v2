@@ -3,6 +3,7 @@ import type {
   ScrapingTask,
 } from '../types/index.js'
 import type { MalAnimeDetails } from 'types/malApi.js'
+import { malTaxonomyKind } from '../shared/malTaxonomy.js'
 
 /** MAL `media_type` → vocabulario Jikan/anidev. */
 const TYPE_MAP: Record<string, string> = {
@@ -75,14 +76,10 @@ const durationText = (seconds?: number): string | undefined => {
  * (los licenciadores reales solo los da el detalle de la compañía).
  */
 /**
- * MAL devuelve géneros, temas y demográficas juntos en `genres`. Las cuatro
- * demográficas tienen ids estables (25 Shoujo, 26 Josei, 27 Shounen, 28 Seinen)
- * y se separan a `demographic`; el resto (incluidos los temas) va a `genre`
- * **sin perder nada**: comparten ids MAL, así que un split posterior es un
- * `UPDATE`, no un refetch.
+ * MAL devuelve géneros, temas y demográficas juntos en `genres`. Se separan con
+ * el mapa autoritativo de `shared/malTaxonomy.ts` (construido leyendo la barra
+ * lateral de la ficha, porque la API no expone esos campos).
  */
-const DEMOGRAPHIC_IDS = new Set([25, 26, 27, 28])
-
 export const processAnimeMalDetails = (
   raw: MalAnimeDetails,
   task: ScrapingTask
@@ -92,9 +89,11 @@ export const processAnimeMalDetails = (
     malId: g.id,
     name: g.name,
   }))
-  const genres = allGenres.filter((g) => !DEMOGRAPHIC_IDS.has(g.malId))
-  const demographics = allGenres.filter((g) => DEMOGRAPHIC_IDS.has(g.malId))
-  const themes = (raw.themes ?? []).map((g) => ({ malId: g.id, name: g.name }))
+  const genres = allGenres.filter((g) => malTaxonomyKind(g.malId) === 'genre')
+  const demographics = allGenres.filter(
+    (g) => malTaxonomyKind(g.malId) === 'demographic'
+  )
+  const themes = allGenres.filter((g) => malTaxonomyKind(g.malId) === 'theme')
   const studios = (raw.studios ?? []).map((s) => ({
     malId: s.id,
     role: 'studio' as const,

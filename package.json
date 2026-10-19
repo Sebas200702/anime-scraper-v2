@@ -22,7 +22,9 @@
     "backfill": "bun src/scripts/backfillAll.ts",
     "schema:mirror": "bun scripts/mirrorSchema.ts",
     "schema:check": "bun scripts/mirrorSchema.ts --check",
-    "promote": "bun src/scripts/promote.ts"
+    "promote": "bun src/scripts/promote.ts",
+    "taxonomy:build": "bun src/scripts/buildMalTaxonomyMap.ts",
+    "taxonomy:reclassify": "bun src/scripts/reclassifyMalTaxonomy.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
