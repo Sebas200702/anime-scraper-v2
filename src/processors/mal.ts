@@ -1,5 +1,6 @@
 import type {
   AnimeMalDetailsProcessorResult,
+  NewMedia,
   ScrapingTask,
 } from '../types/index.js'
 import type { MalAnimeDetails } from 'types/malApi.js'
@@ -133,8 +134,23 @@ export const processAnimeMalDetails = (
     role: s.role,
   }))
 
+  // Poster de MAL: variante de prioridad 25 (AniList 10 gana como default), pero
+  // llena los animes que no están en AniList ni en TVDB.
+  const animeMedia: NewMedia[] = []
+  const poster = raw.main_picture?.large ?? raw.main_picture?.medium
+  if (poster) {
+    animeMedia.push({
+      entityType: 'anime',
+      entityId: malId,
+      mediaType: 'poster',
+      src: poster,
+      size: null,
+    })
+  }
+
   return {
     animeStats,
+    animeMedia,
     genres,
     demographics,
     themes,

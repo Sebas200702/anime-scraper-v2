@@ -10,6 +10,7 @@ import {
   animeTheme,
 } from '../schemas/animeRelations.js'
 import { batchUpsert } from '../shared/batchUpsert.js'
+import { mediaRepository } from './media.js'
 import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 import { unique } from '../utils/deduplicate.js'
 import type {
@@ -110,6 +111,11 @@ export const malRepository = {
       ),
     ])
 
+    // Poster de MAL (variante de menor prioridad).
+    const animeMedia = results.flatMap((r) => r.animeMedia ?? [])
+    const uAnimeMedia = unique(animeMedia, (m) => `${m.entityId}:${m.src}`)
+    const mediaSaved = await mediaRepository.saveMedia(uAnimeMedia, 'mal')
+
     const uGenres = unique(animeGenres, (g) => `${g.animeId}:${g.genreId}`)
     const uDemo = unique(
       animeDemographics,
@@ -131,6 +137,7 @@ export const malRepository = {
 
     return (
       patched +
+      mediaSaved +
       uGenres.length +
       uDemo.length +
       uThemes.length +

@@ -262,6 +262,8 @@ export interface AnimeMalDetailsProcessorResult {
   producers: { malId: number }[]
   animeGenres: { animeId: number; genreId: number }[]
   animeDemographics: { animeId: number; demographicId: number }[]
+  /** Poster de MAL (`main_picture`), como variante de menor prioridad. */
+  animeMedia: NewMedia[]
   animeThemes: { animeId: number; themeId: number }[]
   animeProducers: {
     animeId: number

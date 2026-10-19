@@ -2,6 +2,7 @@
 export interface MalAnimeDetails {
   id: number
   title?: string
+  main_picture?: { medium?: string; large?: string }
   alternative_titles?: { synonyms?: string[]; en?: string; ja?: string }
   start_date?: string
   end_date?: string

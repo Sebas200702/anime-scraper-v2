@@ -15,6 +15,7 @@ import type { ScrapingTask } from 'types/index.js'
 const FIELDS = [
   'id',
   'title',
+  'main_picture',
   'alternative_titles',
   'start_date',
   'end_date',
@@ -116,6 +117,7 @@ export const fetchAnimeMalDetails = async (
 const RANKING_FIELDS = [
   'id',
   'title',
+  'main_picture',
   'alternative_titles',
   'start_date',
   'end_date',

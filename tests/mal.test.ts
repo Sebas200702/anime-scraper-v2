@@ -36,6 +36,7 @@ describe('processAnimeMalDetails (MAL API oficial → anime + junctions con ids 
         average_episode_duration: 1440,
         rating: 'r',
         studios: [{ id: 4, name: 'Bones' }],
+        main_picture: { large: 'https://cdn.myanimelist.net/images/anime/1.jpg' },
       },
       task
     )
@@ -63,6 +64,15 @@ describe('processAnimeMalDetails (MAL API oficial → anime + junctions con ids 
     })
     // MAL los mezcla en `genres`; el mapa autoritativo los separa:
     // 1 Action género, 18 Military tema, 27 Shounen demográfica.
+    expect(result.animeMedia).toEqual([
+      {
+        entityType: 'anime',
+        entityId: 5114,
+        mediaType: 'poster',
+        src: 'https://cdn.myanimelist.net/images/anime/1.jpg',
+        size: null,
+      },
+    ])
     expect(result.genres).toEqual([{ malId: 1, name: 'Action' }])
     expect(result.demographics).toEqual([{ malId: 27, name: 'Shounen' }])
     expect(result.themes).toEqual([{ malId: 18, name: 'Military' }])
@@ -83,6 +93,7 @@ describe('processAnimeMalDetails (MAL API oficial → anime + junctions con ids 
     expect(result.animeStats?.type).toBeUndefined()
     expect(result.animeStats?.broadcastDay).toBeUndefined()
     expect(result.genres).toEqual([])
+    expect(result.animeMedia).toEqual([])
     expect(result.animeProducers).toEqual([])
   })
 })
