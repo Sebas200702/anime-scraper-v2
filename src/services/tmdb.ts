@@ -62,20 +62,31 @@ export const searchTmdbSeries = async (
   query: string,
   year: number | null,
   proxy?: ProxyTarget
-): Promise<{ id: number; name: string; firstAirDate: string | null }[]> => {
+): Promise<
+  {
+    id: number
+    name: string
+    originalName: string
+    firstAirDate: string | null
+    mediaType: 'tv' | 'movie' | null
+  }[]
+> => {
   const key = tmdbApiKey()
   if (!key) throw new SkippedTaskError('missing:TMDB_API_KEY')
   const url =
-    `${TMDB_BASE}/search/tv?api_key=${encodeURIComponent(key)}` +
+    `${TMDB_BASE}/search/multi?api_key=${encodeURIComponent(key)}` +
     `&query=${encodeURIComponent(query)}&language=en-US` +
-    (year ? `&first_air_date_year=${year}` : '') +
     '&include_adult=false'
   const response = await fetcher<{
     results?: {
       id: number
       name?: string
+      title?: string
       original_name?: string
+      original_title?: string
       first_air_date?: string
+      release_date?: string
+      media_type?: string
     }[]
   }>({
     url,
@@ -83,11 +94,19 @@ export const searchTmdbSeries = async (
     headers: { Accept: 'application/json' },
     agent: proxy,
   })
-  return (response.results ?? []).map((r) => ({
-    id: r.id,
-    name: r.original_name || r.name || '',
-    firstAirDate: r.first_air_date ?? null,
-  }))
+  // Se devuelven los **dos** nombres: TMDB trae el original (japonés a
+  // menudo) y el traducido, y nuestro título puede ser cualquiera de los dos.
+  return (response.results ?? [])
+    .filter((r) => r.media_type === 'tv' || r.media_type === 'movie')
+    .map((r) => ({
+      id: r.id,
+      // Las películas traen `title`/`original_title`; las series, `name`/
+      // `original_name`.
+      name: r.name ?? r.title ?? '',
+      originalName: r.original_name ?? r.original_title ?? '',
+      firstAirDate: r.first_air_date ?? r.release_date ?? null,
+      mediaType: (r.media_type as 'tv' | 'movie') ?? null,
+    }))
 }
 
 /** Ficha de la serie: temporadas con su número de episodios. */

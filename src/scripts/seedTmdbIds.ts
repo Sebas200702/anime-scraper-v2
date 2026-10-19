@@ -26,6 +26,12 @@ const norm = (value: string | null | undefined): string =>
 
 const main = async () => {
   // 1) Vía exacta: el id de TMDB dentro de los remote_ids de TVDB.
+  //    (con `--skip-tvdb` se salta: la cuota de TVDB va justa y esta pasada
+  //     son 7.000 peticiones lentas; la búsqueda de TMDB cubre todo el
+  //     catálogo y va mucho más rápido).
+  if (process.argv.includes('--skip-tvdb')) {
+    console.log('· omitida la pasada de remote_ids de TVDB (--skip-tvdb)')
+  } else {
   const token = await authenticate()
   const withTvdb = (
     await db.execute(
@@ -84,6 +90,7 @@ const main = async () => {
       console.log(`  … ${i + 1}/${withTvdb.length} (tvdb → tmdb)`)
   }
   console.log(`✓ ${fromTvdb} ids de TMDB sacados de los remote_ids de TVDB`)
+  }
 
   // 2) Búsqueda para el resto (si hay key).
   if (!hasTmdbKey()) {
@@ -95,7 +102,7 @@ const main = async () => {
 
   const pending = (
     await db.execute(`
-      SELECT a.mal_id, a.title, a.title_english, a.year
+      SELECT a.mal_id, a.title, a.title_english, a.year, a.type
       FROM anime a
       LEFT JOIN anime_external_ids x ON x.anime_id = a.mal_id
       WHERE x.tmdb_id IS NULL
@@ -106,6 +113,7 @@ const main = async () => {
     title: string
     title_english: string | null
     year: number | null
+    type: string | null
   }[]
 
   console.log(`buscando id de TMDB para ${pending.length} animes…`)
@@ -113,7 +121,12 @@ const main = async () => {
   let ambiguous = 0
   const pairs: { animeId: number; tmdbId: number }[] = []
 
-  for (let i = 0; i < pending.length; i++) {
+  // La búsqueda es ligera: 8 en vuelo van sobrados para la cuota de TMDB.
+  const CONCURRENCY = 8
+  let cursor = 0
+  const worker = async () => {
+  while (cursor < pending.length) {
+    const i = cursor++
     const row = pending[i]
     if (!row) continue
     try {
@@ -122,10 +135,20 @@ const main = async () => {
         row.year
       )
       const target = norm(row.title_english || row.title)
+      // El título puede coincidir con el nombre de TMDB o con su nombre
+      // original (japonés): se acepta cualquiera de los dos.
+      const namesMatch = (c: { name: string; originalName: string }) =>
+        norm(c.name) === target || norm(c.originalName) === target
+      // El tipo también tiene que cuadrar: una película de MAL es una `movie`
+      // en TMDB (y al revés).
+      const typeOk = (c: { mediaType: string | null }) =>
+        !c.mediaType ||
+        (row.type === 'Movie' ? c.mediaType === 'movie' : c.mediaType === 'tv')
       const valid = candidates.filter((c) => {
-        if (!row.year || !c.firstAirDate) return norm(c.name) === target
+        if (!typeOk(c)) return false
+        if (!row.year || !c.firstAirDate) return namesMatch(c)
         const year = Number(c.firstAirDate.slice(0, 4))
-        return Math.abs(year - row.year) <= 1 && norm(c.name) === target
+        return Math.abs(year - row.year) <= 1 && namesMatch(c)
       })
       const unique = new Set(valid.map((c) => c.id))
       if (unique.size === 1) {
@@ -143,6 +166,8 @@ const main = async () => {
       )
     }
   }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker))
 
   for (let i = 0; i < pairs.length; i += 1000) {
     const batch = pairs.slice(i, i + 1000)
