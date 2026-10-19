@@ -283,6 +283,48 @@ export const parseMalThemes = (html: string): ParsedTheme[] => {
 }
 
 
+
+/**
+ * Taxonomía exacta de MAL por anime: géneros, temas y demográficas con su id.
+ *
+ * La API v2 **colapsa** los tres en `genres` (los campos `themes` y
+ * `demographics` llegan vacíos) y el mapa global se había reconstruido con 220
+ * fichas. La barra lateral sí los separa y trae el id de MAL en el link
+ * (`/anime/genre/27/Shounen`), así que con la ficha HTML se clasifica cada
+ * anime sin ambigüedad.
+ */
+export interface ParsedTaxonomy {
+  genres: { malId: number; name: string }[]
+  themes: { malId: number; name: string }[]
+  demographics: { malId: number; name: string }[]
+}
+
+const TAXONOMY_LABELS: { label: string; kind: keyof ParsedTaxonomy }[] = [
+  { label: 'Genres', kind: 'genres' },
+  { label: 'Theme', kind: 'themes' },
+  { label: 'Demographic', kind: 'demographics' },
+]
+
+export const parseMalTaxonomy = (html: string): ParsedTaxonomy => {
+  const $ = cheerio.load(html)
+  const out: ParsedTaxonomy = { genres: [], themes: [], demographics: [] }
+  for (const { label, kind } of TAXONOMY_LABELS) {
+    $('div.spaceit_pad').each((_, el) => {
+      const $row = $(el)
+      const title = $row.find('span.dark_text').text().trim()
+      if (title !== `${label}:`) return
+      $row.find('a[href*="/anime/genre/"]').each((__, a) => {
+        const $a = $(a)
+        const malId = Number($a.attr('href')?.match(/\/anime\/genre\/(\d+)/)?.[1])
+        const name = $a.text().trim()
+        if (!Number.isInteger(malId) || !name) return
+        out[kind].push({ malId, name })
+      })
+    })
+  }
+  return out
+}
+
 /**
  * Entradas relacionadas de MAL ("Related Entries").
  *

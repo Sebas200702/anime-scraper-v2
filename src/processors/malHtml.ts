@@ -8,6 +8,7 @@ import {
   parseMalCompanies,
   parseMalFavorites,
   parseMalRelations,
+  parseMalTaxonomy,
 } from '../shared/malAnimeHtml.js'
 import type { ParsedTheme } from '../shared/malAnimeHtml.js'
 
@@ -79,6 +80,16 @@ export const processMalCharacters = (
   return {
     characters,
     staff,
+    // Taxonomía exacta (géneros/temas/demográficas con su id de MAL): la API
+    // los colapsa en `genres` y obligaba a un mapa global de 220 fichas.
+    animeTaxonomy: (() => {
+      const taxonomy = parseMalTaxonomy(raw.html)
+      return {
+        genres: taxonomy.genres.map((g) => ({ animeId, genreId: g.malId, name: g.name })),
+        themes: taxonomy.themes.map((g) => ({ animeId, themeId: g.malId, name: g.name })),
+        demographics: taxonomy.demographics.map((g) => ({ animeId, demographicId: g.malId, name: g.name })),
+      }
+    })(),
     // Relaciones y compañías: solo en el HTML (la API da studios sin rol y
     // AniList no cubre todo el catálogo).
     animeRelations: parseMalRelations(raw.html).map((r) => ({

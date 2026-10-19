@@ -10,8 +10,16 @@ import {
   animeMusic,
   animeRelatedAnime,
   animeProducer,
+  animeGenre,
+  animeTheme,
+  animeDemographic,
 } from '../schemas/animeRelations.js'
 import { characterVoiceActor } from '../schemas/characterRelations.js'
+import {
+  genre,
+  theme,
+  demographic,
+} from '../schemas/animeTaxonomy.js'
 import { characterMedia, staffMedia } from '../schemas/media.js'
 import { music } from '../schemas/music.js'
 import { musicArtist } from '../schemas/musicRelations.js'
@@ -48,6 +56,7 @@ export const malHtmlRepository = {
     const voiceActors = results.flatMap((r) => r.characterVoiceActors)
     const favorites = results.flatMap((r) => r.animeFavorites ?? [])
     const relations = results.flatMap((r) => r.animeRelations ?? [])
+    const taxonomy = results.flatMap((r) => r.animeTaxonomy ?? [])
     const companies = results.flatMap((r) => r.animeCompanies ?? [])
     const charMedia = results.flatMap((r) => r.characterMedia)
     const staffMediaRows = results.flatMap((r) => r.staffMedia)
@@ -133,6 +142,67 @@ export const malHtmlRepository = {
       )
     }
 
+    // 0c) Taxonomía exacta de MAL (géneros/temas/demográficas con id nativo).
+    const taxGenres = taxonomy.flatMap((t2) => t2.genres)
+    const taxThemes = taxonomy.flatMap((t2) => t2.themes)
+    const taxDemos = taxonomy.flatMap((t2) => t2.demographics)
+    if (taxonomy.length > 0) {
+      await batchUpsert(
+        genre,
+        unique(taxGenres, (g) => `${g.genreId}`).map((g) => ({
+          malId: g.genreId,
+          name: g.name,
+        })),
+        2,
+        'genre'
+      )
+      await batchUpsert(
+        theme,
+        unique(taxThemes, (g) => `${g.themeId}`).map((g) => ({
+          malId: g.themeId,
+          name: g.name,
+        })),
+        2,
+        'theme'
+      )
+      await batchUpsert(
+        demographic,
+        unique(taxDemos, (g) => `${g.demographicId}`).map((g) => ({
+          malId: g.demographicId,
+          name: g.name,
+        })),
+        2,
+        'demographic'
+      )
+      await batchUpsert(
+        animeGenre,
+        unique(taxGenres, (g) => `${g.animeId}:${g.genreId}`).map((g) => ({
+          animeId: g.animeId,
+          genreId: g.genreId,
+        })),
+        2,
+        'anime-genre'
+      )
+      await batchUpsert(
+        animeTheme,
+        unique(taxThemes, (g) => `${g.animeId}:${g.themeId}`).map((g) => ({
+          animeId: g.animeId,
+          themeId: g.themeId,
+        })),
+        2,
+        'anime-theme'
+      )
+      await batchUpsert(
+        animeDemographic,
+        unique(taxDemos, (g) => `${g.animeId}:${g.demographicId}`).map((g) => ({
+          animeId: g.animeId,
+          demographicId: g.demographicId,
+        })),
+        2,
+        'anime-demographic'
+      )
+    }
+
     // 1) Padres (los seiyuus también existen como staff).
     await batchUpsert(
       character,
@@ -195,6 +265,7 @@ export const malHtmlRepository = {
 
     return (
       favorites.length +
+      taxonomy.length +
       validRelations.length +
       uCompanies.length +
       characters.length +

@@ -309,6 +309,12 @@ export interface MalCharactersProcessorResult {
   staffMedia: { entityId: number; src: string; mediaType: string }[]
   /** Favoritos (miembros) del anime: solo en la ficha HTML. */
   animeFavorites: { animeId: number; favorites: number }[]
+  /** Taxonomía exacta de MAL: géneros, temas y demográficas con id nativo. */
+  animeTaxonomy: {
+    genres: { animeId: number; genreId: number; name: string }[]
+    themes: { animeId: number; themeId: number; name: string }[]
+    demographics: { animeId: number; demographicId: number; name: string }[]
+  }
   /** Relaciones tipo MAL ("Prequel", "Sequel", …): solo en la ficha HTML. */
   animeRelations: {
     animeId: number
