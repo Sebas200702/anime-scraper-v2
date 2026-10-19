@@ -10,6 +10,14 @@ import {
 import { mapTaskRow, type RawTaskRow } from '../shared/taskMapper.js'
 import type { NewScrapingTask, ScrapingTask } from '../types/index.js'
 
+/** Trocea sin depender de `utils/chunk` (evita el ciclo repo → utils → schemas). */
+const chunkArray = <T>(items: T[], size: number): T[][] => {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size)
+    out.push(items.slice(i, i + size))
+  return out
+}
+
 /**
  * Cola de ingesta en Postgres (`ingest.*`).
  *
@@ -222,6 +230,90 @@ export const taskRepository = {
       WHERE status = 'skipped' ${sourceFilter(source)}
     `)
     return result.rowCount ?? 0
+  },
+
+  /**
+   * Re-encola las tareas de episodios con su `kitsu_id` corregido.
+   *
+   * Tras reparar un mapping, lo derivado quedó apuntando a otra serie: la tarea
+   * se re-arma con el payload nuevo (o se marca `skipped` si el anime no está
+   * en Kitsu). No se crean tareas: se reusan las del `anime_episodes_{id}`.
+   */
+  async rearmEpisodeTasks(
+    items: { animeId: number; kitsuId: number | null }[]
+  ): Promise<number> {
+    if (items.length === 0) return 0
+    let touched = 0
+    for (const batch of chunkArray(items, 500)) {
+      const values = sql.join(
+        batch.map(
+          (i) =>
+            sql`(${`anime_episodes_${i.animeId}`}::text, ${JSON.stringify({ kitsu_id: i.kitsuId, anime_id: i.animeId })}::jsonb, ${
+              i.kitsuId === null ? 'skipped' : 'pending'
+            }::text, ${i.kitsuId === null ? 'missing:kitsu_id' : null}::text)`
+        ),
+        sql`, `
+      )
+      const result = await db.execute(sql`
+        UPDATE ingest.task AS t
+        SET payload = v.payload,
+            status = v.status,
+            skip_reason = v.skip_reason,
+            attempts = 0,
+            last_error = NULL,
+            leased_until = NULL,
+            scheduled_at = now(),
+            updated_at = now()
+        FROM (VALUES ${values}) AS v(entity_id, payload, status, skip_reason)
+        WHERE t.source = 'animeEpisodes' AND t.entity_id = v.entity_id
+      `)
+      touched += result.rowCount ?? 0
+    }
+    return touched
+  },
+
+  /**
+   * Re-encola artworks de TVDB con el `tvdb_id` corregido (o los retira si el
+   * anime ya no tiene serie de TVDB: su media quedó descartada aparte).
+   */
+  async rearmTvdbArtworkTasks(
+    items: { animeId: number; tvdbId: number | null }[]
+  ): Promise<number> {
+    if (items.length === 0) return 0
+    let touched = 0
+    // Los `entity_id` son por `tvdb_id` (no por anime): hay que renombrarlos.
+    for (const batch of chunkArray(items, 500)) {
+      const values = sql.join(
+        batch.map(
+          (i) =>
+            sql`(${i.tvdbId}::int, ${i.animeId}::int, ${`tvdb_artworks_${i.tvdbId}`}::text, ${JSON.stringify(
+              { tvdb_id: i.tvdbId, anime_id: i.animeId }
+            )}::jsonb)`
+        ),
+        sql`, `
+      )
+      const result = await db.execute(sql`
+        UPDATE ingest.task AS t
+        SET entity_id = v.entity_id,
+            payload = v.payload,
+            status = 'pending',
+            skip_reason = NULL,
+            attempts = 0,
+            last_error = NULL,
+            leased_until = NULL,
+            scheduled_at = now(),
+            updated_at = now()
+        FROM (VALUES ${values}) AS v(tvdb_id, anime_id, entity_id, payload)
+        WHERE t.source = 'tvdbSeriesArtworks'
+          AND (t.entity_id LIKE 'tvdb_artworks_%')
+          AND (
+            t.entity_id = v.entity_id
+            OR t.payload->>'anime_id' = v.anime_id::text
+          )
+      `)
+      touched += result.rowCount ?? 0
+    }
+    return touched
   },
 
   /** Cadencia de refresh declarada en la DB (si existe). */

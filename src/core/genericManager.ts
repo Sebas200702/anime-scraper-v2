@@ -343,17 +343,40 @@ export class GenericManager {
       const repository = await this.getRepository()
       const totalSaved = (await repository[saveFnName](items)) ?? items.length
 
-      // Si el filtro de FK dejó filas fuera (padre inexistente), el lote queda
-      // `skipped`: se escribió lo válido y se reintenta cuando el padre exista.
+      // Si el filtro de FK dejó filas fuera (padre inexistente), la tarea queda
+      // `skipped` para reintentarla cuando el padre exista.
+      //
+      // El contador es del proceso, no de la tarea: como un lote lleva hasta
+      // `pageBatch` tareas, marcar todo el lote acusaba de "diferido" a tareas
+      // que guardaron bien (se veía con animeThemes: 1.500 tareas `skipped` con
+      // su música ya escrita). Por eso, cuando hay diferidos, se re-guarda
+      // **tarea por tarea** (idempotente: los repos hacen upsert) para saber
+      // cuáles fallaron de verdad; el costo extra solo aparece en ese caso.
       const deferred = takeDeferredDependencies()
       if (deferred > 0) {
-        await taskRepository.skipTasks(
-          taskIds,
-          `missing:dependency (${deferred} filas diferidas)`
-        )
-        this.reporter.recordSaved(entity, totalSaved, 0)
+        const skipped: number[] = []
+        const completed: number[] = []
+        for (const buffered of batch) {
+          const taskItems = Array.isArray(buffered.data)
+            ? buffered.data
+            : [buffered.data]
+          await repository[saveFnName](taskItems)
+          if (takeDeferredDependencies() > 0) skipped.push(buffered.taskId)
+          else completed.push(buffered.taskId)
+        }
+
+        if (completed.length > 0) {
+          await taskRepository.completeTasks(
+            completed,
+            await this.refreshSeconds(first.taskType)
+          )
+        }
+        if (skipped.length > 0) {
+          await taskRepository.skipTasks(skipped, 'missing:dependency')
+        }
+        this.reporter.recordSaved(entity, totalSaved, completed.length)
         console.log(
-          `⏸️  ${entity}: ${totalSaved} guardados, ${deferred} diferidos por dependencia (tareas re-armables)`
+          `⏸️  ${entity}: ${totalSaved} guardados · ${skipped.length} tareas diferidas por dependencia (re-armables)`
         )
         return
       }

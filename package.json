@@ -24,7 +24,9 @@
     "schema:check": "bun scripts/mirrorSchema.ts --check",
     "promote": "bun src/scripts/promote.ts",
     "taxonomy:build": "bun src/scripts/buildMalTaxonomyMap.ts",
-    "taxonomy:reclassify": "bun src/scripts/reclassifyMalTaxonomy.ts"
+    "taxonomy:reclassify": "bun src/scripts/reclassifyMalTaxonomy.ts",
+    "kitsu:crossmap": "bun src/scripts/buildKitsuCrossmap.ts",
+    "mappings:repair": "bun src/scripts/repairAnimeMappings.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.15.15",
