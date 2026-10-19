@@ -42,13 +42,30 @@ export function generateVideoUrl(basename: string) {
   if (!basename) return null
   return `https://v.animethemes.moe/${basename}`
 }
+/**
+ * Id de **persona** de MAL desde los recursos de un artista de AnimeThemes.
+ *
+ * Las fichas de artista enlazan a `myanimelist.net/people/{id}` (no a
+ * `/anime/`), así que el extractor de anime no sirve aquí: con el regex de
+ * anime, `artist.mal_id` quedaba siempre en NULL.
+ */
+export function extractPersonId(
+  resources: { site: string; link?: string }[]
+): number | null {
+  const mal = resources.find((r) =>
+    (r.link ?? '').includes('myanimelist.net/people/')
+  )
+  const id = mal?.link?.match(/myanimelist\.net\/people\/(\d+)/)?.[1]
+  return id ? Number(id) : null
+}
+
 export const processArtist = (
   rawData: AnimeThemesArtistNextData,
   task: ScrapingTask
 ) => {
   const artistData = rawData.pageProps.artist
 
-  const malId = extractMalId(artistData.resources)
+  const malId = extractPersonId(artistData.resources)
   console.log(`Processing artist: ${artistData.name} (MAL ID: ${malId})`)
 
   const artistResult: AnimeArtistProcessorResult = {

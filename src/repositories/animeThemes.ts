@@ -150,14 +150,32 @@ export const animeThemesRepository = {
 
       // `artist.mal_id` referencia `staff.mal_id` y `batchUpsert` hace
       // `DO NOTHING`: los artistas creados por nombre (desde las performances)
-      // nunca recibían su id MAL aunque la ficha de la persona lo traiga. Se
-      // rellena solo si la persona ya existe en `staff` (si no, la FK rompería
-      // la transacción entera y se perderían todos los artistas del lote).
+      // nunca recibían su id MAL aunque la ficha de la persona lo traiga.
+      //
+      // La FK exige que la persona exista en `staff`, así que se inserta como
+      // persona suelta (los cantantes/grupos no aparecen en la ficha de
+      // ningún anime: no tienen fila en `anime_staff` y no ensucian el
+      // reparto de staff de ninguna serie).
       const withMal = uArtists.filter(
         (a): a is typeof a & { malId: number } =>
           typeof a.malId === 'number' && a.malId > 0
       )
       for (const batch of chunk(withMal, 500)) {
+        // Padre primero: la FK de `artist.mal_id` apunta a `staff.mal_id`.
+        const persons = unique(
+          batch.map((a) => ({ malId: a.malId, name: a.name })),
+          (p) => `${p.malId}`
+        )
+        await tx.execute(sql`
+          INSERT INTO staff (mal_id, name)
+          SELECT v.mal_id, v.name
+          FROM (VALUES ${sql.join(
+            persons.map((p) => sql`(${p.malId}::int, ${p.name}::text)`),
+            sql`, `
+          )}) AS v(mal_id, name)
+          ON CONFLICT (mal_id) DO NOTHING
+        `)
+
         const values = sql.join(
           batch.map((a) => sql`(${a.malId}::int, ${a.name}::text)`),
           sql`, `
