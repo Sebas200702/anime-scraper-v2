@@ -37,6 +37,10 @@ export const resolveNextBuildId = async (
     isJson: false,
     agent: proxy,
     retry: { maxAttempts: 2 },
+    // 10 s: la home de AnimeThemes es ligera y el JSON de cada anime tarda
+    // <2 s por un proxy sano. Con 30 s (default) un proxy muerto quemaba el
+    // hueco y la fuente se quedaba sin avanzar.
+    timeoutMs: 10_000,
   })
 
   const buildId = extractBuildId(String(html))
@@ -65,7 +69,7 @@ export const fetchNextData = async <T>(
   const url = `${base}/_next/data/${buildId}${path}`
 
   try {
-    return await fetcher<T>({ url, agent: proxy })
+    return await fetcher<T>({ url, agent: proxy, timeoutMs: 10_000 })
   } catch (error) {
     if (!(error instanceof FetchError) || error.kind !== 'not_found')
       throw error
@@ -77,6 +81,7 @@ export const fetchNextData = async <T>(
     return await fetcher<T>({
       url: `${base}/_next/data/${fresh}${path}`,
       agent: proxy,
+      timeoutMs: 10_000,
     })
   }
 }
