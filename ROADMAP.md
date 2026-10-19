@@ -18,8 +18,10 @@
 >   studios 18.478 · relaciones 9.285 · 216.728 títulos alternativos.
 > - **Personajes**: 67.432, **todos con retrato** (67.413 ids MAL + seiyuus).
 > - **Staff**: 17.653 personas, **todas con retrato**.
-> - **Episodios**: 400.210 (27.693 animes con episodios) · 57.251 con miniatura
->   (Kitsu solo tiene miniatura de una parte).
+> - **Episodios**: 270.471 (19.844 animes con episodios) · 41.134 con miniatura
+>   (Kitsu solo tiene miniatura de una parte). 10.717 animes se quedan sin
+>   episodios: Kitsu no los tiene (9.047 sin entrada) o no les publica
+>   episodios (1.565, un 404 que ahora es `skipped`, no un fallo).
 > - **Música**: 26.344 canciones · **9.856 animes con OP/ED** (6.480 desde MAL,
 >   5.000 desde AnimeThemes) · 10.171 con nº de tema · 9.310 con rango de
 >   episodios · 24.695 enlaces a Spotify/Apple/Amazon · **19.813 con audio y
