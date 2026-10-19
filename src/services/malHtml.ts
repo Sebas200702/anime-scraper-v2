@@ -29,7 +29,14 @@ export const fetchMalCharacters = async (
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
     },
     agent: proxy,
-    timeoutMs: 20_000,
+    // 10 s: la ficha llega en <2 s por un proxy sano (~40 KB gzip). Con 20 s
+    // los proxies muertos quemaban el hueco entero y el throughput caía a
+    // ~1 ficha/s (30k fichas = 8 h). El reintento a nivel de tarea cubre lo
+    // que se cae, y con otro proxy.
+    timeoutMs: 10_000,
+    // 2 intentos por request: el reintento de tarea (attempts) ya cubre el
+    // resto, sin multiplicar por 3 el tiempo muerto de cada proxy malo.
+    retry: { maxAttempts: 2 },
     // El body es HTML, no JSON: sin esto el fetcher lo trataría como JSON y un
     // marcador de WAF de la página normal lo clasificaría como `blocked`.
     isJson: false,
