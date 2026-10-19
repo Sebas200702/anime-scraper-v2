@@ -114,6 +114,16 @@ SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev tvdbSeriesArtworks
 - **Bloqueado de verdad hasta Jikan**: personajes/staff/VAs (+ su media), junctions de licenciadores (solo studios viene de MAL) y sinopsis de lo sin ficha ni en AniList ni en MAL.
 - `relatedAnime` del dump no trae tipos → relations salen de AniList (tipadas).
 
+
+### Fuentes de MAL (sin Jikan)
+| Fuente | Qué aporta | Coste |
+|---|---|---|
+| `mal` | API v2: stats, studios (rol), taxonomía con ids MAL, broadcast, duración, sinopsis, aired, **poster** | bulk: `/anime/ranking` = 500/request |
+| `malHtml` | Ficha HTML: personajes, seiyuus y staff con retratos | ~40 KB gzip/ficha |
+| `malPeople` | Ficha de persona: retrato de cada staff que la ficha del anime no lista (solo los que faltan) | 1 ficha/persona |
+
+**Clasificación de taxonomía**: la API v2 colapsa géneros+temas+demográficas en `genres`. El mapa autoritativo se lee de la barra lateral (`Genres:`/`Theme:`/`Demographic:`) con `bun run taxonomy:build` y se guarda en `shared/malTaxonomy.ts`; `bun run taxonomy:reclassify` corrige lo ya guardado sin refetch.
+
 ### Notas de operación (lo que costó sangre)
 - **El trial no corta a 10 conexiones**: medido 30→100% ok, 60→92%, 100→86-95%. Pero **varias instancias del backfill a la vez sí lo tumban** (cada una abre su propio cupo): correr siempre **una** instancia.
 - Correr bajo **systemd user** (`anime-backfill.service`), no en el shell del agente: el shell mata los procesos hijos al terminar y los leases quedan vivos.
