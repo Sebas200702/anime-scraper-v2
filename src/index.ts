@@ -10,6 +10,7 @@ import { initializeTvdbSeriesArtworksTasks } from './scripts/initializeTvdbSerie
 import { initializeAnilistTasks } from './scripts/initializeAnilistTasks.js'
 import { initializeMalDetailsTasks } from './scripts/initializeMalDetailsTasks.js'
 import { initializeMalHtmlTasks } from './scripts/initializeMalHtmlTasks.js'
+import { initializeMalPeopleTasks } from './scripts/initializeMalPeopleTasks.js'
 const INITIALIZERS: Record<string, () => Promise<void>> = {
   jikan: initializeTasks,
   jikanRelations: initializeJikanRelationsTasks,
@@ -20,6 +21,7 @@ const INITIALIZERS: Record<string, () => Promise<void>> = {
   anilist: initializeAnilistTasks,
   mal: initializeMalDetailsTasks,
   malHtml: initializeMalHtmlTasks,
+  malPeople: initializeMalPeopleTasks,
 }
 async function main() {
   const arg = process.argv[2] || 'jikan'

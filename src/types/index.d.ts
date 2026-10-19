@@ -309,6 +309,11 @@ export interface MalCharactersProcessorResult {
   staffMedia: { entityId: number; src: string; mediaType: string }[]
 }
 
+/** Resultado de la fuente `malPeople` (retrato de una persona de MAL). */
+export interface MalPeopleProcessorResult {
+  staffMedia: { entityId: number; src: string; mediaType: string }[]
+}
+
 /** Resultado del catálogo en bulk (una página = 50 anime). */
 export interface AnimeCatalogProcessorResult {
   results: AnimeBannersProcessorResult[]

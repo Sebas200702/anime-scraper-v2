@@ -121,6 +121,17 @@ export const SOURCES: SourceConfig[] = [
     },
   },
   {
+    name: 'malPeople',
+    // Fichas de persona (HTML): solo para las que no tienen retrato.
+    maxWorkers: 8,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 1, perMinute: 60 },
+    tasks: {
+      staff_image_hydration: { entity: 'malPeople', needsPayload: true },
+    },
+  },
+  {
     name: 'malHtml',
     // Web de MAL (HTML): ~35-48 KB gzip por ficha, ~1.1 GB para todo el
     // catálogo (cabe en el trial). Su throttle es por IP y agresivo.
@@ -165,6 +176,7 @@ const BACKFILL_PROFILES: Record<
   anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
   mal: { maxWorkers: 8, rateLimit: { perSecond: 2, perMinute: 120 } },
   malHtml: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
+  malPeople: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
 }
 
 /**
@@ -190,6 +202,7 @@ export const DEFAULT_REFRESH_SECONDS: Record<string, number> = {
   anime_mal_details_hydration: 30 * 86400,
   anime_mal_ranking_hydration: 7 * 86400,
   anime_mal_html_hydration: 90 * 86400,
+  staff_image_hydration: 180 * 86400,
 }
 
 /**
@@ -239,6 +252,10 @@ export const SOURCE_HOSTS: Record<
     limits: { perSecond: 2, perMinute: 120 },
   },
   malHtml: {
+    host: 'myanimelist.net',
+    limits: { perSecond: 1, perMinute: 40 },
+  },
+  malPeople: {
     host: 'myanimelist.net',
     limits: { perSecond: 1, perMinute: 40 },
   },
