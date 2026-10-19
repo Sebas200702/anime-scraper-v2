@@ -27,10 +27,18 @@ export const animeMedia = pgTable(
     priority: integer('priority').notNull().default(100),
   },
   (t) => [
-    index('anime_media_anime_id_type_priority_idx').on(t.animeId, t.mediaType, t.priority),
+    index('anime_media_anime_id_type_priority_idx').on(
+      t.animeId,
+      t.mediaType,
+      t.priority
+    ),
     // Identidad natural: una fila por (entidad, tipo, url); las variantes
     // conviven porque cambia `src`. Da un target valido a ON CONFLICT.
-    uniqueIndex('anime_media_entity_type_src_unique').on(t.animeId, t.mediaType, t.src),
+    uniqueIndex('anime_media_entity_type_src_unique').on(
+      t.animeId,
+      t.mediaType,
+      t.src
+    ),
   ]
 )
 
@@ -50,7 +58,8 @@ export const characterMedia = pgTable(
   (t) => [
     index('character_media_character_id_type_priority_idx').on(
       t.characterId,
-      t.mediaType, t.priority
+      t.mediaType,
+      t.priority
     ),
     uniqueIndex('character_media_entity_type_src_unique').on(
       t.characterId,
@@ -74,27 +83,47 @@ export const staffMedia = pgTable(
     priority: integer('priority').notNull().default(100),
   },
   (t) => [
-    index('staff_media_staff_id_type_priority_idx').on(t.staffId, t.mediaType, t.priority),
+    index('staff_media_staff_id_type_priority_idx').on(
+      t.staffId,
+      t.mediaType,
+      t.priority
+    ),
     // Identidad natural: una fila por (entidad, tipo, url); las variantes
     // conviven porque cambia `src`. Da un target valido a ON CONFLICT.
-    uniqueIndex('staff_media_entity_type_src_unique').on(t.staffId, t.mediaType, t.src),
+    uniqueIndex('staff_media_entity_type_src_unique').on(
+      t.staffId,
+      t.mediaType,
+      t.src
+    ),
   ]
 )
 
-export const producerMedia = pgTable('producer_media', {
-  id: serial('id').primaryKey(),
-  producerId: integer('producer_id')
-    .notNull()
-    .references(() => producer.malId, { onDelete: 'cascade' }),
-  mediaType: text('media_type').notNull(),
-  src: text('src').notNull(),
-  size: text('size'),
-  source: text('source'),
-  priority: integer('priority').notNull().default(100),
-}, (t) => [
-  index('producer_media_producer_id_type_priority_idx').on(t.producerId, t.mediaType, t.priority),
-  uniqueIndex('producer_media_entity_type_src_unique').on(t.producerId, t.mediaType, t.src),
-])
+export const producerMedia = pgTable(
+  'producer_media',
+  {
+    id: serial('id').primaryKey(),
+    producerId: integer('producer_id')
+      .notNull()
+      .references(() => producer.malId, { onDelete: 'cascade' }),
+    mediaType: text('media_type').notNull(),
+    src: text('src').notNull(),
+    size: text('size'),
+    source: text('source'),
+    priority: integer('priority').notNull().default(100),
+  },
+  (t) => [
+    index('producer_media_producer_id_type_priority_idx').on(
+      t.producerId,
+      t.mediaType,
+      t.priority
+    ),
+    uniqueIndex('producer_media_entity_type_src_unique').on(
+      t.producerId,
+      t.mediaType,
+      t.src
+    ),
+  ]
+)
 
 export const musicMedia = pgTable(
   'music_media',
@@ -110,10 +139,18 @@ export const musicMedia = pgTable(
     priority: integer('priority').notNull().default(100),
   },
   (t) => [
-    index('music_media_music_id_type_priority_idx').on(t.musicId, t.mediaType, t.priority),
+    index('music_media_music_id_type_priority_idx').on(
+      t.musicId,
+      t.mediaType,
+      t.priority
+    ),
     // Identidad natural: una fila por (entidad, tipo, url); las variantes
     // conviven porque cambia `src`. Da un target valido a ON CONFLICT.
-    uniqueIndex('music_media_entity_type_src_unique').on(t.musicId, t.mediaType, t.src),
+    uniqueIndex('music_media_entity_type_src_unique').on(
+      t.musicId,
+      t.mediaType,
+      t.src
+    ),
   ]
 )
 
@@ -131,7 +168,15 @@ export const episodeMedia = pgTable(
     priority: integer('priority').notNull().default(100),
   },
   (t) => [
-    index('episode_media_episode_id_type_priority_idx').on(t.episodeId, t.mediaType, t.priority),
-    uniqueIndex('episode_media_entity_type_src_unique').on(t.episodeId, t.mediaType, t.src),
+    index('episode_media_episode_id_type_priority_idx').on(
+      t.episodeId,
+      t.mediaType,
+      t.priority
+    ),
+    uniqueIndex('episode_media_entity_type_src_unique').on(
+      t.episodeId,
+      t.mediaType,
+      t.src
+    ),
   ]
 )
