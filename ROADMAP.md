@@ -11,13 +11,24 @@
 >
 > **Estrategia de fill/refresh**: `docs/fill-and-refresh-strategy.md`.
 >
-> **Estado**: **backfill ejecutado y promovido a la DB local de la app**
-> (724.288 filas, idempotente). 30.565 anime, 267.845 episodios, 30.281
-> sinopsis, 21.167 géneros (ids MAL), 6.615 studios con rol, 18.034 relations,
-> 48.639 assets (banners de AniList primero por `priority`), 20.402 con score.
-> AniList y MAL se traen **en bulk** (50 y 500 anime por request: ~600 requests
-> en total). Solo pendiente de Jikan: personajes/staff/VAs y licenciadores.
-> Notas de operación en `docs/BACKFILL.md`.
+> **Estado (2026-10-19)**: **catálogo completo y promovido a la DB local de la app**
+>
+> - **Anime**: 30.565 (30.282 con póster, 8.273 con banner) · sinopsis 30.399 ·
+>   score 20.409 · géneros 30.279 · temas 17.532 · demográficas 4.500 ·
+>   studios 18.478 · relaciones 9.285 · 216.728 títulos alternativos.
+> - **Personajes**: 67.432, **todos con retrato** (67.413 ids MAL + seiyuus).
+> - **Staff**: 17.653 personas, **todas con retrato**.
+> - **Episodios**: 400.210 (27.693 animes con episodios) · 57.251 con miniatura
+>   (Kitsu solo tiene miniatura de una parte).
+> - **Música**: 26.344 canciones · **9.856 animes con OP/ED** (6.480 desde MAL,
+>   5.000 desde AnimeThemes) · 10.171 con nº de tema · 9.310 con rango de
+>   episodios · 24.695 enlaces a Spotify/Apple/Amazon · **19.813 con audio y
+>   vídeo reproducibles** (`.ogg`/`.webm` de AnimeThemes, servidos por el
+>   proxy de `/media/music/{id}/{audio|video}`).
+> - **Ids cruzados**: 20.838 AniList · 28.736 Kitsu · 3.996 TVDB.
+>
+> Jikan sigue caído (2026-10-15) y no se usa: todo sale de MAL (API + HTML),
+> AniList, Kitsu, TVDB y AnimeThemes. Notas de operación en `docs/BACKFILL.md`.
 
 ---
 
