@@ -103,9 +103,9 @@ export const tmdbRepository = {
         .map((item) => {
           const id = byNumber.get(item.number)
           if (!id) return null
-          return `(${id}::int, ${item.title ?? null}::text, ${item.aired ?? null}::text)`
+          return sql`(${id}::int, ${item.title ?? null}::text, ${item.aired ?? null}::text)`
         })
-        .filter((v): v is string => v !== null)
+        .filter((v): v is NonNullable<typeof v> => v !== null)
       if (values.length === 0) continue
       await db.execute(sql`
         UPDATE episode e
