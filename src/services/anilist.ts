@@ -68,9 +68,14 @@ export const fetchAnimeBanners = async (
 
   // GraphQL devuelve 200 con `errors` para fallos de consulta.
   if (response.errors?.length) {
-    throw new Error(
-      `AniList: ${response.errors[0]?.message ?? 'unknown error'}`
-    )
+    const message = response.errors[0]?.message ?? 'unknown error'
+    // "Not Found" = AniList no tiene ese anime (no es un fallo): la tarea
+    // queda `skipped` y se re-arma sola. Antes quemaba 3 intentos y acababa
+    // en dead_letter (2.007 animes).
+    if (/not found/i.test(message)) {
+      throw new SkippedTaskError('anilist:not_found')
+    }
+    throw new Error(`AniList: ${message}`)
   }
 
   return response

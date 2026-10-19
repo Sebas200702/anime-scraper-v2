@@ -85,7 +85,19 @@ export const processAnimeMalDetails = (
   raw: MalAnimeDetails,
   task: ScrapingTask
 ): AnimeMalDetailsProcessorResult => {
-  const malId = Number(task.entityId.replace('anime_mal_', ''))
+  // El id viene del **payload** (`{ animeId }`): depender del `entity_id`
+  // breakaba en cuanto cambiaba el prefijo (`mal_details_` → NaN → el UPDATE
+  // fallaba con "invalid input syntax for type integer" y las 30.561 tareas
+  // morían al guardar).
+  const payloadId = Number(
+    (task.payload as { animeId?: number } | undefined)?.animeId
+  )
+  const malId = Number.isFinite(payloadId)
+    ? payloadId
+    : Number(task.entityId.replace('anime_mal_', ''))
+  if (!Number.isInteger(malId) || malId <= 0) {
+    throw new Error(`MAL: id de anime inválido (${task.entityId})`)
+  }
   const allGenres = (raw.genres ?? []).map((g) => ({
     malId: g.id,
     name: g.name,
