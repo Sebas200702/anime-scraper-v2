@@ -22,7 +22,11 @@ describe('config de fuentes', () => {
     // rompería: el gate las trata como una sola clave y no consumen el tope de
     // conexiones del proveedor (van sin proxy).
     expect(KEY_SCOPED_HOSTS.has('api4.thetvdb.com')).toBe(true)
-    expect(KEY_SCOPED_HOSTS.has('api.myanimelist.net')).toBe(true)
+    // MAL **no** va aquí: su cuota es por IP, no por client-id. Medido con el
+    // mismo client-id, 60 requests concurrentes repartidos por 30 IPs dieron
+    // 0 respuestas 429; contarlo como global limitaba la fuente a 2 req/s
+    // (30.561 fichas = 4,2 h) cuando con los proxies da ~20 req/s (~25 min).
+    expect(KEY_SCOPED_HOSTS.has('api.myanimelist.net')).toBe(false)
     expect(SINGLE_IP_SOURCES.has('mal')).toBe(false) // throttle por IP
     expect(SINGLE_IP_SOURCES.has('tvdbSeriesArtworks')).toBe(true)
     expect(SINGLE_IP_SOURCES.has('animeMapping')).toBe(false)
