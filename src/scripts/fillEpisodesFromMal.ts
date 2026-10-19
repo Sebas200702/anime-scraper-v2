@@ -52,13 +52,23 @@ const main = async () => {
     created += res.rowCount ?? 0
   }
 
+  // Unifica el nombre de los episodios sin título real: Kitsu deja 193.576 con
+  // el título vacío y usa "Episode 01" como nombre por defecto; el relleno
+  // desde MAL usaba "Episode 1". Todos siguen la convención "Episode NN".
+  const normalized = await db.execute(`
+    UPDATE episode
+    SET title = 'Episode ' || lpad(number::text, 2, '0')
+    WHERE title = '' OR title LIKE 'Episode %'
+  `)
+
   const counts = await db.execute(`
     SELECT
       (SELECT count(*) FROM episode) AS episodios,
       (SELECT count(DISTINCT anime_id) FROM episode) AS animes
   `)
   console.log(
-    `✓ ${created} episodios creados · ` +
+    `✓ ${created} episodios creados · ${normalized.rowCount ?? 0} títulos ` +
+      `unificados · ` +
       JSON.stringify(counts.rows[0] as Record<string, number>)
   )
   process.exit(0)
