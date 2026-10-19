@@ -13,26 +13,31 @@
 >
 > **Estado (2026-10-19)**: **catálogo completo y promovido a la DB local de la app**
 >
-> - **Anime**: 30.565 (30.282 con póster, 8.273 con banner) · sinopsis 30.408 ·
->   score 20.410 · favoritos 30.399 · members 30.565 · 216.728 sinónimos.
-> - **Taxonomía (exacta, con id nativo de MAL)**: 30.279 con géneros ·
->   18.255 con temas · **11.527 con demográficas** (antes 4.500: la API colapsa
->   los tres campos y obligaba a un mapa global de 220 fichas).
-> - **Relaciones**: 13.315 animes (AniList + "Related Entries" de MAL).
-> - **Compañías**: 21.782 animes con rol (estudio / licenciadora / productora).
-> - **Personajes**: 67.434, **todos con retrato**. **Staff**: 17.653 con retrato.
-> - **Episodios**: 270.471 (19.844 animes) · 41.134 con miniatura.
-> - **Música**: 26.344 canciones · **9.856 animes con OP/ED** · 10.246 con nº de
->   tema · 9.380 con rango de episodios · 24.769 enlaces a Spotify/Apple/Amazon ·
+> - **Anime**: 30.565 (30.288 con póster, 8.772 con banner) · sinopsis 30.408 ·
+>   score 20.410 · favoritos 30.399 · 216.728 sinónimos.
+> - **Taxonomía exacta** (ids nativos de MAL, sacados de la ficha HTML): 30.279
+>   con géneros · 18.255 con temas · **11.527 con demográficas**.
+> - **Relaciones**: 13.315 animes (AniList + "Related Entries" de MAL) ·
+>   **Compañías**: 21.782 con rol (estudio / licenciadora / productora).
+> - **Personajes**: 67.434, **todos con retrato** · **Staff**: 17.653 con retrato.
+> - **Episodios**: 452.585 en **30.356 animes** (Kitsu donde existe + el número
+>   que publica MAL) · 41.134 con miniatura.
+> - **Música**: 29.020 canciones · **10.167 animes con OP/ED** · 11.686 con nº de
+>   tema · 10.417 con rango de episodios · 24.769 enlaces a Spotify/Apple/Amazon ·
 >   **19.815 con audio y vídeo reproducibles** (`.ogg`/`.webm` servidos por
->   `/media/music/{id}/{audio|video}`).
-> - **Ids cruzados**: 20.838 AniList · 28.736 Kitsu · 3.996 TVDB.
+>   `/media/music/{id}/{audio|video}`) · 15.075 artistas (2.461 con id de MAL).
+> - **Ids cruzados**: 20.838 AniList · 28.736 Kitsu · 7.031 TVDB · 9.783 ANN.
+>
+> **Fuentes de OP/ED**: MAL (ficha HTML: nº, artista, rango) · AnimeThemes
+> (vídeo/audio completo, 5.013 animes) · **ANN** (enciclopedia: nº, artista y
+> rango de episodios, 9.783 animes). Se cruzan por `(anime, tipo, título
+> normalizado)`: la misma canción es **una sola fila** y las fuentes se anexan.
 >
 > **Límites de fuente (no son huecos de código)**: el banner solo existe en
-> AniList; Kitsu publica miniatura de una parte de los episodios y no tiene
-> entrada para 9.047 animes; MAL no da `broadcast` ni `score` si no hay votos;
-> ni MAL ni AnimeThemes tienen OP/ED para 20.709 animes (AniDB está bloqueado
-> desde aquí y AnimeSongs está aparcado).
+> AniList y TVDB; Kitsu publica miniatura de una parte de los episodios y no
+> tiene entrada para 9.047 animes; MAL no da `broadcast` ni `score` si no hay
+> votos; AniDB está bloqueado desde aquí (cert TLS roto + 403 a IPs de
+> datacenter) y AnimeSongs está aparcado.
 >
 > Jikan sigue caído (2026-10-15) y no se usa: todo sale de MAL (API + HTML),
 > AniList, Kitsu, TVDB y AnimeThemes. Notas de operación en `docs/BACKFILL.md`.
