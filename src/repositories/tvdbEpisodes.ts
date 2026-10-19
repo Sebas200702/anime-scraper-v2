@@ -123,14 +123,28 @@ export const tvdbEpisodesRepository = {
         } else {
           match = byTitle.get(norm(oursEpisode.title))
         }
-        if (!match?.image) continue
-        media.push({
-          entityType: 'episode',
-          entityId: oursEpisode.id,
-          mediaType: 'thumbnail',
-          src: match.image,
-          size: null,
-        })
+        if (!match) continue
+        if (match.image) {
+          media.push({
+            entityType: 'episode',
+            entityId: oursEpisode.id,
+            mediaType: 'thumbnail',
+            src: match.image,
+            size: null,
+          })
+        }
+        // TVDB además trae el **título real** y la fecha de emisión: nuestros
+        // episodios vendían con el marcador "Episode NN" (Kitsu no publica el
+        // título de la mayoría), así que se completan aquí.
+        const title = match.name?.trim()
+        const aired = day(match.aired)
+        if (title || aired) {
+          pendingTitles.push({
+            id: oursEpisode.id,
+            title: title || null,
+            aired: aired || null,
+          })
+        }
       }
     }
 
