@@ -108,6 +108,24 @@ describe('parseMalThemes (OP/ED de la ficha de MAL)', () => {
     expect(parseMalThemes(html)[0]?.title).toBe('Real')
   })
 
+  test('layout B: el título es texto plano en la celda (series largas)', () => {
+    // One Piece: 86 OP/ED sin `<span class="theme-song-title">`.
+    const html = page(
+      `<tr><td width="8%"></td><td width="84%"><span class="theme-song-index">1:</span>&nbsp;"We Are! (ウィーアー!)"<span class="theme-song-artist"> by Hiroshi Kitadani (きただにひろし)</span>&nbsp;<span class="theme-song-episode">(eps 1-47,1000)</span><input type="hidden" id="spotify_url_85133" value="" /></td><td width="8%"></td></tr>`,
+      ''
+    )
+    const themes = parseMalThemes(html)
+    expect(themes).toHaveLength(1)
+    expect(themes[0]).toMatchObject({
+      kind: 'OP',
+      sequence: 1,
+      title: 'We Are! (ウィーアー!)',
+      artist: 'Hiroshi Kitadani (きただにひろし)',
+      episodes: 'eps 1-47,1000',
+      malSongId: 85133,
+    })
+  })
+
   test('sin temas devuelve lista vacía (no rompe)', () => {
     expect(parseMalThemes('<html><body>nada</body></html>')).toEqual([])
   })

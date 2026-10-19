@@ -225,10 +225,23 @@ export const parseMalThemes = (html: string): ParsedTheme[] => {
 
     $box.find('tr, li').each((__, row) => {
       const $row = $(row)
-      const rawTitle = $row.find('.theme-song-title').text().trim()
-      if (!rawTitle) return // filas de encabezado o temas sin datos en MAL
-
-      const title = rawTitle.replace(/^"|"$/g, '').trim()
+      // Layout A: el título va en su propio `<span class="theme-song-title">`.
+      // Layout B: el título es texto plano dentro de la celda, entre el
+      // índice y el artista (así vienen las series largas: One Piece tenía 86
+      // OP/ED y, sin este segundo layout, no se parseaba ninguno).
+      const $titleSpan = $row.find('.theme-song-title').first()
+      let title = $titleSpan.text().trim()
+      if (!title) {
+        const $clone = $row.find('td').eq(1).clone()
+        $clone
+          .find(
+            '.theme-song-index, .theme-song-artist, .theme-song-episode, input, a, script'
+          )
+          .remove()
+        title = $clone.text().trim()
+      }
+      if (!title) return // filas de encabezado o temas sin datos en MAL
+      title = title.replace(/^"|"$/g, '').trim()
       if (!title) return
 
       const rawArtist = $row.find('.theme-song-artist').text().trim()
