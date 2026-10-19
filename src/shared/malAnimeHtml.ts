@@ -108,23 +108,26 @@ export const parseMalAnimeCharacters = (html: string): ParsedMalCharacters => {
   })
 
   // --- Staff ---
+  // Cada persona es su propia `<table><tr>`: la imagen va en la primera celda
+  // (ancla sin texto) y el nombre+rol en la segunda. Se recorre por filas, no
+  // por anclas, o se toma la ancla de la imagen y la fila se descarta.
   $('h2')
     .filter((_, el) => $(el).text().trim() === 'Staff')
     .each((_, el) => {
-      // El listado vive en el `div.detail-characters-list` hermano del header
-      // (usar el contenedor padre capturaría también la sección de personajes).
       const $section = $(el).parent().next('div.detail-characters-list')
-      $section.find('a[href*="/people/"]').each((__, ael) => {
-        const $a = $(ael)
-        const malId = idFromHref($a.attr('href'), 'people')
-        if (!malId) return
-        const name = $a.text().trim()
-        if (!name) return
-        const role =
-          $a.closest('td').find('small').first().text().trim() || 'Unknown'
+      $section.find('tr').each((__, row) => {
+        const $row = $(row)
+        const $name = $row
+          .find('a[href*="/people/"]')
+          .filter((___, a) => $(a).text().trim().length > 0)
+          .first()
+        const malId = idFromHref($name.attr('href'), 'people')
+        const name = $name.text().trim()
+        if (!malId || !name) return
+
+        const role = $row.find('small').first().text().trim() || 'Unknown'
         const image = fullImage(
-          $a.closest('td').next('td').find('img').attr('data-src') ??
-            $a.closest('td').find('img').attr('data-src')
+          $row.find('img').attr('data-src') ?? $row.find('img').attr('src')
         )
 
         const existing = animeStaff.find((s) => s.malId === malId)
