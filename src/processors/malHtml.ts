@@ -3,7 +3,12 @@ import type {
   MalThemeRow,
   ScrapingTask,
 } from '../types/index.js'
-import { parseMalAnimePage, parseMalFavorites } from '../shared/malAnimeHtml.js'
+import {
+  parseMalAnimePage,
+  parseMalCompanies,
+  parseMalFavorites,
+  parseMalRelations,
+} from '../shared/malAnimeHtml.js'
 import type { ParsedTheme } from '../shared/malAnimeHtml.js'
 
 /**
@@ -74,6 +79,19 @@ export const processMalCharacters = (
   return {
     characters,
     staff,
+    // Relaciones y compañías: solo en el HTML (la API da studios sin rol y
+    // AniList no cubre todo el catálogo).
+    animeRelations: parseMalRelations(raw.html).map((r) => ({
+      animeId,
+      relationType: r.type,
+      relatedAnimeId: r.relatedMalId,
+    })),
+    animeCompanies: parseMalCompanies(raw.html).map((c) => ({
+      animeId,
+      producerId: c.malId,
+      role: c.role,
+      name: c.name,
+    })),
     // La API de MAL no da los favoritos; salen de la barra lateral del HTML.
     animeFavorites: (() => {
       const favorites = parseMalFavorites(raw.html)

@@ -309,6 +309,19 @@ export interface MalCharactersProcessorResult {
   staffMedia: { entityId: number; src: string; mediaType: string }[]
   /** Favoritos (miembros) del anime: solo en la ficha HTML. */
   animeFavorites: { animeId: number; favorites: number }[]
+  /** Relaciones tipo MAL ("Prequel", "Sequel", …): solo en la ficha HTML. */
+  animeRelations: {
+    animeId: number
+    relationType: string
+    relatedAnimeId: number
+  }[]
+  /** Compañías con rol (productora/licenciadora/estudio): solo en el HTML. */
+  animeCompanies: {
+    animeId: number
+    producerId: number
+    role: string
+    name: string
+  }[]
   /**
    * Temas OP/ED de la ficha de MAL: la fuente de canciones con más cobertura.
    * Trae el nº de tema, el rango de episodios y los enlaces/ids de tienda

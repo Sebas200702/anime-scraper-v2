@@ -2,11 +2,14 @@ import { sql } from 'drizzle-orm'
 import { db } from '../libs/db.js'
 import { anime } from '../schemas/anime.js'
 import { character } from '../schemas/character.js'
+import { producer, producerTitle } from '../schemas/producer.js'
 import { staff } from '../schemas/staff.js'
 import {
   animeCharacter,
   animeStaff,
   animeMusic,
+  animeRelatedAnime,
+  animeProducer,
 } from '../schemas/animeRelations.js'
 import { characterVoiceActor } from '../schemas/characterRelations.js'
 import { characterMedia, staffMedia } from '../schemas/media.js'
@@ -19,6 +22,7 @@ import { unique } from '../utils/deduplicate.js'
 import { normalizeText } from '../utils/normalize.js'
 import { malMusicId, normalizeSongTitle } from '../shared/malMusicIds.js'
 import { resolveArtistIds } from '../shared/artistResolver.js'
+import { filterByExistingFk } from '../shared/fkFilter.js'
 import type {
   MalCharactersProcessorResult,
   MalThemeRow,
@@ -43,6 +47,8 @@ export const malHtmlRepository = {
     const animeStaffRows = results.flatMap((r) => r.animeStaff)
     const voiceActors = results.flatMap((r) => r.characterVoiceActors)
     const favorites = results.flatMap((r) => r.animeFavorites ?? [])
+    const relations = results.flatMap((r) => r.animeRelations ?? [])
+    const companies = results.flatMap((r) => r.animeCompanies ?? [])
     const charMedia = results.flatMap((r) => r.characterMedia)
     const staffMediaRows = results.flatMap((r) => r.staffMedia)
 
@@ -62,6 +68,69 @@ export const malHtmlRepository = {
         )}) AS v(anime_id, favorites)
         WHERE a.mal_id = v.anime_id
       `)
+    }
+
+    // 0b) Relaciones de MAL + compañías con rol (solo en el HTML).
+    const uRelations = unique(
+      relations,
+      (r) => `${r.animeId}:${r.relatedAnimeId}:${r.relationType}`
+    )
+    // La junction exige que el anime relacionado esté en el catálogo.
+    const validRelations = await filterByExistingFk(
+      uRelations,
+      (r) => r.relatedAnimeId,
+      anime,
+      anime.malId,
+      false
+    )
+    if (validRelations.length > 0) {
+      await batchUpsert(
+        animeRelatedAnime,
+        validRelations.map((r) => ({
+          animeId: r.animeId,
+          relationType: r.relationType,
+          relatedAnimeId: r.relatedAnimeId,
+        })),
+        3,
+        'anime-relation'
+      )
+    }
+
+    const uCompanies = unique(
+      companies,
+      (c) => `${c.animeId}:${c.producerId}:${c.role}`
+    )
+    const uProducerIds = unique(companies, (c) => `${c.producerId}`)
+    if (uCompanies.length > 0) {
+      await batchUpsert(
+        producer,
+        uProducerIds.map((c) => ({ malId: c.producerId })),
+        1,
+        'producer'
+      )
+      await batchUpsert(
+        producerTitle,
+        unique(
+          companies.map((c) => ({
+            producerId: c.producerId,
+            type: 'Default',
+            title: c.name,
+          })),
+          (t) => `${t.producerId}:${t.title}`
+        ),
+        3,
+        'producer-title'
+      )
+      await batchUpsert(
+        animeProducer,
+        uCompanies.map((c) => ({
+          animeId: c.animeId,
+          producerId: c.producerId,
+          role: c.role,
+        })),
+        3,
+        'anime-producer'
+      )
     }
 
     // 1) Padres (los seiyuus también existen como staff).
@@ -126,6 +195,8 @@ export const malHtmlRepository = {
 
     return (
       favorites.length +
+      validRelations.length +
+      uCompanies.length +
       characters.length +
       uAnimeCharacters.length +
       uAnimeStaff.length +

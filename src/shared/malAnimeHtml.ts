@@ -282,6 +282,76 @@ export const parseMalThemes = (html: string): ParsedTheme[] => {
   return themes
 }
 
+
+/**
+ * Entradas relacionadas de MAL ("Related Entries").
+ *
+ * AniList solo publica relaciones para parte del catálogo (11.456 animes); MAL
+ * las tiene para muchos más y con el tipo ("Prequel (TV)", "Sequel", …). Cada
+ * entrada trae el tipo y el link al anime relacionado.
+ */
+export interface ParsedRelation {
+  type: string
+  relatedMalId: number
+  title: string | null
+}
+
+export const parseMalRelations = (html: string): ParsedRelation[] => {
+  const $ = cheerio.load(html)
+  const out: ParsedRelation[] = []
+  $('div.related-entries div.entry').each((_, el) => {
+    const $entry = $(el)
+    const type = $entry.find('div.relation').text().trim().split(' (')[0]?.trim()
+    const $link = $entry.find('div.title a[href*="/anime/"]').first()
+    const href = $link.attr('href')
+    const relatedMalId = Number(href?.match(/\/anime\/(\d+)/)?.[1])
+    if (!type || !Number.isInteger(relatedMalId)) return
+    out.push({ type, relatedMalId, title: $link.text().trim() || null })
+  })
+  return out
+}
+
+/**
+ * Compañías de MAL con su rol: `Producers:`, `Licensors:` y `Studios:`.
+ *
+ * MAL da el id de la compañía en el link (`/anime/producer/16/TV_Tokyo`), así
+ * que la relación `anime_producer` puede llevar id nativo y rol (la API solo
+ * devuelve los estudios).
+ */
+export interface ParsedCompany {
+  role: 'producer' | 'licensor' | 'studio'
+  malId: number
+  name: string
+}
+
+const COMPANY_ROLES: { label: string; role: ParsedCompany['role'] }[] = [
+  { label: 'Producers', role: 'producer' },
+  { label: 'Licensors', role: 'licensor' },
+  { label: 'Studios', role: 'studio' },
+]
+
+export const parseMalCompanies = (html: string): ParsedCompany[] => {
+  const $ = cheerio.load(html)
+  const out: ParsedCompany[] = []
+  for (const { label, role } of COMPANY_ROLES) {
+    $('div.spaceit_pad').each((_, el) => {
+      const $row = $(el)
+      const title = $row.find('span.dark_text').text().trim()
+      if (title !== `${label}:`) return
+      $row.find('a[href*="/anime/producer/"]').each((__, a) => {
+        const $a = $(a)
+        const malId = Number(
+          $a.attr('href')?.match(/\/anime\/producer\/(\d+)/)?.[1]
+        )
+        const name = $a.text().trim()
+        if (!Number.isInteger(malId) || !name) return
+        out.push({ role, malId, name })
+      })
+    })
+  }
+  return out
+}
+
 /**
  * `Favorites` (miembros que marcaron el anime como favorito) de la barra
  * lateral de MAL.
