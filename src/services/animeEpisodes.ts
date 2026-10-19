@@ -1,4 +1,5 @@
 import { CONFIG } from '../config/config.js'
+import { FetchError } from '../libs/fetcher.js'
 import { SkippedTaskError } from '../libs/skippedTaskError.js'
 import type { ScrapingTask } from 'types/index.js'
 import { fetcher } from '../libs/fetcher.js'
@@ -35,15 +36,26 @@ export const fetchAnimeEpisodes = async (
     await kitsuLimiter()
     const url = `${BASE}/anime/${kitsu_id}/episodes?page[limit]=${limit}&page[offset]=${offset}`
 
-    const response = await fetcher<KitsuEpisodesResponse>({
-      url,
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      agent,
-      timeoutMs: 10_000,
-    })
+    let response: KitsuEpisodesResponse
+    try {
+      response = await fetcher<KitsuEpisodesResponse>({
+        url,
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        agent,
+        timeoutMs: 10_000,
+      })
+    } catch (error) {
+      // Kitsu responde 404 cuando el anime existe pero **no tiene**
+      // episodios: no es un fallo, es "no hay datos". Sin esto la tarea
+      // quemaba sus 3 intentos y acababa en dead_letter (1.565 animes).
+      if (error instanceof FetchError && error.kind === 'not_found') {
+        throw new SkippedTaskError('kitsu:no_episodes')
+      }
+      throw error
+    }
 
     if (!response.data || response.data.length === 0) {
       break

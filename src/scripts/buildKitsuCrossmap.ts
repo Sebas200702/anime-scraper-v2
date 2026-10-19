@@ -30,6 +30,8 @@ const SITES = [
 ]
 const LIMIT = 20
 const CONCURRENCY = 8
+/** Sondas de liveness: son GET pequeños, así que caben muchas en vuelo. */
+const LIVENESS_CONCURRENCY = 32
 
 interface MappingRow {
   externalSite: string
@@ -88,7 +90,23 @@ const main = async () => {
   if (proxies.length === 0)
     throw new Error('Necesito proxies.json para el barrido')
 
+  // La fase de mappings (2.271 requests) es la cara: se guarda en disco para
+  // poder re-ejecutar solo la verificación de liveness sin repetirla.
+  const RAW = '.cache/kitsu_mappings_raw.json'
+  const reuse = process.argv.includes('--reuse-mappings')
   const byItem = new Map<string, Record<string, string>>()
+  if (reuse) {
+    try {
+      const raw = JSON.parse(await readFile(RAW, 'utf8')) as Record<
+        string,
+        Record<string, string>
+      >
+      for (const [k, v] of Object.entries(raw)) byItem.set(k, v)
+      console.log(`↻ mappings reutilizados de ${RAW} (${byItem.size} animes)`)
+    } catch {
+      console.log('· no hay mappings en caché: se recorre Kitsu entero')
+    }
+  }
   let requests = 0
   let cursor = 0
   const nextProxy = (): string =>
@@ -164,6 +182,9 @@ const main = async () => {
     }
   }
 
+  await writeFile(RAW, JSON.stringify(Object.fromEntries(byItem)))
+  console.log(`💾 mappings crudos guardados en ${RAW}`)
+
   // Verificación de liveness: Kitsu tiene mappings que apuntan a animes
   // **borrados** (`/anime/3341` → 404 con la fila de mapping aún viva), así que
   // el cruce por sí solo no basta: sin este filtro el anime quedaba con un
@@ -172,7 +193,7 @@ const main = async () => {
   const vivos = new Set<number>()
   const pendientes = [...kitsuIds]
   let probados = 0
-  const verificadores = Array.from({ length: CONCURRENCY }, async () => {
+  const verificadores = Array.from({ length: LIVENESS_CONCURRENCY }, async () => {
     while (pendientes.length > 0) {
       const id = pendientes.shift() as number
       for (let attempt = 1; attempt <= 3; attempt++) {
@@ -182,7 +203,10 @@ const main = async () => {
             method: 'GET',
             headers: { Accept: 'application/vnd.api+json' },
             agent: nextProxy(),
-            timeoutMs: 15_000,
+            timeoutMs: 8_000,
+            // 1 intento: una sonda que falla se descarta; los reintentos
+            // multiplicaban por 3 el tiempo de la pasada (83/min → 4 h).
+            retry: { maxAttempts: 1 },
           })
           vivos.add(id)
           break
