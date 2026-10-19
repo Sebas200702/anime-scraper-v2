@@ -12,7 +12,7 @@ import type { ScrapingTask } from 'types/index.js'
  * trae su retrato en `og:image`, con la URL completa (sin el prefijo de
  * reescalado `/r/WxH`).
  */
-export const fetchMalPersonImage = async (
+export const fetchMalPeople = async (
   task: ScrapingTask,
   proxy?: ProxyTarget
 ): Promise<{ html: string; staffId: number }> => {

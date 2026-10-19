@@ -8,7 +8,7 @@ import type { MalPeopleProcessorResult, ScrapingTask } from '../types/index.js'
  */
 const OG_IMAGE = /<meta\s+property="og:image"\s+content="([^"]+)"/i
 
-export const processMalPersonImage = (
+export const processMalPeople = (
   raw: { html: string; staffId: number },
   _task: ScrapingTask
 ): MalPeopleProcessorResult => {

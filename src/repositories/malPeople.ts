@@ -7,7 +7,7 @@ import type { MalPeopleProcessorResult } from '../types/index.js'
  * Idempotente: la identidad natural es `(staff_id, media_type, src)`.
  */
 export const malPeopleRepository = {
-  async saveMalPersonImage(
+  async saveMalPeople(
     results: MalPeopleProcessorResult[]
   ): Promise<number> {
     const media = results
