@@ -124,6 +124,21 @@ SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev tvdbSeriesArtworks
 
 **Clasificación de taxonomía**: la API v2 colapsa géneros+temas+demográficas en `genres`. El mapa autoritativo se lee de la barra lateral (`Genres:`/`Theme:`/`Demographic:`) con `bun run taxonomy:build` y se guarda en `shared/malTaxonomy.ts`; `bun run taxonomy:reclassify` corrige lo ya guardado sin refetch.
 
+
+### Música: metadatos de MAL + archivos de AnimeThemes
+| Capa | Fuente | Qué aporta | Cobertura |
+|---|---|---|---|
+| Índice | `malHtml` (la ficha HTML que ya se descarga) | OP/ED: nº de tema, título, artista, rango de episodios y enlaces/ids de Spotify/Apple/Amazon | todo el catálogo |
+| Metadatos | `animeThemes` | nº de versión, vídeos por resolución | 5.013 anime |
+| Archivos | `animeThemes` (`v.`/`a.animethemes.moe`) | **webm y ogg completos**, reproducibles por el proxy de `/media/music/{id}/{video\|audio}` | los que AnimeThemes tiene |
+
+**Reglas**
+- **MAL manda en el índice, AnimeThemes en el archivo.** Si el anime ya tiene la canción (mismo tipo y título normalizado), los metadatos de MAL se **anexan** a esa fila y se conserva su vídeo/audio; si no, se crea la fila con id reservado de MAL y queda **sin media** (hueco a cubrir con otra fuente).
+- Normalización de títulos (`shared/malMusicIds.ts`): sin grupos entre paréntesis (el título japonés de MAL), sin espacios ni puntuación y en minúsculas. Sin esto, `Nagare Boshi ~Shooting Star~ (流れ星〜…)` (MAL) y `Nagareboshi ~Shooting Star~` (AnimeThemes) se contaban como canciones distintas y se duplicaban.
+- Tramos de ids reservados (`MAL_MUSIC_ID_BASE` 1e9, `MAL_VERSION_ID_BASE` 1.1e9, `MAL_SONG_ID_BASE` 1.2e9): `music.id`, `music_version.version_id` y `music_resolution.song_id` son enteros y las fuentes los usan con espacios distintos; sin separarlos, una canción de MAL pisaría una fila de AnimeThemes.
+- **Reproducción**: la app proxya bytes (`/media/music/{id}/video|audio`) con allowlist de MIME y `Range`; solo puede servir **archivos directos**. Las URLs de animeThemes son `https://v.animethemes.moe/{video.webm}` y `https://a.animethemes.moe/{audio.ogg}` (antes apuntaban a `animethemes.moe/{audio,video}/…` y el audio daba **404 en todas las filas**).
+- `music_stream` guarda los enlaces de tienda por canción (provider, url, external_id, country): es la llave para localizar el audio completo cuando haya otra fuente.
+
 ### Notas de operación (lo que costó sangre)
 - **El trial no corta a 10 conexiones**: medido 30→100% ok, 60→92%, 100→86-95%. Pero **varias instancias del backfill a la vez sí lo tumban** (cada una abre su propio cupo): correr siempre **una** instancia.
 - Correr bajo **systemd user** (`anime-backfill.service`), no en el shell del agente: el shell mata los procesos hijos al terminar y los leases quedan vivos.
