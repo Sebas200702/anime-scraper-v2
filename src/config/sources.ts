@@ -175,7 +175,9 @@ const BACKFILL_PROFILES: Record<
   },
   anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
   mal: { maxWorkers: 8, rateLimit: { perSecond: 2, perMinute: 120 } },
-  malHtml: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
+  // 30 en vuelo: el presupuesto de conexiones por fuente es 30 y la
+  // latencia (no el ancho de banda) es lo que manda en estas fichas.
+  malHtml: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 40 } },
   malPeople: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
 }
 
