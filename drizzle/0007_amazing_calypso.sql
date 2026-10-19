@@ -1,0 +1,1 @@
+ALTER TABLE "anime_external_ids" ADD COLUMN "ann_id" integer;

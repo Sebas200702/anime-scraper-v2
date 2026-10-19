@@ -121,6 +121,19 @@ export const SOURCES: SourceConfig[] = [
     },
   },
   {
+    name: 'ann',
+    // Enciclopedia de Anime News Network: OP/ED con nº de tema, artista y rango
+    // de episodios (dato que ni MAL ni AnimeThemes dan completos). El id de
+    // ANN llega del dump offline, así que el emparejamiento es exacto.
+    maxWorkers: 20,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 1, perMinute: 40 },
+    tasks: {
+      ann_themes_hydration: { entity: 'annThemes', needsPayload: true },
+    },
+  },
+  {
     name: 'malPeople',
     // Fichas de persona (HTML): solo para las que no tienen retrato.
     maxWorkers: 8,
@@ -171,7 +184,10 @@ const BACKFILL_PROFILES: Record<
   animeEpisodes: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 50 } },
   tvdbSeriesArtworks: {
     maxWorkers: 10,
-    rateLimit: { perSecond: 1, perMinute: 40 },
+    // La clave aguanta ~16 req/s (medido: 60 búsquedas en 3,7 s sin un 429),
+    // así que el tope conservative de 40/min dejaba los 3.000 artworks nuevos
+    // en 75 min.
+    rateLimit: { perSecond: 2, perMinute: 120 },
   },
   anilist: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 25 } },
   // 20 en vuelo: la cuota de MAL es por IP y hay 30 proxies.
@@ -180,6 +196,7 @@ const BACKFILL_PROFILES: Record<
   // latencia (no el ancho de banda) es lo que manda en estas fichas.
   malHtml: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 40 } },
   malPeople: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
+  ann: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
 }
 
 /**
@@ -256,6 +273,10 @@ export const SOURCE_HOSTS: Record<
   },
   malHtml: {
     host: 'myanimelist.net',
+    limits: { perSecond: 1, perMinute: 40 },
+  },
+  ann: {
+    host: 'www.animenewsnetwork.com',
     limits: { perSecond: 1, perMinute: 40 },
   },
   malPeople: {

@@ -353,6 +353,22 @@ export interface MalThemeRow {
   }[]
 }
 
+/** Resultado de la fuente `ann` (OP/ED de la enciclopedia de ANN). */
+export interface AnnProcessorResult {
+  themes: {
+    annId: number
+    animeId: number
+    kind: 'OP' | 'ED'
+    sequence: number | null
+    title: string
+    artist: string | null
+    variant: string | null
+    episodes: string | null
+  }[]
+  /** La ficha declarada otro anime: se descarta. */
+  mismatched: boolean
+}
+
 /** Resultado de la fuente `malPeople` (retrato de una persona de MAL). */
 export interface MalPeopleProcessorResult {
   staffMedia: { entityId: number; src: string; mediaType: string }[]

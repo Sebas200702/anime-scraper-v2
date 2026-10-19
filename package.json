@@ -27,6 +27,11 @@
     "taxonomy:reclassify": "bun src/scripts/reclassifyMalTaxonomy.ts",
     "taxonomy:cleanup": "bun src/scripts/cleanupMisclassifiedGenres.ts",
     "kitsu:crossmap": "bun src/scripts/buildKitsuCrossmap.ts",
+    "ann:seed-ids": "bun src/scripts/seedAnnIds.ts",
+    "artists:match-staff": "bun src/scripts/matchArtistsToStaff.ts",
+    "artists:merge-duplicates": "bun src/scripts/mergeDuplicateArtists.ts",
+    "tvdb:seed-ids": "bun src/scripts/seedTvdbIds.ts",
+    "episodes:fill-from-mal": "bun src/scripts/fillEpisodesFromMal.ts",
     "music:fix-urls": "bun src/scripts/fixAnimeThemesUrls.ts",
     "mappings:repair": "bun src/scripts/repairAnimeMappings.ts"
   },
