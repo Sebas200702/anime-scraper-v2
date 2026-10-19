@@ -32,6 +32,7 @@
     "artists:merge-duplicates": "bun src/scripts/mergeDuplicateArtists.ts",
     "tvdb:seed-ids": "bun src/scripts/seedTvdbIds.ts",
     "tmdb:seed-ids": "bun src/scripts/seedTmdbIds.ts",
+    "anilist:seed-ids": "bun src/scripts/seedAnilistIds.ts",
     "episodes:fill-from-mal": "bun src/scripts/fillEpisodesFromMal.ts",
     "music:fix-urls": "bun src/scripts/fixAnimeThemesUrls.ts",
     "mappings:repair": "bun src/scripts/repairAnimeMappings.ts"

@@ -358,6 +358,8 @@ export interface TmdbProcessorResult {
   animeId: number
   backdrops: { src: string; lang: string | null }[]
   stills: { number: number; src: string }[]
+  /** Episodios con su título y fecha (rellenan los "Episode NN"). */
+  episodes: { number: number; title: string | null; aired: string | null }[]
   seriesName: string | null
 }
 

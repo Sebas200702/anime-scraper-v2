@@ -109,45 +109,71 @@ export const searchTmdbSeries = async (
     }))
 }
 
-/** Ficha de la serie: temporadas con su número de episodios. */
+/**
+ * Ficha de la serie: temporadas con su número de episodios.
+ *
+ * En TMDB las **películas** cuelgan de `/movie/{id}` (no de `/tv/{id}`): nuestro
+ * catálogo tiene 5.060 películas, así que se prueban las dos rutas y se guarda con
+ * cuál respondió.
+ */
 export const fetchTmdbSeries = async (
   tmdbId: number,
   proxy?: ProxyTarget
-): Promise<{ series: TmdbSeries; seasons: TmdbSeason[] }> => {
+): Promise<{
+  series: TmdbSeries
+  seasons: TmdbSeason[]
+  mediaType: 'tv' | 'movie'
+}> => {
   const key = tmdbApiKey()
   if (!key) throw new SkippedTaskError('missing:TMDB_API_KEY')
-  const response = await fetcher<{ data?: TmdbSeries }>({
-    url: `${TMDB_BASE}/tv/${tmdbId}?api_key=${encodeURIComponent(key)}&language=en-US`,
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-    agent: proxy,
-  })
-  const data = response.data
-  return {
-    series: data ?? { id: tmdbId },
-    seasons: (data?.seasons ?? []).filter((s) => s.season_number > 0),
+
+  for (const mediaType of ['tv', 'movie'] as const) {
+    try {
+      // Ojo: en la API **v3** el objeto viene en la raíz (el envoltorio
+      // `{ data: ... }` es de la v4).
+      const response = await fetcher<TmdbSeries & { status_message?: string }>({
+        url: `${TMDB_BASE}/${mediaType}/${tmdbId}?api_key=${encodeURIComponent(key)}&language=en-US`,
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        agent: proxy,
+      })
+      if (response?.id && !response.status_message) {
+        return {
+          series: response,
+          seasons: (response.seasons ?? []).filter((s) => s.season_number > 0),
+          mediaType,
+        }
+      }
+    } catch (error) {
+      // 404 en /tv/ → probar /movie/; si no,rethrow.
+      if (!(error instanceof Error) || !/404/.test(error.message)) throw error
+    }
   }
+  throw new Error(`TMDB: ${tmdbId} no existe ni como serie ni como película`)
 }
 
 /** Imágenes de la serie: backdrops (banner) y posters. */
 export const fetchTmdbSeriesImages = async (
   tmdbId: number,
-  proxy?: ProxyTarget
+  proxy?: ProxyTarget,
+  mediaType: 'tv' | 'movie' = 'tv'
 ): Promise<{ backdrops: TmdbImage[]; posters: TmdbImage[] }> => {
   const key = tmdbApiKey()
   if (!key) throw new SkippedTaskError('missing:TMDB_API_KEY')
   const response = await fetcher<{
+    id?: number
     backdrops?: TmdbImage[]
     posters?: TmdbImage[]
+    status_message?: string
   }>({
-    url: `${TMDB_BASE}/tv/${tmdbId}/images?api_key=${encodeURIComponent(key)}&include_image_language=en,null`,
+    url: `${TMDB_BASE}/${mediaType}/${tmdbId}/images?api_key=${encodeURIComponent(key)}&include_image_language=en,null`,
     method: 'GET',
     headers: { Accept: 'application/json' },
     agent: proxy,
   })
   return {
-    backdrops: response.backdrops ?? [],
-    posters: response.posters ?? [],
+    backdrops: response?.backdrops ?? [],
+    posters: response?.posters ?? [],
   }
 }
 
@@ -155,19 +181,151 @@ export const fetchTmdbSeriesImages = async (
 export const fetchTmdbSeasonStills = async (
   tmdbId: number,
   seasonNumber: number,
-  proxy?: ProxyTarget
+  proxy?: ProxyTarget,
+  mediaType: 'tv' | 'movie' = 'tv'
 ): Promise<TmdbStill[]> => {
   const key = tmdbApiKey()
   if (!key) throw new SkippedTaskError('missing:TMDB_API_KEY')
-  const response = await fetcher<{ stills?: TmdbStill[] }>({
+  const response = await fetcher<{ stills?: TmdbStill[]; status_message?: string }>({
     url:
-      `${TMDB_BASE}/tv/${tmdbId}/season/${seasonNumber}/images` +
+      `${TMDB_BASE}/${mediaType}/${tmdbId}/season/${seasonNumber}/images` +
       `?api_key=${encodeURIComponent(key)}&include_image_language=en,null`,
     method: 'GET',
     headers: { Accept: 'application/json' },
     agent: proxy,
   })
   return response.stills ?? []
+}
+
+/**
+ * Datos de imágenes de una serie de TMDB: temporadas, backdrops y stills.
+ *
+ * El nombre importa: el `GenericManager` resuelve la función del servicio por
+ * convención (`fetch<Entity>`), con `entity: 'tmdbImages'`.
+ */
+export const fetchTmdbImages = async (
+  task: ScrapingTask,
+  proxy?: ProxyTarget
+): Promise<{
+  animeId: number
+  tmdbId: number
+  seriesName: string | null
+  seasons: TmdbSeason[]
+  backdrops: TmdbImage[]
+  stills: TmdbStill[]
+  episodes: TmdbEpisode[]
+}> => {
+  const { animeId, tmdbId } = task.payload as {
+    animeId?: number
+    tmdbId?: number
+  }
+  if (!animeId || !tmdbId) {
+    throw new SkippedTaskError('missing:tmdbId')
+  }
+
+  const { series, seasons, mediaType } = await fetchTmdbSeries(tmdbId, proxy)
+  const images = await fetchTmdbSeriesImages(tmdbId, proxy, mediaType)
+
+  const stills: TmdbStill[] = []
+  const episodes: TmdbEpisode[] = []
+  if (mediaType === 'tv') {
+    for (const season of seasons.sort(
+      (a, b) => a.season_number - b.season_number
+    )) {
+      stills.push(
+        ...(await fetchTmdbSeasonStills(
+          tmdbId,
+          season.season_number,
+          proxy,
+          mediaType
+        ))
+      )
+      episodes.push(
+        ...(await fetchTmdbSeasonEpisodes(
+          tmdbId,
+          season.season_number,
+          proxy,
+          mediaType
+        ))
+      )
+    }
+  }
+
+  return {
+    animeId,
+    tmdbId,
+    seriesName: series.name ?? null,
+    seasons,
+    backdrops: images.backdrops,
+    stills,
+    episodes,
+  }
+}
+
+/**
+ * Stills de **un episodio** (`/season/{n}/episode/{m}/images`).
+ *
+ * El endpoint de temporada devuelve los *posters* de la temporada (no los
+ * fotogramas de cada capitulo): para las miniaturas de episodio hay que pedir
+ * capitulo a capitulo, y de ahi que devuelva varias versiones (`stills`) de las
+ * que se elige la mejor valorada.
+ */
+export const fetchTmdbEpisodeStills = async (
+  tmdbId: number,
+  seasonNumber: number,
+  episodeNumber: number,
+  proxy?: ProxyTarget,
+  mediaType: 'tv' | 'movie' = 'tv'
+): Promise<TmdbStill[]> => {
+  const key = tmdbApiKey()
+  if (!key) throw new SkippedTaskError('missing:TMDB_API_KEY')
+  const response = await fetcher<{
+    stills?: TmdbStill[]
+    status_message?: string
+  }>({
+    url:
+      `${TMDB_BASE}/${mediaType}/${tmdbId}/season/${seasonNumber}` +
+      `/episode/${episodeNumber}/images` +
+      `?api_key=${encodeURIComponent(key)}&include_image_language=en,null`,
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    agent: proxy,
+  })
+  return response?.stills ?? []
+}
+
+/** Episodios de una temporada: número, nombre y fecha de emisión. */
+export interface TmdbEpisode {
+  id: number
+  episode_number: number | null
+  season_number: number | null
+  name: string | null
+  air_date: string | null
+  overview?: string | null
+  runtime?: number | null
+  still_path?: string | null
+}
+
+export const fetchTmdbSeasonEpisodes = async (
+  tmdbId: number,
+  seasonNumber: number,
+  proxy?: ProxyTarget,
+  mediaType: 'tv' | 'movie' = 'tv'
+): Promise<TmdbEpisode[]> => {
+  const key = tmdbApiKey()
+  if (!key) throw new SkippedTaskError('missing:TMDB_API_KEY')
+  const response = await fetcher<{
+    episodes?: TmdbEpisode[]
+    status_message?: string
+  }>({
+    url:
+      `${TMDB_BASE}/${mediaType}/${tmdbId}/season/${seasonNumber}` +
+      `?api_key=${encodeURIComponent(key)}&language=en-US`,
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    agent: proxy,
+  })
+  return response?.episodes ?? []
 }
 
 export { imageUrl as tmdbImageUrl, CONFIG as tmdbConfig }

@@ -124,10 +124,10 @@ export const SOURCES: SourceConfig[] = [
     name: 'tmdb',
     // Backdrops (banner) y stills (miniatura de episodio con `episode_number`).
     // Requiere TMDB_API_KEY; sin key no se siembra nada.
-    maxWorkers: 10,
+    maxWorkers: 20,
     pageBatch: 50,
     taskBatchSize: 200,
-    rateLimit: { perSecond: 2, perMinute: 120 },
+    rateLimit: { perSecond: 10, perMinute: 600 },
     tasks: {
       tmdb_images_hydration: { entity: 'tmdbImages', needsPayload: true },
     },
@@ -310,8 +310,10 @@ export const SOURCE_HOSTS: Record<
     limits: { perSecond: 3, perMinute: 150 },
   },
   tmdb: {
+    // TMDB aguanta ~40 req/s con la key; con 10/s las 7.100 series (3
+    // peticiones cada una) entran en ~40 min.
     host: 'api.themoviedb.org',
-    limits: { perSecond: 2, perMinute: 120 },
+    limits: { perSecond: 10, perMinute: 600 },
   },
   malPeople: {
     host: 'myanimelist.net',
@@ -333,7 +335,12 @@ export const SOURCE_HOSTS: Record<
  * MAL **no** va aquí: su throttle es por IP (verificado: se satura en directo y
  * responde bien por proxy), así que se reparte entre IPs como Kitsu/AniList.
  */
-export const SINGLE_IP_SOURCES = new Set(['tvdbSeriesArtworks'])
+export const SINGLE_IP_SOURCES = new Set([
+  'tvdbSeriesArtworks',
+  // TMDB: la cuota es de la API key, no de la IP, y los proxies no llegan a
+  // api.themoviedb.org (fallan con error de red). Va directo.
+  'tmdb',
+])
 
 /**
  * Hosts cuya cuota es **por API key**: el gate los trata como una sola clave
@@ -348,7 +355,11 @@ export const SINGLE_IP_SOURCES = new Set(['tvdbSeriesArtworks'])
  * límite es por IP). Contarlo como global limitaba la fuente a 2 req/s
  * (30.561 fichas = 4,2 h) cuando con los proxies da ~20 req/s (~25 min).
  */
-export const KEY_SCOPED_HOSTS = new Set(['api4.thetvdb.com'])
+export const KEY_SCOPED_HOSTS = new Set([
+  'api4.thetvdb.com',
+  // La cuota de TMDB es de la API key: el gate la cuenta como una sola clave.
+  'api.themoviedb.org',
+])
 
 export function getSourceConfig(sourceName: string) {
   const config = SOURCES.find((s) => s.name === sourceName)

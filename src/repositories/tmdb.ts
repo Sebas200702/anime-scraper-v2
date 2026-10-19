@@ -11,6 +11,17 @@ import type { TmdbProcessorResult } from '../types/index.js'
  * `episode_number` de TMDB más el desplazamiento de las temporadas anteriores
  * es la numeración de MAL. Si no existe ese episodio, la imagen se descarta.
  */
+/** Agrupa por anime (para no repetir la consulta de episodios por bloque). */
+const groupByAnime = <T extends { animeId: number }>(
+  items: T[]
+): Map<number, T[]> => {
+  const map = new Map<number, T[]>()
+  for (const item of items) {
+    map.set(item.animeId, [...(map.get(item.animeId) ?? []), item])
+  }
+  return map
+}
+
 export const tmdbRepository = {
   async saveTmdbImages(results: TmdbProcessorResult[]): Promise<number> {
     if (results.length === 0) return 0
@@ -67,6 +78,46 @@ export const tmdbRepository = {
           size: null,
         })
       }
+    }
+
+    // Títulos y fechas de los episodios (rellenan los "Episode NN").
+    const episodeInfo = results.flatMap((r) =>
+      r.episodes.map((e) => ({
+        animeId: r.animeId,
+        number: e.number,
+        title: e.title,
+        aired: e.aired,
+      }))
+    )
+    for (const [animeId, items] of groupByAnime(episodeInfo)) {
+      const rows = await db.execute(sql`
+        SELECT id, number FROM episode WHERE anime_id = ${animeId}
+      `)
+      const byNumber = new Map(
+        (rows.rows as unknown as { id: number; number: number }[]).map((r) => [
+          r.number,
+          r.id,
+        ])
+      )
+      const values = items
+        .map((item) => {
+          const id = byNumber.get(item.number)
+          if (!id) return null
+          return `(${id}::int, ${item.title ?? null}::text, ${item.aired ?? null}::text)`
+        })
+        .filter((v): v is string => v !== null)
+      if (values.length === 0) continue
+      await db.execute(sql`
+        UPDATE episode e
+        SET title = COALESCE(
+              NULLIF(e.title, ''),
+              NULLIF(e.title, 'Episode ' || lpad(e.number::text, 2, '0')),
+              v.title
+            ),
+            aired = COALESCE(NULLIF(e.aired, ''), v.aired)
+        FROM (VALUES ${sql.join(values, sql`, `)}) AS v(id, title, aired)
+        WHERE e.id = v.id
+      `)
     }
 
     const animeSaved = await mediaRepository.saveMedia(

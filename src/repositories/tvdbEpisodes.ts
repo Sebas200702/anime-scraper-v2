@@ -83,6 +83,13 @@ export const tvdbEpisodesRepository = {
       size: null
     }[] = []
 
+    // Títulos/fechas que completan los episodios con marcador "Episode NN".
+    const pendingTitles: {
+      id: number
+      title: string | null
+      aired: string | null
+    }[] = []
+
     for (const result of results) {
       const ourEpisodes = ours.get(result.animeId) ?? []
       if (ourEpisodes.length === 0) continue
@@ -125,6 +132,28 @@ export const tvdbEpisodesRepository = {
           size: null,
         })
       }
+    }
+
+    // Títulos y fechas: solo se rellenan los que están vacíos o son el
+    // marcador "Episode NN" (nunca se pisa un título real).
+    for (const batch of chunk(pendingTitles, 500)) {
+      await db.execute(sql`
+        UPDATE episode e
+        SET title = COALESCE(
+              NULLIF(e.title, ''),
+              NULLIF(e.title, 'Episode ' || lpad(e.number::text, 2, '0')),
+              v.title
+            ),
+            aired = COALESCE(NULLIF(e.aired, ''), v.aired)
+        FROM (VALUES ${sql.join(
+          batch.map(
+            (t) =>
+              sql`(${t.id}::int, ${t.title ?? null}::text, ${t.aired ?? null}::text)`
+          ),
+          sql`, `
+        )}) AS v(id, title, aired)
+        WHERE e.id = v.id
+      `)
     }
 
     if (media.length === 0) return 0
