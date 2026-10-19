@@ -35,6 +35,8 @@ export const animeMusic = pgTable(
     musicId: integer('music_id')
       .references(() => music.id, { onDelete: 'cascade' })
       .notNull(),
+    sequence: integer('sequence'),
+    episodes: text('episodes'),
   },
   (t) => [primaryKey({ columns: [t.animeId, t.musicId] })]
 )

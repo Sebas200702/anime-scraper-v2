@@ -307,6 +307,29 @@ export interface MalCharactersProcessorResult {
   voiceActorStaff: { malId: number; name: string }[]
   characterMedia: { entityId: number; src: string; mediaType: string }[]
   staffMedia: { entityId: number; src: string; mediaType: string }[]
+  /**
+   * Temas OP/ED de la ficha de MAL: la fuente de canciones con más cobertura.
+   * Trae el nº de tema, el rango de episodios y los enlaces/ids de tienda
+   * (Spotify/Apple/Amazon) que después permiten localizar el audio completo.
+   */
+  themes: MalThemeRow[]
+}
+
+/** Un OP/ED tal cual lo publica MAL, listo para persistir. */
+export interface MalThemeRow {
+  animeId: number
+  kind: 'OP' | 'ED'
+  sequence: number | null
+  title: string
+  artist: string | null
+  malSongId: number | null
+  episodes: string | null
+  streams: {
+    provider: string
+    url: string
+    externalId: string | null
+    country: string | null
+  }[]
 }
 
 /** Resultado de la fuente `malPeople` (retrato de una persona de MAL). */

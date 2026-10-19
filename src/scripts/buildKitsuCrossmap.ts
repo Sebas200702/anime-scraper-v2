@@ -14,7 +14,7 @@
  * búsquedas difusas y en minutos.
  *
  * Uso:
- *   bun run kitsu:crossmap            → /tmp/opencode/kitsu_crossmap.json
+ *   bun run kitsu:crossmap            → .cache/kitsu_crossmap.json
  *   bun run kitsu:crossmap --out x.json
  */
 import { readFile, writeFile } from 'node:fs/promises'
@@ -41,9 +41,11 @@ interface MappingRow {
 }
 
 const outIdx = process.argv.indexOf('--out')
+// `.cache/` (durable, gitignored): `/tmp` se borra entre reinicios y este
+// archivo es la entrada de `mappings:repair`.
 const OUT: string =
   (outIdx > -1 ? process.argv[outIdx + 1] : undefined) ??
-  '/tmp/opencode/kitsu_crossmap.json'
+  '.cache/kitsu_crossmap.json'
 
 const loadProxies = async (): Promise<string[]> => {
   try {

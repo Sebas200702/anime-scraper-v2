@@ -122,6 +122,13 @@ export const PROMOTION_PLAN: PromotionPlan[] = [
     strategy: 'insert-missing',
     key: ['music_id', 'media_type', 'src'],
   },
+  // Enlaces a tiendas por canción (Spotify/Apple/Amazon). Identidad
+  // `(music_id, provider)`: la misma canción se lista una vez por tienda.
+  {
+    table: 'music_stream',
+    strategy: 'upsert',
+    key: ['music_id', 'provider'],
+  },
 
   // 6. Episodios (id surrogate: se remapea por (anime_id, number))
   {

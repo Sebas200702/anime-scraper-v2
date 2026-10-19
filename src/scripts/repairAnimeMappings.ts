@@ -24,8 +24,8 @@ import { taskRepository } from '../repositories/tasks.js'
 import { decideMapping } from '../shared/mappingRepair.js'
 
 const APPLY = process.argv.includes('--apply')
-const CROSSMAP = '/tmp/opencode/kitsu_crossmap.json'
-const DUMP = '/tmp/opencode/dump_mal_kitsu.json'
+const CROSSMAP = '.cache/kitsu_crossmap.json'
+const DUMP = '.cache/dump_mal_kitsu.json'
 
 interface Crossmap {
   byMal: Record<

@@ -36,6 +36,20 @@
       "when": 1792375015431,
       "tag": "0004_productive_zarek",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792418623188,
+      "tag": "0005_curvy_nekra",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792418643865,
+      "tag": "0006_daily_domino",
+      "breakpoints": true
     }
   ]
 }
