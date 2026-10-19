@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from '../libs/db.js'
+import { anime } from '../schemas/anime.js'
 import { character } from '../schemas/character.js'
 import { staff } from '../schemas/staff.js'
 import {
@@ -41,8 +42,27 @@ export const malHtmlRepository = {
     const animeCharacters = results.flatMap((r) => r.animeCharacters)
     const animeStaffRows = results.flatMap((r) => r.animeStaff)
     const voiceActors = results.flatMap((r) => r.characterVoiceActors)
+    const favorites = results.flatMap((r) => r.animeFavorites ?? [])
     const charMedia = results.flatMap((r) => r.characterMedia)
     const staffMediaRows = results.flatMap((r) => r.staffMedia)
+
+    // 0) Favoritos del anime (solo en la ficha HTML: la API no los da).
+    for (const batch of chunk(
+      unique(favorites, (f) => `${f.animeId}`),
+      500
+    )) {
+      await db.execute(sql`
+        UPDATE anime a
+        SET favorites = v.favorites
+        FROM (VALUES ${sql.join(
+          batch.map(
+            (f) => sql`(${f.animeId}::int, ${f.favorites}::int)`
+          ),
+          sql`, `
+        )}) AS v(anime_id, favorites)
+        WHERE a.mal_id = v.anime_id
+      `)
+    }
 
     // 1) Padres (los seiyuus también existen como staff).
     await batchUpsert(
@@ -105,6 +125,7 @@ export const malHtmlRepository = {
     }
 
     return (
+      favorites.length +
       characters.length +
       uAnimeCharacters.length +
       uAnimeStaff.length +

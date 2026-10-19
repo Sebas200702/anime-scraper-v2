@@ -3,7 +3,7 @@ import type {
   MalThemeRow,
   ScrapingTask,
 } from '../types/index.js'
-import { parseMalAnimePage } from '../shared/malAnimeHtml.js'
+import { parseMalAnimePage, parseMalFavorites } from '../shared/malAnimeHtml.js'
 import type { ParsedTheme } from '../shared/malAnimeHtml.js'
 
 /**
@@ -74,6 +74,11 @@ export const processMalCharacters = (
   return {
     characters,
     staff,
+    // La API de MAL no da los favoritos; salen de la barra lateral del HTML.
+    animeFavorites: (() => {
+      const favorites = parseMalFavorites(raw.html)
+      return favorites === null ? [] : [{ animeId, favorites }]
+    })(),
     themes: themes
       .filter((theme) => theme.malSongId !== null)
       .map((theme) => ({

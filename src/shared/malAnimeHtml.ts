@@ -282,6 +282,22 @@ export const parseMalThemes = (html: string): ParsedTheme[] => {
   return themes
 }
 
+/**
+ * `Favorites` (miembros que marcaron el anime como favorito) de la barra
+ * lateral de MAL.
+ *
+ * La API oficial **no** expone este dato (solo `num_list_users` = members), y
+ * la app lo publica en el detalle del anime (`anime.favourites`), así que sale
+ * de la ficha HTML: `Popularity: #9  Members: 3,170,632  Favorites: 88,028`.
+ */
+export const parseMalFavorites = (html: string): number | null => {
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+  const match = text.match(/Favorites:\s*([0-9][0-9,]*)/)
+  if (!match?.[1]) return null
+  const value = Number(match[1].replace(/,/g, ''))
+  return Number.isFinite(value) ? value : null
+}
+
 /** Personajes, staff y temas musicales de una ficha de anime. */
 export const parseMalAnimePage = (html: string): ParsedMalAnime => ({
   ...parseMalAnimeCharacters(html),
