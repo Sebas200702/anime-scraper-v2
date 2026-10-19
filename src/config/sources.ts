@@ -121,6 +121,30 @@ export const SOURCES: SourceConfig[] = [
     },
   },
   {
+    name: 'tmdb',
+    // Backdrops (banner) y stills (miniatura de episodio con `episode_number`).
+    // Requiere TMDB_API_KEY; sin key no se siembra nada.
+    maxWorkers: 10,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 2, perMinute: 120 },
+    tasks: {
+      tmdb_images_hydration: { entity: 'tmdbImages', needsPayload: true },
+    },
+  },
+  {
+    name: 'tvdbEpisodes',
+    // Imágenes de cada episodio: TVDB las publica y Kitsu no. El mapeo a
+    // nuestra numeración se verifica (recuento + fecha + título).
+    maxWorkers: 10,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 2, perMinute: 120 },
+    tasks: {
+      tvdb_episodes_hydration: { entity: 'tvdbEpisodes', needsPayload: true },
+    },
+  },
+  {
     name: 'ann',
     // Enciclopedia de Anime News Network: OP/ED con nº de tema, artista y rango
     // de episodios (dato que ni MAL ni AnimeThemes dan completos). El id de
@@ -197,6 +221,8 @@ const BACKFILL_PROFILES: Record<
   malHtml: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 40 } },
   malPeople: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
   ann: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
+  tvdbEpisodes: { maxWorkers: 10, rateLimit: { perSecond: 2, perMinute: 120 } },
+  tmdb: { maxWorkers: 10, rateLimit: { perSecond: 2, perMinute: 120 } },
 }
 
 /**
@@ -278,6 +304,14 @@ export const SOURCE_HOSTS: Record<
   ann: {
     host: 'www.animenewsnetwork.com',
     limits: { perSecond: 1, perMinute: 40 },
+  },
+  tvdbEpisodes: {
+    host: 'api4.thetvdb.com',
+    limits: { perSecond: 3, perMinute: 150 },
+  },
+  tmdb: {
+    host: 'api.themoviedb.org',
+    limits: { perSecond: 2, perMinute: 120 },
   },
   malPeople: {
     host: 'myanimelist.net',

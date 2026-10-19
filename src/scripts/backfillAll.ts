@@ -24,6 +24,8 @@ import { initializeMalDetailsTasks } from '../scripts/initializeMalDetailsTasks.
 import { initializeMalHtmlTasks } from '../scripts/initializeMalHtmlTasks.js'
 import { initializeMalPeopleTasks } from '../scripts/initializeMalPeopleTasks.js'
 import { initializeAnnTasks } from '../scripts/initializeAnnTasks.js'
+import { initializeTvdbEpisodesTasks } from '../scripts/initializeTvdbEpisodesTasks.js'
+import { initializeTmdbTasks } from '../scripts/initializeTmdbTasks.js'
 
 const INITIALIZERS: Record<string, () => Promise<void>> = {
   jikan: initializeTasks,
@@ -37,6 +39,8 @@ const INITIALIZERS: Record<string, () => Promise<void>> = {
   malHtml: initializeMalHtmlTasks,
   malPeople: initializeMalPeopleTasks,
   ann: initializeAnnTasks,
+  tvdbEpisodes: initializeTvdbEpisodesTasks,
+  tmdb: initializeTmdbTasks,
 }
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'))

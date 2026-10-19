@@ -353,6 +353,26 @@ export interface MalThemeRow {
   }[]
 }
 
+/** Resultado de la fuente `tmdb` (banner y miniaturas de episodio de TMDB). */
+export interface TmdbProcessorResult {
+  animeId: number
+  backdrops: { src: string; lang: string | null }[]
+  stills: { number: number; src: string }[]
+  seriesName: string | null
+}
+
+/** Resultado de la fuente `tvdbEpisodes` (miniaturas de episodio de TVDB). */
+export interface TvdbEpisodesProcessorResult {
+  animeId: number
+  episodes: {
+    number: number | null
+    absoluteNumber: number | null
+    aired: string | null
+    name: string | null
+    image: string
+  }[]
+}
+
 /** Resultado de la fuente `ann` (OP/ED de la enciclopedia de ANN). */
 export interface AnnProcessorResult {
   themes: {

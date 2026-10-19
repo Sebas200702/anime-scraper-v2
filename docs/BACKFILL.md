@@ -139,6 +139,23 @@ SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev tvdbSeriesArtworks
 - **Reproducción**: la app proxya bytes (`/media/music/{id}/video|audio`) con allowlist de MIME y `Range`; solo puede servir **archivos directos**. Las URLs de animeThemes son `https://v.animethemes.moe/{video.webm}` y `https://a.animethemes.moe/{audio.ogg}` (antes apuntaban a `animethemes.moe/{audio,video}/…` y el audio daba **404 en todas las filas**).
 - `music_stream` guarda los enlaces de tienda por canción (provider, url, external_id, country): es la llave para localizar el audio completo cuando haya otra fuente.
 
+
+### Banners y miniaturas de episodio: TVDB y TMDB
+| Fuente | Qué da | Requiere |
+|---|---|---|
+| **TVDB** (arteworks) | banner, clearlogo, clearart, icon, background, poster de la serie | `TVDB_API_KEY` (la tenemos) |
+| **TVDB** (episodios) | **miniatura de cada episodio** (`/banners/episodes/...`) | mapeo **por fecha de emisión** (TVDB reinicia la numeración en cada bloque de "aired order") |
+| **TMDB** | **backdrop** (el banner más completo) y **stills** por episodio con `episode_number` (numeración estándar = la de MAL) | `TMDB_API_KEY` (gratis, [registro](https://www.themoviedb.org/settings/api)) |
+
+- El mapeo **MAL → TMDB** sale **gratis** de los `remote_ids` de TVDB (tipo 12,
+  "TheMovieDB.com"): `bun run tmdb:seed-ids` (la parte de TVDB no necesita la
+  key de TMDB). Para el resto del catálogo, la búsqueda de TMDB por título
+  (**verificada**: título normalizado idéntico y año ±1) necesita la key.
+- Sin `TMDB_API_KEY` la fuente `tmdb` **no se siembra** (queda documentada pero
+  inactiva) y los scripts lo dicen por log.
+- Prioridad de media: `MEDIA_SOURCE_PRIORITY` deja AniList (10) como banner
+  principal y TVDB/TMDB como variantes de respaldo.
+
 ### Notas de operación (lo que costó sangre)
 - **El trial no corta a 10 conexiones**: medido 30→100% ok, 60→92%, 100→86-95%. Pero **varias instancias del backfill a la vez sí lo tumban** (cada una abre su propio cupo): correr siempre **una** instancia.
 - Correr bajo **systemd user** (`anime-backfill.service`), no en el shell del agente: el shell mata los procesos hijos al terminar y los leases quedan vivos.

@@ -12,6 +12,8 @@ import { initializeMalDetailsTasks } from './scripts/initializeMalDetailsTasks.j
 import { initializeMalHtmlTasks } from './scripts/initializeMalHtmlTasks.js'
 import { initializeMalPeopleTasks } from './scripts/initializeMalPeopleTasks.js'
 import { initializeAnnTasks } from './scripts/initializeAnnTasks.js'
+import { initializeTvdbEpisodesTasks } from './scripts/initializeTvdbEpisodesTasks.js'
+import { initializeTmdbTasks } from './scripts/initializeTmdbTasks.js'
 const INITIALIZERS: Record<string, () => Promise<void>> = {
   jikan: initializeTasks,
   jikanRelations: initializeJikanRelationsTasks,
@@ -24,6 +26,8 @@ const INITIALIZERS: Record<string, () => Promise<void>> = {
   malHtml: initializeMalHtmlTasks,
   malPeople: initializeMalPeopleTasks,
   ann: initializeAnnTasks,
+  tvdbEpisodes: initializeTvdbEpisodesTasks,
+  tmdb: initializeTmdbTasks,
 }
 async function main() {
   const arg = process.argv[2] || 'jikan'

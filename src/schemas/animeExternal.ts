@@ -18,6 +18,7 @@ export const animeExternalIds = pgTable('anime_external_ids', {
   tvdbId: integer('tvdb_id'),
   anilistId: integer('anilist_id'),
   annId: integer('ann_id'),
+  tmdbId: integer('tmdb_id'),
   createdAt: timestamp('created_at')
     .notNull()
     .$defaultFn(() => new Date()),
