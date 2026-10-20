@@ -42,6 +42,27 @@ import type { AniListMediaProcessorResult } from '../processors/anilistMedia.js'
  */
 const ANILIST_ONLY_ID_BASE = 1_000_000_000
 
+/**
+ * Claves con las que se indexa y busca un nombre.
+ *
+ * MAL escribe los nombres japoneses en el orden occidental
+ * ("Urasawa, Naoki") y AniList en el japonés ("Naoki Urasawa"): sin la
+ * variante invertida, el 100 % de los autores y artistas japoneses se
+ * quedaba sin cruzar (los 33.079 nombres de MAL llevan la coma).
+ */
+const nameKeys = (value: string | null | undefined): string[] => {
+  const base = normalizeText(value)
+  if (!base) return []
+  const keys = [base]
+  if (base.includes(',')) {
+    const parts = base.split(',').map((s) => s.trim())
+    const last = parts[0]
+    const first = parts.slice(1).join(',').trim()
+    if (last && first) keys.push(`${first} ${last}`)
+  }
+  return keys
+}
+
 let nameIndex: {
   characters: Map<string, number>
   staff: Map<string, number>
@@ -62,8 +83,9 @@ const loadNameIndex = async (): Promise<NonNullable<typeof nameIndex>> => {
     name_kanji: string | null
   }[]) {
     for (const key of [row.name, row.name_kanji]) {
-      const norm = normalizeText(key)
-      if (norm && !characters.has(norm)) characters.set(norm, row.mal_id)
+      for (const norm of nameKeys(key)) {
+        if (!characters.has(norm)) characters.set(norm, row.mal_id)
+      }
     }
   }
 
@@ -164,7 +186,9 @@ export const anilistMediaRepository = {
 
     for (const r of [...animeResults, ...mangaResults]) {
       for (const c of r.characters) {
-        const matched = index.characters.get(normalizeText(c.name))
+        const matched = nameKeys(c.name)
+          .map((k) => index.characters.get(k))
+          .find((v) => v !== undefined)
         const characterId = matched ?? ANILIST_ONLY_ID_BASE + c.anilistId
         if (!matched) {
           anilistOnly.push({
@@ -192,7 +216,9 @@ export const anilistMediaRepository = {
           favourites: c.favourites,
         })
         for (const va of c.voiceActors) {
-          const staffId = index.staff.get(normalizeText(va.name))
+          const staffId = nameKeys(va.name)
+            .map((k) => index.staff.get(k))
+            .find((v) => v !== undefined)
           if (!staffId) continue
           voiceActors.push({
             characterId,
