@@ -34,6 +34,14 @@ import type { AniListMediaProcessorResult } from '../processors/anilistMedia.js'
  * módulo: el repositorio vive en el proceso del servicio, no se recarga por
  * lote.
  */
+/**
+ * Rango de ids reservado para los personajes que solo existen en AniList.
+ * Los ids de MAL de personaje no pasan de ~306.000, así que 1e9 + id de
+ * AniList no colisiona con ninguno y la tabla `character` puede seguir
+ * teniendo una sola clave primaria.
+ */
+const ANILIST_ONLY_ID_BASE = 1_000_000_000
+
 let nameIndex: {
   characters: Map<string, number>
   staff: Map<string, number>
@@ -136,10 +144,42 @@ export const anilistMediaRepository = {
       language: string
     }[] = []
 
+    // Personajes que solo existen en AniList: no tienen equivalente en MAL
+    // (MyAnimeList no publica ficha de personaje para ~13.500 de sus animes),
+    // pero su id vive en otro espacio de ids, así que se guardan en la MISMA
+    // tabla `character` con el rango 1e9+ reservado (los ids de MAL no pasan
+    // de ~306.000) y con su `anilist_id` real.
+    const anilistOnly: {
+      characterId: number
+      anilistId: number
+      name: string
+      nativeName: string | null
+      description: string | null
+      gender: string | null
+      birthYear: number | null
+      bloodType: string | null
+      age: string | null
+      favourites: number | null
+    }[] = []
+
     for (const r of [...animeResults, ...mangaResults]) {
       for (const c of r.characters) {
-        const characterId = index.characters.get(normalizeText(c.name))
-        if (!characterId) continue
+        const matched = index.characters.get(normalizeText(c.name))
+        const characterId = matched ?? ANILIST_ONLY_ID_BASE + c.anilistId
+        if (!matched) {
+          anilistOnly.push({
+            characterId,
+            anilistId: c.anilistId,
+            name: c.name,
+            nativeName: c.nativeName,
+            description: c.description,
+            gender: c.gender,
+            birthYear: c.birthYear,
+            bloodType: c.bloodType,
+            age: c.age,
+            favourites: c.favourites,
+          })
+        }
         characterLinks.push({
           mediaId: r.mediaId as number,
           characterId,
@@ -160,6 +200,37 @@ export const anilistMediaRepository = {
             language: 'Japanese',
           })
         }
+      }
+    }
+
+    if (anilistOnly.length > 0) {
+      for (const batch of chunk(
+        unique(anilistOnly, (c) => `${c.characterId}`),
+        1_000
+      )) {
+        await db.execute(sql`
+          INSERT INTO character (
+            mal_id, name, name_kanji, about, anilist_id, gender, blood_type,
+            age, favorites, date_of_birth
+          )
+          SELECT v.id, v.name, v.native_name, v.description, v.anilist_id, v.gender,
+                 v.blood_type, v.age, v.favourites,
+                 CASE WHEN v.birth_year IS NOT NULL
+                   THEN make_date(v.birth_year, 1, 1) END
+          FROM (VALUES ${sql.join(
+            batch.map(
+              (c) =>
+                sql`(${c.characterId}::int, ${c.name}::text, ${c.nativeName}::text, ${c.description}::text, ${c.anilistId}::int, ${c.gender}::text, ${c.bloodType}::text, ${c.age}::text, ${c.favourites}::int, ${c.birthYear}::int)`
+            ),
+            sql`, `
+          )}) AS v(id, name, native_name, description, anilist_id, gender,
+                    blood_type, age, favourites, birth_year)
+          ON CONFLICT (mal_id) DO UPDATE SET
+            name = COALESCE(NULLIF(EXCLUDED.name, ''), character.name),
+            name_kanji = COALESCE(EXCLUDED.name_kanji, character.name_kanji),
+            about = COALESCE(EXCLUDED.about, character.about),
+            anilist_id = COALESCE(EXCLUDED.anilist_id, character.anilist_id)
+        `)
       }
     }
 

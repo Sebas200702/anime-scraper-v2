@@ -152,6 +152,8 @@ export const parseMalCharactersPage = (html: string): ParsedCharacterRow[] => {
 
     characters.push({
       malId,
+      // MAL llama "Ector" a los personajes sin ficha propia: se deja el
+      // nombre tal cual, pero sin retrato (su imagen es un interrogante).
       name,
       nativeName,
       role,

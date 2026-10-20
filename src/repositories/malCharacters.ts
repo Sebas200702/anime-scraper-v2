@@ -18,6 +18,10 @@ import type { MalCharactersProcessorResult } from '../processors/malCharacters.j
  * vínculos y la media. Todo idempotente: la identidad natural de cada junction
  * es su clave primaria compuesta.
  */
+/** MAL usa un GIF de interrogante para los personajes sin ficha: no es un retrato. */
+const isRealImage = (src: string | null | undefined): src is string =>
+  Boolean(src) && !/questionmark/i.test(src as string)
+
 export const malCharactersRepository = {
   async saveMalCharacters(
     results: MalCharactersProcessorResult[]
@@ -112,7 +116,7 @@ export const malCharactersRepository = {
 
     const staffPortraits = unique(
       voiceActors
-        .filter((v) => v.image)
+        .filter((v) => isRealImage(v.image))
         .map((v) => ({ id: v.staffId, src: v.image as string })),
       (v) => `${v.id}:${v.src}`
     )

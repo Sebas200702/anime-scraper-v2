@@ -92,6 +92,7 @@ const MEDIA_DEEP_QUERY = `query ($id: Int, $type: MediaType, $charPage: Int, $st
         node {
           id
           name { full native alternative }
+          description(asHtml: false)
           gender
           dateOfBirth { year }
           bloodType
@@ -108,6 +109,7 @@ const MEDIA_DEEP_QUERY = `query ($id: Int, $type: MediaType, $charPage: Int, $st
         node {
           id
           name { full native alternative }
+          description(asHtml: false)
           gender
           dateOfBirth { year }
           favourites

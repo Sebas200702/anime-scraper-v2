@@ -306,7 +306,7 @@ const BACKFILL_PROFILES: Record<
   malPerson: { maxWorkers: 200, rateLimit: { perSecond: 2, perMinute: 120 } },
   anilistMedia: {
     maxWorkers: 200,
-    rateLimit: { perSecond: 1, perMinute: 28 },
+    rateLimit: { perSecond: 1, perMinute: 22 },
     taskBatchSize: 5_000,
   },
   musicMeta: { maxWorkers: 60, rateLimit: { perSecond: 2, perMinute: 120 } },
@@ -426,7 +426,7 @@ export const SOURCE_HOSTS: Record<
     // AniList: 30 req/min por IP (cabecera `x-ratelimit-limit`). El 429
     // manda `Retry-After: 60`, pero con el lote de 5.000 tasks su coste se
     // amortiza: 28/min por IP con ~60 IPs son ~1.600 req/min.
-    limits: { perSecond: 1, perMinute: 28 },
+    limits: { perSecond: 1, perMinute: 22 },
   },
   musicMeta: {
     host: 'open.spotify.com',

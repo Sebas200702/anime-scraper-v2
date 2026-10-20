@@ -44,6 +44,7 @@ export const processAnilistMedia = (
       name: edge.node.name.full ?? edge.node.name.native ?? '',
       nativeName: edge.node.name.native,
       alternativeName: edge.node.name.alternative,
+      description: edge.node.description,
       role: edge.role.toUpperCase(),
       gender: edge.node.gender,
       birthYear: edge.node.dateOfBirth?.year ?? null,
