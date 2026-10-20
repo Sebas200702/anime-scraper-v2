@@ -153,9 +153,13 @@ export const tvdbEpisodesRepository = {
     for (const batch of chunk(pendingTitles, 500)) {
       await db.execute(sql`
         UPDATE episode e
+        -- NULLIF anidados: el marcador "Episode NN" tambien es un null (si no,
+        -- COALESCE se queda con el titulo viejo y nunca aplica el nuevo).
         SET title = COALESCE(
-              NULLIF(e.title, ''),
-              NULLIF(e.title, 'Episode ' || lpad(e.number::text, 2, '0')),
+              NULLIF(
+                NULLIF(e.title, ''),
+                'Episode ' || lpad(e.number::text, 2, '0')
+              ),
               v.title
             ),
             aired = COALESCE(NULLIF(e.aired, ''), v.aired)
