@@ -32,6 +32,7 @@
     "artists:merge-duplicates": "bun src/scripts/mergeDuplicateArtists.ts",
     "tvdb:seed-ids": "bun src/scripts/seedTvdbIds.ts",
     "tvdb:fix-duplicates": "bun src/scripts/fixTvdbDuplicates.ts",
+    "kitsu:fix-duplicates": "bun src/scripts/fixKitsuDuplicates.ts",
     "tmdb:seed-ids": "bun src/scripts/seedTmdbIds.ts",
     "anilist:seed-ids": "bun src/scripts/seedAnilistIds.ts",
     "anilist:enumerate": "bun src/scripts/enumerateAnilist.ts",
