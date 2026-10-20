@@ -1,24 +1,42 @@
-import type { MalCharactersPayload } from '../services/malCharacters.js'
+import { parseMalCharactersPage } from '../shared/malCharactersHtml.js'
 import type { ScrapingTask } from '../types/index.js'
 
 /**
- * Mapea el reparto completo de MAL a las filas del catálogo.
+ * Mapea la página de personajes de MAL a las filas del catálogo.
  *
- * El id de MAL de un personaje es un id de **persona**: la ficha de esa
- * persona trae su nombre y su retrato (fuente `malPerson`). Aquí solo se crea
- * el vínculo anime ↔ personaje con su rol; el nombre se rellena después.
+ * De aquí salen: el personaje (con su nombre nativo), el vínculo anime ↔
+ * personaje con su rol, el **retrato** del personaje y las **voces** (con su
+ * idioma), que alimentan la tabla `character_voice_actor`.
  */
 export const processMalCharacters = (
-  raw: MalCharactersPayload,
+  raw: { animeId: number; html: string },
   _task: ScrapingTask
-) => ({
-  animeId: raw.animeId,
-  characters: raw.characters.map((c) => ({
+) => {
+  const characters = parseMalCharactersPage(raw.html)
+
+  return {
     animeId: raw.animeId,
-    characterId: c.characterId,
-    role: c.role,
-  })),
-})
+    characters: characters.map((c) => ({
+      animeId: raw.animeId,
+      characterId: c.malId,
+      name: c.name,
+      nativeName: c.nativeName,
+      role: c.role,
+      favourites: c.favourites,
+      image: c.image ?? null,
+    })),
+    voiceActors: characters.flatMap((c) =>
+      c.voiceActors.map((va) => ({
+        animeId: raw.animeId,
+        characterId: c.malId,
+        staffId: va.malId,
+        name: va.name,
+        language: va.language,
+        image: va.image ?? null,
+      }))
+    ),
+  }
+}
 
 export type MalCharactersProcessorResult = ReturnType<
   typeof processMalCharacters

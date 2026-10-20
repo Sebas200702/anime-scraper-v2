@@ -3,12 +3,13 @@ import { db } from '../libs/db.js'
 import { taskRepository } from '../repositories/tasks.js'
 
 /**
- * Siembra una tarea por **persona** de MAL (staff o personaje).
+ * Siembra una tarea por **persona** de MAL (el staff).
  *
- * El id de MAL de un personaje es un id de persona, así que la misma ficha
- * `/v2/people/{id}` sirve para ambos: trae el nombre (el de los personajes
- * nunca se había guardado, salvo los 10 de la ficha HTML), la biografía, los
- * alias y el retrato.
+ * Ojo: el id de **personaje** de MAL vive en un espacio distinto del de
+ * persona (`/character/{id}` ≠ `/people/{id}`), así que la ficha de persona no
+ * sirve para los personajes: 404 en casi todos. Los personajes se nombran con
+ * la página de personajes del anime (`malCharacters`), que además trae el
+ * retrato y las voces.
  */
 export const initializeMalPersonTasks = async () => {
   const existing = await taskRepository.getExistingEntityIds('malPerson')
@@ -18,13 +19,7 @@ export const initializeMalPersonTasks = async () => {
 
   const rows = (
     await db.execute(sql`
-      SELECT DISTINCT person_id AS id, kind FROM (
-        SELECT s.mal_id AS person_id, 'staff' AS kind FROM staff s
-        UNION ALL
-        SELECT c.character_id AS person_id, 'character' AS kind
-        FROM anime_character c
-      ) t
-      ORDER BY id
+      SELECT s.mal_id AS id, 'staff' AS kind FROM staff s ORDER BY s.mal_id
     `)
   ).rows as unknown as { id: number; kind: 'staff' | 'character' }[]
 

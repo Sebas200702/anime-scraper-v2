@@ -1,77 +1,52 @@
 import { CONFIG } from '../config/config.js'
 import { fetcher } from '../libs/fetcher.js'
 import { SkippedTaskError } from '../libs/skippedTaskError.js'
+import { parseMalCharactersPage } from '../shared/malCharactersHtml.js'
 import type { ProxyTarget } from '../libs/transport.js'
 import type { ScrapingTask } from 'types/index.js'
 
 /**
- * Reparto **completo** de un anime según la API oficial de MAL
- * (`/v2/anime/{id}/characters`).
+ * Reparto **completo** de un anime según la página de personajes de MAL
+ * (`/anime/{id}/characters`).
  *
- * La ficha HTML de MAL solo enseña los diez primeros personajes de la
- * sección "Characters and Voice Actors"; la API v2 devuelve la lista entera
- * paginada (100 por página, con `paging.next` para seguir).
+ * Por qué la web y no la API: `/v2/anime/{id}/characters` da los ids y el rol,
+ * pero **no** el nombre, ni el retrato, ni las voces; y el id de personaje de
+ * MAL vive en un espacio **distinto** del de persona (`/v2/people/{id}`), así
+ * que la ficha de persona no sirve para los personajes. La página de
+ * personajes trae todo en una sola petición: id, nombre, nativo, rol,
+ * favoritos, retrato y las voces con su idioma.
  *
- * Cada entrada trae el **id de MAL del personaje** (que es un id de persona) y
- * su rol (`Main` / `Supporting`).
+ * La ficha principal del anime solo lista los diez primeros: esta es la vía
+ * para el reparto entero.
  */
-
-export interface MalCharacterEntry {
-  characterId: number
-  role: string
-}
-
-export interface MalCharactersPayload {
-  animeId: number
-  characters: MalCharacterEntry[]
-}
-
 export const fetchMalCharacters = async (
   task: ScrapingTask,
   proxy?: ProxyTarget
-): Promise<MalCharactersPayload> => {
+): Promise<{ animeId: number; html: string }> => {
   const { animeId } = task.payload as { animeId?: number }
   if (!animeId) throw new SkippedTaskError('missing:animeId')
 
-  const clientId = CONFIG.MAL_CLIENT_ID
-  if (!clientId) throw new SkippedTaskError('missing:MAL_CLIENT_ID')
+  // Ojo con la URL: `/anime/{id}/characters` se interpreta como el **slug**
+  // "characters" y MAL redirige a la ficha principal (sin reparto). La página
+  // de personajes necesita el slug real, pero **cualquier** slug sirve:
+  // `/anime/{id}/_/characters` devuelve la lista entera.
+  const html = await fetcher<string>({
+    url: `${CONFIG.MAL_WEB_BASE}/anime/${animeId}/_/characters`,
+    method: 'GET',
+    headers: {
+      Accept: 'text/html,application/xhtml+xml',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'User-Agent':
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+    },
+    agent: proxy,
+    timeoutMs: 40_000,
+    // El body es HTML: sin esto el fetcher lo trataría como JSON.
+    isJson: false,
+  })
 
-  const characters: MalCharacterEntry[] = []
-  let next: string | null =
-    `${CONFIG.MAL_API_BASE}/anime/${animeId}/characters?limit=100&nsfw=true`
-
-  while (next) {
-    const response: {
-      data?: { node?: { id?: number }; role?: string }[]
-      paging?: { next?: string | null }
-    } = await fetcher<{
-      data?: { node?: { id?: number }; role?: string }[]
-      paging?: { next?: string | null }
-    }>({
-      url: next,
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        'X-MAL-CLIENT-ID': clientId,
-      },
-      agent: proxy,
-      timeoutMs: 20_000,
-    })
-
-    for (const entry of response.data ?? []) {
-      const id = entry.node?.id
-      if (!id) continue
-      characters.push({ characterId: id, role: entry.role ?? 'Supporting' })
-    }
-
-    // La API pagina con la URL completa: se respeta tal cual (lleva el
-    // client-id en la query y no se puede rehacer a mano).
-    const raw = response.paging?.next
-    next = raw
-      ? raw.replace(/^https?:\/\/api\.myanimelist\.net/, CONFIG.MAL_API_BASE)
-      : null
-    if (characters.length > 2_000) break
+  if (typeof html !== 'string' || html.length < 5_000) {
+    throw new Error('MAL: respuesta HTML vacía o inesperada')
   }
-
-  return { animeId, characters }
+  return { animeId, html }
 }

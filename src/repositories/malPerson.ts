@@ -6,7 +6,6 @@ import { characterMedia, staffMedia } from '../schemas/media.js'
 import { batchUpsert } from '../shared/batchUpsert.js'
 import { chunk } from '../utils/chunk.js'
 import { unique } from '../utils/deduplicate.js'
-import { PLACEHOLDER_NAME } from './malCharacters.js'
 import type { MalPersonProcessorResult } from '../processors/malPerson.js'
 
 /**
@@ -141,6 +140,3 @@ export const malPersonRepository = {
     return results.length
   },
 }
-
-/** Reexportado por comodidad para quien solo necesite el nombre provisional. */
-export { PLACEHOLDER_NAME }

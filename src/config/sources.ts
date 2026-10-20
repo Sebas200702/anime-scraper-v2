@@ -124,7 +124,7 @@ export const SOURCES: SourceConfig[] = [
     name: 'malManga',
     // Ficha completa de las obras impresas (manga, novela, one-shot) en la API
     // v2 de MAL: sinopsis, capítulos, serialización, editorial y relaciones.
-    maxWorkers: 100,
+    maxWorkers: 200,
     pageBatch: 50,
     taskBatchSize: 200,
     rateLimit: { perSecond: 1, perMinute: 60 },
@@ -291,13 +291,13 @@ const BACKFILL_PROFILES: Record<
   malHtml: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 40 } },
   malPeople: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
   // Las fichas de MAL son pequeñas (~1 KB): 30 en vuelo por 100 IPs.
-  malManga: { maxWorkers: 100, rateLimit: { perSecond: 2, perMinute: 120 } },
+  malManga: { maxWorkers: 200, rateLimit: { perSecond: 2, perMinute: 120 } },
   malCharacters: {
     maxWorkers: 30,
     rateLimit: { perSecond: 2, perMinute: 120 },
   },
-  malPerson: { maxWorkers: 100, rateLimit: { perSecond: 2, perMinute: 120 } },
-  anilistMedia: { maxWorkers: 100, rateLimit: { perSecond: 1, perMinute: 25 } },
+  malPerson: { maxWorkers: 200, rateLimit: { perSecond: 2, perMinute: 120 } },
+  anilistMedia: { maxWorkers: 200, rateLimit: { perSecond: 1, perMinute: 25 } },
   musicMeta: { maxWorkers: 60, rateLimit: { perSecond: 2, perMinute: 120 } },
   ann: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
   tvdbEpisodes: { maxWorkers: 10, rateLimit: { perSecond: 2, perMinute: 120 } },

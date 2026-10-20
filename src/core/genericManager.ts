@@ -182,9 +182,10 @@ export class GenericManager {
     const poolSize = proxyManager.getAvailableProxies().length
     // Fuentes sin proxy (cuota por key/client id): pueden tener varias en vuelo
     // sin tocar el tope de conexiones del proveedor; el gate por host las acota.
-    const maxInFlight = singleIp
-      ? Math.max(1, this.maxWorkers)
-      : Math.min(this.maxWorkers, Math.max(1, poolSize))
+    // En vuelo = `maxWorkers` (no el tamaño del pool): varias tareas pueden
+    // compartir IP, y el `RateGate` es quien limita por (host, IP). Limitarlo
+    // al tamaño del pool dejaba el 50 % de los workers ociosos.
+    const maxInFlight = Math.max(1, this.maxWorkers)
 
     console.log(
       `\n🚀 Starting ${source} — ${maxInFlight} tareas en vuelo · ` +
