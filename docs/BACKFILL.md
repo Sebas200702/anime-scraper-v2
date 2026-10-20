@@ -156,6 +156,29 @@ SCRAPER_MODE=backfill SCRAPER_MAX_WORKERS=10 bun run dev tvdbSeriesArtworks
 - Prioridad de media: `MEDIA_SOURCE_PRIORITY` deja AniList (10) como banner
   principal y TVDB/TMDB como variantes de respaldo.
 
+
+### Banners y miniaturas: TVDB, TMDB y el cruce de ids
+| Herramienta | Qué hace |
+|---|---|
+| `bun run tvdb:seed-ids` | Busca la serie en TVDB por título+año+tipo y guarda el id (verificado con el nombre de la serie) |
+| `bun run tvdb:fix-duplicates` | Un id de TVDB compartido por varios animes es un falso positivo del buscador: se conserva solo en el anime cuyo título coincide con el nombre (o alias) de la serie, y se borra la media de la serie equivocada |
+| `bun run tmdb:seed-ids` | Mapea MAL → TMDB: primero con los `remote_ids` de TVDB (**exacto**, sin key) y después con la búsqueda de TMDB (verificada por nombre traducido **y** original, año ±1 y tipo) |
+| `bun run anilist:seed-ids` | Amplía el enlace a AniList: el bulk por año solo cruzaba por `idMal`; ahora se empareja por **año + título normalizado** (los cortos sin `idMal` en AniList quedan enlazados) |
+| `bun run artists:match-staff` | Relaciona los artistas de música con su persona de MAL por nombre normalizado (los homónimos se descartan) |
+| `bun run artists:merge-duplicates` | Fusiona los artistas que solo difieren en mayúsculas |
+
+**Fuentes y su estado**
+- **TVDB** (`TVDB_API_KEY`): artworks de serie (banner, clearlogo, clearart, icon,
+  background) y **miniatura de cada episodio** (`/banners/episodes/...`). El
+  mapeo a nuestra numeración se hace **por fecha de emisión**: TVDB reinicia la
+  numeración en cada bloque de "aired order", así que su `number` no es el de MAL.
+- **TMDB** (`TMDB_API_KEY`): **backdrop** (el banner más completo) y **stills**
+  de cada episodio (`/season/{n}/episode/{m}/images`, 1 request por capítulo).
+  Además da el **título y la fecha** de cada episodio, que rellenan los que
+  Kitsu dejó como "Episode NN". Va **directo** (sin proxies: no llegan a
+  `api.themoviedb.org`) y con la cuota de la key (`KEY_SCOPED_HOSTS`).
+- **AniList**: banners, relaciones y etiquetas; su límite es 30 req/min por IP.
+
 ### Notas de operación (lo que costó sangre)
 - **El trial no corta a 10 conexiones**: medido 30→100% ok, 60→92%, 100→86-95%. Pero **varias instancias del backfill a la vez sí lo tumban** (cada una abre su propio cupo): correr siempre **una** instancia.
 - Correr bajo **systemd user** (`anime-backfill.service`), no en el shell del agente: el shell mata los procesos hijos al terminar y los leases quedan vivos.
