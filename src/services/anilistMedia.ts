@@ -150,7 +150,9 @@ export const fetchAnilistMedia = async (
         variables: { id: anilistId, type, charPage, staffPage },
       }),
       agent: proxy,
-      timeoutMs: 30_000,
+      // La latencia real por proxy es ~0,5 s (p90 1,2 s): 12 s es un margen
+      // enorme y evita que un task lento alargue todo el lote.
+      timeoutMs: 8_000,
     })
     if (response.errors?.length) {
       const message = response.errors[0]?.message ?? 'unknown error'

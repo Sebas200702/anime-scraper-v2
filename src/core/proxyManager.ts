@@ -119,8 +119,12 @@ export const proxyManager = {
     const proxy = this.proxies.find((p) => p.url === proxyUrl)
     if (!proxy) return
     proxy.failures++
-    proxy.cooldownUntil =
-      Date.now() + Math.min(1000 * 2 ** proxy.failures, 60_000)
+    // El cooldown era exponencial (2^n s): con un 8 % de timeouts, las IPs
+    // buena quedaban fuera minutos y el pool se encogía (espiral mortal:
+    // menos IPs → más tráfico cada una → más 429 → más timeouts). 5 s y el
+    // LRU ya rotates las IPs; las que mueren de verdad se descartan por el
+    // filtro de salud.
+    proxy.cooldownUntil = Date.now() + 5_000
   },
 
   reportSuccess(proxyUrl: string) {

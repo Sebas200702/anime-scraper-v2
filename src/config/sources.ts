@@ -166,10 +166,13 @@ export const SOURCES: SourceConfig[] = [
     // Pase profundo por medio: reparto completo con voz, créditos de staff,
     // relaciones y enlaces externos. AniList es la única fuente que da el
     // reparto entero de las series largas.
-    maxWorkers: 100,
+    //
+    // Lotes grandes: el cuello era el *lote más lento* (un solo timeout
+    // alargaba los 200 tasks del lote), no la red.
+    maxWorkers: 400,
     pageBatch: 50,
-    taskBatchSize: 200,
-    rateLimit: { perSecond: 1, perMinute: 25 },
+    taskBatchSize: 400,
+    rateLimit: { perSecond: 1, perMinute: 20 },
     tasks: {
       media_anilist_details_hydration: {
         entity: 'anilistMedia',
@@ -266,7 +269,11 @@ export { capitalize } from '../shared/parsers.js'
  */
 const BACKFILL_PROFILES: Record<
   string,
-  { maxWorkers: number; rateLimit: { perSecond: number; perMinute: number } }
+  {
+    maxWorkers: number
+    rateLimit: { perSecond: number; perMinute: number }
+    taskBatchSize?: number
+  }
 > = {
   jikan: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 40 } },
   jikanRelations: {
@@ -297,7 +304,11 @@ const BACKFILL_PROFILES: Record<
     rateLimit: { perSecond: 2, perMinute: 120 },
   },
   malPerson: { maxWorkers: 200, rateLimit: { perSecond: 2, perMinute: 120 } },
-  anilistMedia: { maxWorkers: 200, rateLimit: { perSecond: 1, perMinute: 25 } },
+  anilistMedia: {
+    maxWorkers: 200,
+    rateLimit: { perSecond: 1, perMinute: 28 },
+    taskBatchSize: 5_000,
+  },
   musicMeta: { maxWorkers: 60, rateLimit: { perSecond: 2, perMinute: 120 } },
   ann: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
   tvdbEpisodes: { maxWorkers: 10, rateLimit: { perSecond: 2, perMinute: 120 } },
@@ -412,7 +423,10 @@ export const SOURCE_HOSTS: Record<
   },
   anilistMedia: {
     host: 'graphql.anilist.co',
-    limits: { perSecond: 1, perMinute: 25 },
+    // AniList: 30 req/min por IP (cabecera `x-ratelimit-limit`). El 429
+    // manda `Retry-After: 60`, pero con el lote de 5.000 tasks su coste se
+    // amortiza: 28/min por IP con ~60 IPs son ~1.600 req/min.
+    limits: { perSecond: 1, perMinute: 28 },
   },
   musicMeta: {
     host: 'open.spotify.com',
@@ -478,6 +492,11 @@ export function getSourceConfig(sourceName: string) {
 
     resolved.maxWorkers = Math.min(cap, profile.maxWorkers)
     resolved.rateLimit = { ...profile.rateLimit }
+    // El perfil de backfill también fija el tamaño de lote: sin copiarlo, el
+    // `taskBatchSize` del source (200) manda y el lote se queda corto (el
+    // manager drena el lote entero antes de pedir el siguiente: un lote
+    // pequeño paga el "barrero" —esperar al task más lento— cada vez).
+    if (profile.taskBatchSize) resolved.taskBatchSize = profile.taskBatchSize
     console.log(
       `⚙️  Modo backfill: ${resolved.name} con ${resolved.maxWorkers} tareas en vuelo (una IP por tarea)`
     )

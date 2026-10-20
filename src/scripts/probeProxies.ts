@@ -33,6 +33,12 @@ const SOURCES = [
   'https://raw.githubusercontent.com/Thordata/awesome-free-proxy-list/main/proxies/all.txt',
   'https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/http.txt',
   'https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies-http.txt',
+  // Verificadas el 2026-10-20 (todas responden 200 y listan ip:port).
+  'https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/protocols/http/data.txt',
+  'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt',
+  'https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&protocol=http&proxy_format=ipport&format=text',
+  'https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/http.txt',
+  'https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt',
 ]
 
 const IP_CHECK_URL = 'https://api.ipify.org?format=json'
