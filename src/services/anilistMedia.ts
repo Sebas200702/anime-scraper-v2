@@ -27,6 +27,7 @@ export interface AniListCharacterEdge {
       native: string | null
       alternative: string | null
     }
+    description: string | null
     gender: string | null
     dateOfBirth: { year: number | null } | null
     bloodType: string | null
