@@ -48,8 +48,6 @@ export const processAnilistMedia = (
       gender: edge.node.gender,
       birthYear: edge.node.dateOfBirth?.year ?? null,
       bloodType: edge.node.bloodType,
-      height: edge.node.height,
-      weight: edge.node.weight,
       age: edge.node.age,
       favourites: edge.node.favourites,
       voiceActors: edge.voiceActors.map((va) => ({
@@ -64,7 +62,6 @@ export const processAnilistMedia = (
       nativeName: edge.node.name.native,
       alternativeName: edge.node.name.alternative,
       role: edge.role,
-      roleNote: edge.roleNote,
       gender: edge.node.gender,
       birthYear: edge.node.dateOfBirth?.year ?? null,
       favourites: edge.node.favourites,

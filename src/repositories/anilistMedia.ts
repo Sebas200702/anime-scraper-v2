@@ -97,7 +97,7 @@ export const anilistMediaRepository = {
             .map((s) => ({
               mediaId: r.mediaId as number,
               staffId: index.staff.get(normalizeText(s.name)),
-              role: s.roleNote ? `${s.role} (${s.roleNote})` : s.role,
+              role: s.role,
               anilistId: s.anilistId,
               name: s.name,
             }))
@@ -127,8 +127,6 @@ export const anilistMediaRepository = {
       gender: string | null
       birthYear: number | null
       bloodType: string | null
-      height: number | null
-      weight: number | null
       age: string | null
       favourites: number | null
     }[] = []
@@ -150,8 +148,6 @@ export const anilistMediaRepository = {
           gender: c.gender,
           birthYear: c.birthYear,
           bloodType: c.bloodType,
-          height: c.height,
-          weight: c.weight,
           age: c.age,
           favourites: c.favourites,
         })
@@ -178,8 +174,6 @@ export const anilistMediaRepository = {
             anilist_id = v.anilist_id,
             gender = COALESCE(v.gender, c.gender),
             blood_type = COALESCE(v.blood_type, c.blood_type),
-            height = COALESCE(v.height, c.height),
-            weight = COALESCE(v.weight, c.weight),
             age = COALESCE(v.age, c.age),
             favorites = COALESCE(v.favorites, c.favorites),
             date_of_birth = COALESCE(
@@ -191,10 +185,10 @@ export const anilistMediaRepository = {
           FROM (VALUES ${sql.join(
             batch.map(
               (c) =>
-                sql`(${c.characterId}::int, ${c.anilistId}::int, ${c.gender}::text, ${c.birthYear}::int, ${c.bloodType}::text, ${c.height}::int, ${c.weight}::int, ${c.age}::text, ${c.favourites}::int)`
+                sql`(${c.characterId}::int, ${c.anilistId}::int, ${c.gender}::text, ${c.birthYear}::int, ${c.bloodType}::text, ${c.age}::text, ${c.favourites}::int)`
             ),
             sql`, `
-          )}) AS v(character_id, anilist_id, gender, birth_year, blood_type, height, weight, age, favorites)
+          )}) AS v(character_id, anilist_id, gender, birth_year, blood_type, age, favorites)
           WHERE c.mal_id = v.character_id
         `)
       }

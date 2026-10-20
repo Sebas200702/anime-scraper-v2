@@ -30,8 +30,6 @@ export interface AniListCharacterEdge {
     gender: string | null
     dateOfBirth: { year: number | null } | null
     bloodType: string | null
-    height: number | null
-    weight: number | null
     age: string | null
     favourites: number | null
   }
@@ -43,7 +41,6 @@ export interface AniListCharacterEdge {
 
 export interface AniListStaffEdge {
   role: string
-  roleNote: string | null
   node: {
     id: number
     name: {
@@ -98,8 +95,6 @@ const MEDIA_DEEP_QUERY = `query ($id: Int, $type: MediaType, $charPage: Int, $st
           gender
           dateOfBirth { year }
           bloodType
-          height
-          weight
           age
           favourites
         }
@@ -110,7 +105,6 @@ const MEDIA_DEEP_QUERY = `query ($id: Int, $type: MediaType, $charPage: Int, $st
       pageInfo { total hasNextPage }
       edges {
         role
-        roleNote
         node {
           id
           name { full native alternative }
@@ -127,7 +121,7 @@ const MEDIA_DEEP_QUERY = `query ($id: Int, $type: MediaType, $charPage: Int, $st
   }
 }`
 
-export const fetchAnilistMediaDeep = async (
+export const fetchAnilistMedia = async (
   task: ScrapingTask,
   proxy?: ProxyTarget
 ): Promise<{ mediaType: AniListMediaType; media: AniListMediaDeep }> => {
