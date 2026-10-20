@@ -31,6 +31,7 @@ import { initializeMalCharactersTasks } from '../scripts/initializeMalCharacters
 import { initializeMalPersonTasks } from '../scripts/initializeMalPersonTasks.js'
 import { initializeAnilistMediaTasks } from '../scripts/initializeAnilistMediaTasks.js'
 import { initializeMusicMetaTasks } from '../scripts/initializeMusicMetaTasks.js'
+import { initializeMalMangaPageTasks } from '../scripts/initializeMalMangaPageTasks.js'
 
 const INITIALIZERS: Record<string, () => Promise<void>> = {
   jikan: initializeTasks,
@@ -51,6 +52,7 @@ const INITIALIZERS: Record<string, () => Promise<void>> = {
   malPerson: initializeMalPersonTasks,
   anilistMedia: initializeAnilistMediaTasks,
   musicMeta: initializeMusicMetaTasks,
+  malMangaPage: initializeMalMangaPageTasks,
 }
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'))

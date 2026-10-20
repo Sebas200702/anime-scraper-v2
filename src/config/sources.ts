@@ -133,6 +133,19 @@ export const SOURCES: SourceConfig[] = [
     },
   },
   {
+    name: 'malMangaPage',
+    // Página de la obra impresa: el equipo (autores, ilustradores, editores)
+    // con el id de persona de MAL. La API v2 no lo da y AniList lo da con
+    // nombres que no se pueden cruzar.
+    maxWorkers: 100,
+    pageBatch: 50,
+    taskBatchSize: 2_000,
+    rateLimit: { perSecond: 1, perMinute: 40 },
+    tasks: {
+      manga_page_hydration: { entity: 'malMangaPage', needsPayload: true },
+    },
+  },
+  {
     name: 'malCharacters',
     // Reparto **completo** por anime. La ficha HTML de MAL solo lista los
     // primeros 10 personajes; `/v2/anime/{id}/characters` devuelve la lista
@@ -416,6 +429,10 @@ export const SOURCE_HOSTS: Record<
   malCharacters: {
     host: 'api.myanimelist.net',
     limits: { perSecond: 2, perMinute: 120 },
+  },
+  malMangaPage: {
+    host: 'myanimelist.net',
+    limits: { perSecond: 1, perMinute: 40 },
   },
   malPerson: {
     host: 'api.myanimelist.net',
