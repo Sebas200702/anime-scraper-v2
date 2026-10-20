@@ -31,6 +31,7 @@
     "artists:match-staff": "bun src/scripts/matchArtistsToStaff.ts",
     "artists:merge-duplicates": "bun src/scripts/mergeDuplicateArtists.ts",
     "tvdb:seed-ids": "bun src/scripts/seedTvdbIds.ts",
+    "tvdb:fix-duplicates": "bun src/scripts/fixTvdbDuplicates.ts",
     "tmdb:seed-ids": "bun src/scripts/seedTmdbIds.ts",
     "anilist:seed-ids": "bun src/scripts/seedAnilistIds.ts",
     "episodes:fill-from-mal": "bun src/scripts/fillEpisodesFromMal.ts",
