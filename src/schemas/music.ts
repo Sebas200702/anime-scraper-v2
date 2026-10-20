@@ -5,12 +5,17 @@
  * No editar a mano: `bun run schema:mirror` (drift check: `bun run schema:mirror --check`).
  */
 
-import { index, integer, pgTable, serial, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import { date, index, integer, pgTable, serial, text, uniqueIndex } from 'drizzle-orm/pg-core'
 
 export const music = pgTable('music', {
   id: integer('id').primaryKey().notNull(),
   title: text('title'),
   type: text('type').notNull(),
+  album: text('album'),
+  duration: integer('duration'),
+  releaseDate: date('release_date'),
+  lyrics: text('lyrics'),
+  source: text('source'),
 })
 export const musicVersion = pgTable(
   'music_version',

@@ -5,7 +5,7 @@
  * No editar a mano: `bun run schema:mirror` (drift check: `bun run schema:mirror --check`).
  */
 
-import { integer, pgTable, serial, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import { integer, pgTable, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 
 export const staff = pgTable('staff', {
   malId: integer('mal_id').primaryKey(),
@@ -14,6 +14,11 @@ export const staff = pgTable('staff', {
   familyName: text('family_name'),
   birthday: text('birthday'),
   about: text('about'),
+  anilistId: integer('anilist_id'),
+  gender: text('gender'),
+  dateOfBirth: timestamp('date_of_birth', { withTimezone: true }),
+  favorites: integer('favorites'),
+  voiceActorMalId: integer('voice_actor_mal_id'),
 })
 export const staffAlternativeName = pgTable(
   'staff_alternative_name',

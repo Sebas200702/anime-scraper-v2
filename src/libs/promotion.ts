@@ -40,6 +40,12 @@ export interface PromotionPlan {
    * con `remaps` por clave natural.
    */
   surrogateId?: boolean
+  /**
+   * Filtro SQL aplicado al leer del origen (sin comillas en los valores que
+   * Banshee: se interpola tal cual). Sirve para no promover filas con datos
+   * provisionales (p. ej. los personajes cuyo nombre aún es un marcador).
+   */
+  where?: string
 }
 
 /**
@@ -74,8 +80,39 @@ export const PROMOTION_PLAN: PromotionPlan[] = [
     key: ['anime_id', 'media_type', 'src'],
   },
 
-  // 4. Personas
-  { table: 'character', strategy: 'upsert', key: ['mal_id'] },
+  // 3b. Obra impresa (manga, novela, one-shot)
+  { table: 'manga', strategy: 'upsert', key: ['mal_id'] },
+  {
+    table: 'manga_title_synonym',
+    strategy: 'upsert',
+    key: ['manga_id', 'title'],
+  },
+  { table: 'manga_external_ids', strategy: 'upsert', key: ['manga_id'] },
+  {
+    table: 'manga_media',
+    strategy: 'insert-missing',
+    key: ['manga_id', 'media_type', 'src'],
+  },
+  {
+    table: 'anime_external_link',
+    strategy: 'upsert',
+    key: ['anime_id', 'url'],
+  },
+  {
+    table: 'manga_external_link',
+    strategy: 'upsert',
+    key: ['manga_id', 'url'],
+  },
+
+  // 4. Personas. Los personajes creados por `malCharacters` llevan un nombre
+  // provisional hasta que su ficha de persona lo sustituye: los provisionales
+  // no se promovieron (en la app quedarían con un nombre de relleno).
+  {
+    table: 'character',
+    strategy: 'upsert',
+    key: ['mal_id'],
+    where: "name NOT LIKE 'Personaje %'",
+  },
   {
     table: 'character_nickname',
     strategy: 'upsert',
@@ -211,6 +248,35 @@ export const PROMOTION_PLAN: PromotionPlan[] = [
     strategy: 'upsert',
     key: ['character_id', 'staff_id', 'language'],
   },
+
+  // 8. Junctions de obra impresa (dependen de manga, taxonomía y personas)
+  { table: 'manga_genre', strategy: 'upsert', key: ['manga_id', 'genre_id'] },
+  { table: 'manga_theme', strategy: 'upsert', key: ['manga_id', 'theme_id'] },
+  {
+    table: 'manga_demographic',
+    strategy: 'upsert',
+    key: ['manga_id', 'demographic_id'],
+  },
+  {
+    table: 'manga_producer',
+    strategy: 'upsert',
+    key: ['manga_id', 'producer_id', 'role'],
+  },
+  {
+    table: 'manga_staff',
+    strategy: 'upsert',
+    key: ['manga_id', 'staff_id', 'role'],
+  },
+  {
+    table: 'manga_character',
+    strategy: 'upsert',
+    key: ['manga_id', 'character_id', 'role'],
+  },
+  {
+    table: 'manga_relation',
+    strategy: 'upsert',
+    key: ['manga_id', 'relation_type', 'related_manga_id'],
+  },
 ]
 
 export interface TableReport {
@@ -262,15 +328,17 @@ const readTable = async (
   table: string,
   columns: string[],
   key: string[],
-  batchSize: number
+  batchSize: number,
+  where?: string
 ): Promise<Record<string, unknown>[]> => {
   const order = key.map(quote).join(', ')
   const rows: Record<string, unknown>[] = []
   let offset = 0
+  const filter = where ? ` WHERE ${where}` : ''
 
   for (;;) {
     const { rows: page } = await pool.query(
-      `SELECT ${columns.map(quote).join(', ')} FROM ${quote(table)}
+      `SELECT ${columns.map(quote).join(', ')} FROM ${quote(table)}${filter}
        ORDER BY ${order} LIMIT $1 OFFSET $2`,
       [batchSize, offset]
     )
@@ -502,7 +570,8 @@ export const promote = async ({
         entry.table,
         columns,
         entry.key,
-        batchSize
+        batchSize,
+        entry.where
       )
 
       // Si falta el mapa de un padre (p. ej. no está en destino), la fila hija

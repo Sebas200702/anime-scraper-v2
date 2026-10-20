@@ -26,6 +26,11 @@ import { initializeMalPeopleTasks } from '../scripts/initializeMalPeopleTasks.js
 import { initializeAnnTasks } from '../scripts/initializeAnnTasks.js'
 import { initializeTvdbEpisodesTasks } from '../scripts/initializeTvdbEpisodesTasks.js'
 import { initializeTmdbTasks } from '../scripts/initializeTmdbTasks.js'
+import { initializeMalMangaTasks } from '../scripts/initializeMalMangaTasks.js'
+import { initializeMalCharactersTasks } from '../scripts/initializeMalCharactersTasks.js'
+import { initializeMalPersonTasks } from '../scripts/initializeMalPersonTasks.js'
+import { initializeAnilistMediaTasks } from '../scripts/initializeAnilistMediaTasks.js'
+import { initializeMusicMetaTasks } from '../scripts/initializeMusicMetaTasks.js'
 
 const INITIALIZERS: Record<string, () => Promise<void>> = {
   jikan: initializeTasks,
@@ -41,6 +46,11 @@ const INITIALIZERS: Record<string, () => Promise<void>> = {
   ann: initializeAnnTasks,
   tvdbEpisodes: initializeTvdbEpisodesTasks,
   tmdb: initializeTmdbTasks,
+  malManga: initializeMalMangaTasks,
+  malCharacters: initializeMalCharactersTasks,
+  malPerson: initializeMalPersonTasks,
+  anilistMedia: initializeAnilistMediaTasks,
+  musicMeta: initializeMusicMetaTasks,
 }
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'))

@@ -34,6 +34,12 @@
     "tvdb:fix-duplicates": "bun src/scripts/fixTvdbDuplicates.ts",
     "tmdb:seed-ids": "bun src/scripts/seedTmdbIds.ts",
     "anilist:seed-ids": "bun src/scripts/seedAnilistIds.ts",
+    "anilist:enumerate": "bun src/scripts/enumerateAnilist.ts",
+    "malManga:seed-tasks": "bun src/scripts/initializeMalMangaTasks.ts",
+    "malCharacters:seed-tasks": "bun src/scripts/initializeMalCharactersTasks.ts",
+    "malPerson:seed-tasks": "bun src/scripts/initializeMalPersonTasks.ts",
+    "anilistMedia:seed-tasks": "bun src/scripts/initializeAnilistMediaTasks.ts",
+    "musicMeta:seed-tasks": "bun src/scripts/initializeMusicMetaTasks.ts",
     "episodes:fill-from-mal": "bun src/scripts/fillEpisodesFromMal.ts",
     "music:fix-urls": "bun src/scripts/fixAnimeThemesUrls.ts",
     "mappings:repair": "bun src/scripts/repairAnimeMappings.ts"

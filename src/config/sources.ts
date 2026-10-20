@@ -121,6 +121,76 @@ export const SOURCES: SourceConfig[] = [
     },
   },
   {
+    name: 'malManga',
+    // Ficha completa de las obras impresas (manga, novela, one-shot) en la API
+    // v2 de MAL: sinopsis, capítulos, serialización, editorial y relaciones.
+    maxWorkers: 100,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 1, perMinute: 60 },
+    tasks: {
+      manga_mal_details_hydration: { entity: 'malManga', needsPayload: true },
+    },
+  },
+  {
+    name: 'malCharacters',
+    // Reparto **completo** por anime. La ficha HTML de MAL solo lista los
+    // primeros 10 personajes; `/v2/anime/{id}/characters` devuelve la lista
+    // entera paginada (hasta 100 por página).
+    maxWorkers: 30,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 1, perMinute: 60 },
+    tasks: {
+      anime_mal_characters_hydration: {
+        entity: 'malCharacters',
+        needsPayload: true,
+      },
+    },
+  },
+  {
+    name: 'malPerson',
+    // Ficha de persona de la API v2 (`/v2/people/{id}`): sirve para el staff
+    // **y** para los personajes (en MAL ambos son personas) y trae nombre,
+    // biografía, alias y retrato.
+    maxWorkers: 100,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 1, perMinute: 60 },
+    tasks: {
+      person_mal_details_hydration: { entity: 'malPerson', needsPayload: true },
+    },
+  },
+  {
+    name: 'anilistMedia',
+    // Pase profundo por medio: reparto completo con voz, créditos de staff,
+    // relaciones y enlaces externos. AniList es la única fuente que da el
+    // reparto entero de las series largas.
+    maxWorkers: 100,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 1, perMinute: 25 },
+    tasks: {
+      media_anilist_details_hydration: {
+        entity: 'anilistMedia',
+        needsPayload: true,
+      },
+    },
+  },
+  {
+    name: 'musicMeta',
+    // Metadatos de las canciones en las tiendas: Spotify (oEmbed, sin
+    // credenciales) da el título exacto y la carátura; iTunes (lookup) da
+    // álbum, duración y fecha.
+    maxWorkers: 30,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 1, perMinute: 60 },
+    tasks: {
+      music_meta_hydration: { entity: 'musicMeta', needsPayload: true },
+    },
+  },
+  {
     name: 'tmdb',
     // Backdrops (banner) y stills (miniatura de episodio con `episode_number`).
     // Requiere TMDB_API_KEY; sin key no se siembra nada.
@@ -220,6 +290,15 @@ const BACKFILL_PROFILES: Record<
   // latencia (no el ancho de banda) es lo que manda en estas fichas.
   malHtml: { maxWorkers: 30, rateLimit: { perSecond: 1, perMinute: 40 } },
   malPeople: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
+  // Las fichas de MAL son pequeñas (~1 KB): 30 en vuelo por 100 IPs.
+  malManga: { maxWorkers: 100, rateLimit: { perSecond: 2, perMinute: 120 } },
+  malCharacters: {
+    maxWorkers: 30,
+    rateLimit: { perSecond: 2, perMinute: 120 },
+  },
+  malPerson: { maxWorkers: 100, rateLimit: { perSecond: 2, perMinute: 120 } },
+  anilistMedia: { maxWorkers: 100, rateLimit: { perSecond: 1, perMinute: 25 } },
+  musicMeta: { maxWorkers: 60, rateLimit: { perSecond: 2, perMinute: 120 } },
   ann: { maxWorkers: 20, rateLimit: { perSecond: 1, perMinute: 40 } },
   tvdbEpisodes: { maxWorkers: 10, rateLimit: { perSecond: 2, perMinute: 120 } },
   tmdb: { maxWorkers: 10, rateLimit: { perSecond: 2, perMinute: 120 } },
@@ -318,6 +397,26 @@ export const SOURCE_HOSTS: Record<
   malPeople: {
     host: 'myanimelist.net',
     limits: { perSecond: 1, perMinute: 40 },
+  },
+  malManga: {
+    host: 'api.myanimelist.net',
+    limits: { perSecond: 2, perMinute: 120 },
+  },
+  malCharacters: {
+    host: 'api.myanimelist.net',
+    limits: { perSecond: 2, perMinute: 120 },
+  },
+  malPerson: {
+    host: 'api.myanimelist.net',
+    limits: { perSecond: 2, perMinute: 120 },
+  },
+  anilistMedia: {
+    host: 'graphql.anilist.co',
+    limits: { perSecond: 1, perMinute: 25 },
+  },
+  musicMeta: {
+    host: 'open.spotify.com',
+    limits: { perSecond: 2, perMinute: 120 },
   },
 }
 

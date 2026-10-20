@@ -1,5 +1,5 @@
 /**
- * ESPEJO de `anidev-v2/src/lib/db/schemas/anime-media, character-media, staff-media, producer-media, music-media, episode-media` — anidev-v2 es el dueño del
+ * ESPEJO de `anidev-v2/src/lib/db/schemas/anime-media, manga-media, character-media, staff-media, producer-media, music-media, episode-media` — anidev-v2 es el dueño del
  * DDL y el scraper solo lo refleja para escribir en la misma forma.
  *
  * No editar a mano: `bun run schema:mirror` (drift check: `bun run schema:mirror --check`).
@@ -7,6 +7,7 @@
 
 import { index, integer, pgTable, serial, text, uniqueIndex } from 'drizzle-orm/pg-core'
 import { anime } from './anime.js'
+import { manga } from './manga.js'
 import { character } from './character.js'
 import { staff } from './staff.js'
 import { producer } from './producer.js'
@@ -36,6 +37,33 @@ export const animeMedia = pgTable(
     // conviven porque cambia `src`. Da un target valido a ON CONFLICT.
     uniqueIndex('anime_media_entity_type_src_unique').on(
       t.animeId,
+      t.mediaType,
+      t.src
+    ),
+  ]
+)
+
+export const mangaMedia = pgTable(
+  'manga_media',
+  {
+    id: serial('id').primaryKey(),
+    mangaId: integer('manga_id')
+      .notNull()
+      .references(() => manga.malId, { onDelete: 'cascade' }),
+    mediaType: text('media_type').notNull(),
+    src: text('src').notNull(),
+    size: text('size'),
+    source: text('source'),
+    priority: integer('priority').notNull().default(100),
+  },
+  (t) => [
+    index('manga_media_manga_id_type_priority_idx').on(
+      t.mangaId,
+      t.mediaType,
+      t.priority
+    ),
+    uniqueIndex('manga_media_entity_type_src_unique').on(
+      t.mangaId,
       t.mediaType,
       t.src
     ),
