@@ -117,11 +117,13 @@ export const PROMOTION_PLAN: PromotionPlan[] = [
     table: 'character_nickname',
     strategy: 'upsert',
     key: ['character_id', 'nickname'],
+    where: `character_id IN (SELECT mal_id FROM character WHERE name NOT LIKE 'Personaje %')`,
   },
   {
     table: 'character_media',
     strategy: 'insert-missing',
     key: ['character_id', 'media_type', 'src'],
+    where: `character_id IN (SELECT mal_id FROM character WHERE name NOT LIKE 'Personaje %')`,
   },
   { table: 'staff', strategy: 'upsert', key: ['mal_id'] },
   {
@@ -232,6 +234,9 @@ export const PROMOTION_PLAN: PromotionPlan[] = [
     table: 'anime_character',
     strategy: 'upsert',
     key: ['anime_id', 'character_id', 'role'],
+    // Los personajes con nombre provisional no se promueven (su ficha de
+    // persona no ha llegado): sus vínculos tampoco, o la FK falla.
+    where: `character_id IN (SELECT mal_id FROM character WHERE name NOT LIKE 'Personaje %')`,
   },
   {
     table: 'anime_music',
@@ -247,6 +252,7 @@ export const PROMOTION_PLAN: PromotionPlan[] = [
     table: 'character_voice_actor',
     strategy: 'upsert',
     key: ['character_id', 'staff_id', 'language'],
+    where: `character_id IN (SELECT mal_id FROM character WHERE name NOT LIKE 'Personaje %')`,
   },
 
   // 8. Junctions de obra impresa (dependen de manga, taxonomía y personas)
@@ -271,6 +277,7 @@ export const PROMOTION_PLAN: PromotionPlan[] = [
     table: 'manga_character',
     strategy: 'upsert',
     key: ['manga_id', 'character_id', 'role'],
+    where: `character_id IN (SELECT mal_id FROM character WHERE name NOT LIKE 'Personaje %')`,
   },
   {
     table: 'manga_relation',
@@ -313,14 +320,33 @@ const chunk = <T>(items: T[], size: number): T[][] => {
   return out
 }
 
+/**
+ * Columnas de una tabla del destino, **sin** la PK surrogate.
+ *
+ * Una PK `serial`/`identity` la asigna el destino (su secuencia puede estar
+ * en otro punto que la del origen): copiarla choca con las filas que ya
+ * existen y además depende del orden de lectura, que durante una promoción
+ * en vivo puede repetir filas. Se detecta por el `nextval(...)` del default.
+ */
 const columnsOf = async (pool: Pool, table: string): Promise<string[]> => {
-  const { rows } = await pool.query<{ column_name: string }>(
-    `SELECT column_name FROM information_schema.columns
+  const { rows } = await pool.query<{
+    column_name: string
+    column_default: string | null
+    is_identity: string
+  }>(
+    `SELECT column_name, column_default, is_identity
+     FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = $1
      ORDER BY ordinal_position`,
     [table]
   )
-  return rows.map((row) => row.column_name)
+  return rows
+    .filter((row) => {
+      if (row.column_name !== 'id') return true
+      if (row.is_identity === 'YES') return false
+      return !/nextval/i.test(row.column_default ?? '')
+    })
+    .map((row) => row.column_name)
 }
 
 const readTable = async (
