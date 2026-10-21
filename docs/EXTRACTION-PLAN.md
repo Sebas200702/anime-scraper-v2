@@ -1,89 +1,86 @@
-# Plan de extracción total (2026-10-19)
+# Plan de extracción total (2026-10-19/20)
 
-Objetivo: **dejar la base de datos con todo lo que la app necesitará** antes de
-que la app cresca, usando el pool de proxies mientras siga vivo. La app v2
-tiene hoy dos dominios (`anime`, `music`) y su roadmap pide fichas de
-personajes, seiyuus, artistas, schedule y **manga/novelas**; el catálogo
-tenía huecos que solo se ven al medir.
+Objetivo: **dejar la base con todo lo que la app necesitará** (anime, manga,
+novelas y música) usando el pool de proxies antes de que se cierre, y con el
+catálogo lo más completo posible.
 
 ## Lo que se encontró (medido, no supuesto)
 
 | Hueco | Medición | Causa |
 |---|---|---|
-| Personajes por anime | 115.455 en 16.638 animes; **nunca más de 10** por anime | La ficha HTML de MAL ("Characters and Voice Actors") solo lista los 10 primeros |
-| Animes sin reparto | **13.927** de 30.565 | Los que no tienen personaje en la sección principal |
-| Animes sin `anilist_id` | 9.409 | El cruce por año+título no era exacto; el cruce por `idMal` sí |
-| Dominio manga/novela | **0** filas | Nunca se había extraído |
-| Metadatos de canción | 29.020 canciones con título+artista y **sin** álbum, duración, fecha ni portada | Solo se habían guardado los enlaces |
+| Personajes por anime | La ficha HTML de MAL corta en **10**; `/v2/people/{id}` da 404 para casi todos | **El id de personaje y el de persona son espacios distintos** (`/character/{id}` ≠ `/people/{id}`) |
+| Animes sin reparto | 13.569 de 30.561 | Ni MAL ni AniList publican lista para ellos (entradas viejas, OVAs de una entrega, vídeos musicales) |
+| Reparto de manga | 0 | La API v2 de MAL **no** expone el staff de un manga y AniList lo da con nombres parciales ("Yaminabe") o de seudónimo ("Ray Yuuki" vs "Kaneko, Yuuki") |
+| CrUCE de nombres | 0 de 33.079 | MAL escribe "apellido, nombre" y AniList "nombre apellido" |
+| Dominio manga/novela | 0 filas | Nunca se había extraído |
+| Metadatos de canción | 29.020 con título y artista, sin álbum/duración/portada | Solo se guardaban los enlaces |
 
-## Fuentes comprobadas (a través de las 100 proxies)
+## Decisiones de diseño que se Taken
 
-| Fuente | Estado | Aporta |
-|---|---|---|
-| **MAL API v2** `/v2/anime/{id}` | ✅ | ficha completa (sigue en pie) |
-| MAL API v2 `/v2/manga/{id}` | ✅ | sinopsis, capítulos, serialización, editorial, relaciones, portada |
-| MAL API v2 `/v2/anime/{id}/characters` | ✅ | **reparto completo** paginado (100/página) |
-| MAL API v2 `/v2/people/{id}` | ✅ | nombre, biografía, alias, retrato (staff **y** personajes) |
-| MAL API v2 `/v2/manga` (lista) | ❌ 400 | la enumeración va por AniList |
-| **AniList** GraphQL | ✅ (30 req/min **por IP**) | reparto completo con voz, créditos, relaciones, enlaces, tags |
-| AniList `Page` más allá de 5.000 | ❌ (límite de profundidad) | se recorre el espacio de ids con `id_in` |
-| **Spotify** oEmbed | ✅ sin credenciales | título exacto + carátura |
-| **iTunes** lookup | ✅ sin credenciales | álbum, duración, fecha, carátura |
-| VGMdb | ❌ 403 (Cloudflare) | — |
-| Deezer | ❌ 403 | — |
-| AniDB / Anime-Planet / AnimeSongs | ❌ (TLS, sin respuesta, aparcado) | — |
+### El reparto completo viene de la página de personajes
 
-## Lo que se extrajo
+`/anime/{id}/{slug}/characters` da id, nombre, nativo, rol, favoritos, retrato
+**y las voces con su idioma** en una sola petición. La API v2 solo da ids y
+rol. Ojo con la URL: `/anime/{id}/characters` se interpreta como el slug
+"characters" y MAL redirige a la ficha principal (sin reparto); con cualquier
+otro slug (`/anime/{id}/_/characters`) devuelve la lista entera.
 
-### 1. Catálogo completo de AniList (`bun run anilist:enumerate`)
+### Los personajes que solo existen en AniList van en la misma tabla
 
-El `Page` de AniList tiene un límite de **5.000 entradas** por consulta, así que
-`Page` solo llega a la 100 y no cubre el espacio de ids (218.626). La vía que
-sí lo cubre es `id_in`: 50 ids por consulta → 4.374 consultas.
+AniList cubre los animes sin lista de MAL, pero su id de personaje vive en
+otro espacio de ids. Mezclarlos en `character` (indexada por `mal_id`)
+colisionaría. Se guardan **en la misma tabla** con el rango `1e9 +` reservado
+(los ids de MAL de personaje no pasan de 306.072) y su `anilist_id` real, y se
+enlazan con el mismo `anime_character` / `manga_character`.
 
-- **21.152 anime enlazados por `idMal`** (exacto, no por título).
-- **70.958 obras impresas** creadas: 57.867 manga, 6.991 novelas, 6.000
-  one-shots, con sinónimos, géneros, fechas, país y origen.
+### El equipo de las obras viene de la página de MAL
 
-### 2. Ficha completa de las obras impresas (`malManga`)
+Es la única fuente con el **id de persona** de MAL para autores, ilustradores
+y editores. Fuente nueva `malMangaPage`: una petición por obra (78-153 KB).
 
-`/v2/manga/{id}` sobre las 70.958 obras: sinopsis, background, capítulos,
-volúmenes, serialización (revista), editorial con rol, relaciones tipadas,
-enlaces externos y portada. También crea los géneros/temas/demográficas de MAL
-que ningún anime había usado (la tabla `genre` tenía 34 de ~48).
+### AniList no se puede enumerar con `Page`
 
-### 3. Reparto completo (`malCharacters` + `malPerson`)
+El límite de profundidad de la API es de **5.000 entradas** por consulta, así
+que `Page` solo llega a la 100 y no cubre el espacio de ids (218.626). La vía
+que sí lo cubre es `id_in`: 50 ids por consulta → 4.374 consultas → 164.125
+medios. Con eso se crean **70.858 obras impresas** (57.867 manga, 6.991 novelas,
+6.000 one-shots) y se cierra el mapeo anime↔AniList **por `idMal`**.
 
-- `malCharacters`: una petición por anime → el **reparto entero** con el rol
-  (`Main`/`Supporting`).
-- `malPerson`: una petición por persona → el nombre (que solo se tenía para
-  los 10 primeros), la biografía, los alias y el **retrato** (la API devuelve
-  la miniatura; la grande se deduce de la URL).
+## Rendimiento: el cuello era el lote, no la red
 
-### 4. Pase profundo de AniList (`anilistMedia`)
+Con 76 IPs el pase iba a **25 tareas/min**. Tres causas encadenadas:
 
-Por medio (anime y manga): reparto completo **con sus voces**, créditos de
-staff con rol y nota, relaciones y enlaces externos. El cruce con MAL es por
-**nombre normalizado** (AniList no publica el id de MAL de sus personajes) y
-aporta el rol fino (`MAIN`/`SUPPORTING`/`BACKGROUND`) y la voz.
+1. El perfil de backfill **no copiaba el `taskBatchSize`** al config resuelto,
+   así que el lote se quedaba en 200 tasks. El manager drena el lote entero
+   antes de pedir el siguiente, de modo que el "barrero" (esperar al task más
+   lento) se pagaba cada 200 tasks.
+2. El **cooldown del proxy era exponencial** (2ⁿ s): con un 8 % de timeouts las
+   IPs buenas quedaban fuera minutos, el pool se encogía y las que quedaban
+   recibían más tráfico (espiral mortal). Ahora es plano (5 s) y rota el LRU.
+3. El **timeout de 30 s** era de sobra (la latencia real por proxy es ~0,5 s,
+   p90 1,2 s): 8 s.
 
-### 5. Metadatos de las canciones (`musicMeta`)
+Con el lote en 5.000, el cooldown plano y 28 req/min por IP (el límite de
+AniList es 30, confirmado en la cabecera `x-ratelimit-limit`): **25 → 615
+tareas/min** (y hasta 1.650 con el pool sano).
 
-Spotify (oEmbed) + iTunes (lookup), sin credenciales: título exacto, álbum,
-duración, fecha de publicación y portada.
+## El reparto de los animes sin lista de MAL
 
-## Orden de ejecución
+Ni MAL ni AniList lo tienen (verificado uno a uno: `Monkey Magic`, `Fushigi
+na Koala Blinky`, `Princess Memory` → 0 personajes en ambas fuentes). No es un
+fallo del scraper: es un techo de las fuentes. Lo que sí se recuperó:
+**373 animes** que MAL no listaba y AniList sí, más el reparto completo de las
+obras impresas (que solo existe en AniList).
 
-```
-malManga      (independiente)
-malCharacters → malPerson → anilistMedia   (el reparto necesita los nombres)
-musicMeta     (independiente)
-```
+## Qué falta (y no son datos)
 
-## Lo que queda fuera (y por qué)
-
-- **OP/ED de los ~20.400 anime sin tema**: ni MAL, ni ANN, ni AnimeThemes los
-  tienen. No hay más fuente accesible; el techo musical está cerca.
-- **Vídeo de episodio**: sin fuente legal (muro de Fase 5 del roadmap).
-- **Manga sin id de MAL** (70.542 en AniList): el catálogo está indexado por
-  id de MAL, así que quedan fuera hasta que se decida la clave.
+- **Páginas de dominio** en la app: `/character/[id]`, `/voice-actor/[id]`,
+  `/manga/[id]`.
+- **Control parental del manga**: la tabla `manga` no tiene columna de rating,
+  así que el fail-closed de anime no aplica a las obras adultas.
+- **Búsqueda global**: `/search` es solo de anime.
+- **OP/ED de ~20.400 anime**: ni MAL, ni ANN, ni AnimeThemes los tienen; no
+  hay más fuente accesible.
+- **Vídeo de episodio**: sin fuente legal (muro de Fase 5).
+- **Obras impresas sin id de MAL** (70.542 en AniList): el catálogo está
+  indexado por id de MAL, así que no tienen dónde guardarse.
