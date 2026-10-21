@@ -1,7 +1,7 @@
 import { db } from '../libs/db.js'
 import { artist } from '../schemas/artist.js'
-import { inArray } from 'drizzle-orm'
-import { chunk, SQLITE_MAX_VARIABLES } from '../utils/chunk.js'
+import { sql } from 'drizzle-orm'
+import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 import { normalizeText } from '../utils/normalize.js'
 import { batchUpsert } from './batchUpsert.js'
 import type { NewArtist } from '../types/index.js'
@@ -21,14 +21,26 @@ export async function resolveArtistIds(
   const uniqueNames = [...new Set(artistNames.filter(Boolean))]
   const artistMap = new Map<string, number>()
 
-  // 1. Find existing artists
-  for (const batch of chunk(uniqueNames, SQLITE_MAX_VARIABLES)) {
+  // 1. Find existing artists (por nombre normalizado: MAL, ANN y AnimeThemes
+  // escriben el mismo artista con distinta capitalización —"Nobodyknows+" y
+  // "nobodyknows+"— y el índice único es sobre el nombre exacto).
+  for (const batch of chunk(uniqueNames, MAX_PARAMS_PER_STATEMENT)) {
+    const normalized = batch.map((name) => normalizeText(name))
     const found = await db
       .select({ id: artist.id, name: artist.name })
       .from(artist)
-      .where(inArray(artist.name, batch))
+      .where(
+        sql`lower(trim(${artist.name})) = ANY(${sql.raw(
+          `ARRAY[${normalized
+            .map((n) => `'${n.replace(/'/g, "''")}'`)
+            .join(',')}]`
+        )})`
+      )
     for (const a of found) {
-      artistMap.set(normalizeText(a.name), a.id)
+      const key = normalizeText(a.name)
+      // Si hay varias filas con el mismo nombre normalizado, gana la más
+      // antigua: es la que ya pueden estar referenciando los créditos.
+      if (!artistMap.has(key)) artistMap.set(key, a.id)
     }
   }
 
@@ -40,15 +52,23 @@ export async function resolveArtistIds(
   if (missing.length > 0) {
     await batchUpsert(artist, missing, 3, 'new-artists')
 
-    // Re-query to get new IDs
+    // Re-query to get new IDs (por nombre normalizado, igual que antes).
     const newNames = missing.map((a) => a.name)
-    for (const batch of chunk(newNames, SQLITE_MAX_VARIABLES)) {
+    for (const batch of chunk(newNames, MAX_PARAMS_PER_STATEMENT)) {
+      const normalized = batch.map((name) => normalizeText(name))
       const found = await db
         .select({ id: artist.id, name: artist.name })
         .from(artist)
-        .where(inArray(artist.name, batch))
+        .where(
+          sql`lower(trim(${artist.name})) = ANY(${sql.raw(
+            `ARRAY[${normalized
+              .map((n) => `'${n.replace(/'/g, "''")}'`)
+              .join(',')}]`
+          )})`
+        )
       for (const a of found) {
-        artistMap.set(normalizeText(a.name), a.id)
+        const key = normalizeText(a.name)
+        if (!artistMap.has(key)) artistMap.set(key, a.id)
       }
     }
   }

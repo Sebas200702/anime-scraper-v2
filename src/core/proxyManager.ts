@@ -1,7 +1,25 @@
 import fs from 'node:fs/promises'
 import type { ProxyState } from 'types/index.js'
-const raw = await fs.readFile('./proxies.json', 'utf-8')
-const rawProxies: string[] = JSON.parse(raw)
+import { CONFIG } from '../config/config.js'
+import { normalizeProxy } from '../libs/transport.js'
+
+const PROXIES_FILE = './proxies.json'
+
+const loadRawProxies = async (): Promise<string[]> => {
+  try {
+    const parsed: unknown = JSON.parse(await fs.readFile(PROXIES_FILE, 'utf-8'))
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((entry): entry is string => typeof entry === 'string')
+  } catch (error: any) {
+    // Sin archivo (o inválido) se corre directo: degradar, no romper el arranque.
+    console.warn(
+      `📡 ${PROXIES_FILE} no disponible (${error?.message ?? error}); se correrá sin proxies`
+    )
+    return []
+  }
+}
+
+const rawProxies = await loadRawProxies()
 
 export const proxyManager = {
   proxies: [] as ProxyState[],
@@ -10,9 +28,20 @@ export const proxyManager = {
   init() {
     if (this.initialized) return
     this.initialized = true
-    console.log(`📡 Loaded ${rawProxies.length} proxies`)
-    this.proxies = rawProxies.map((proxy) => ({
-      url: `http://${proxy}`,
+
+    const credentials = { user: CONFIG.PROXY_USER, pass: CONFIG.PROXY_PASS }
+    const normalized: string[] = []
+    for (const entry of rawProxies) {
+      const url = normalizeProxy(entry, credentials)
+      if (url) normalized.push(url)
+    }
+
+    const skipped = rawProxies.length - normalized.length
+    console.log(
+      `📡 Loaded ${normalized.length} proxies${skipped > 0 ? ` (${skipped} entradas inválidas ignoradas)` : ''}`
+    )
+    this.proxies = normalized.map((url) => ({
+      url,
       failures: 0,
       lastUsed: 0,
       cooldownUntil: 0,
@@ -33,19 +62,69 @@ export const proxyManager = {
    * Each worker gets multiple proxies to rotate through.
    * @returns Array of URL-string arrays, one per worker.
    */
+  /**
+   * Siguiente proxy disponible, por LRU, marcándolo como usado. Es la forma de
+   * que el orquestador reparta tareas entre **todas** las IPs (antes el proxy
+   * se fijaba por worker y `lastUsed` nunca se actualizaba: siempre elegía el
+   * mismo y el resto quedaba ocioso).
+   */
+  acquire(): ProxyState | undefined {
+    const proxy = this.getAvailableProxies()[0]
+    if (proxy) proxy.lastUsed = Date.now()
+    return proxy
+  },
+
+  /**
+   * Adquiere una IP **de un shard** concreto (`index` de `count`): cada fuente
+   * del backfill recibe su propia porción del pool, así dos fuentes nunca
+   * compiten por la misma IP (que era lo que hacía saltar el 429 por IP).
+   * Dentro del shard se mantiene LRU y el health del pool.
+   */
+  acquireShard(index: number, count: number): ProxyState | undefined {
+    const size = Math.max(1, Math.floor(this.proxies.length / count))
+    const from = index * size
+    const to = index === count - 1 ? this.proxies.length : from + size
+    const slice = this.proxies.slice(from, to)
+    if (slice.length === 0) return this.acquire()
+
+    const now = Date.now()
+    const healthy = slice
+      .filter((p) => p.failures < 10 && now >= p.cooldownUntil)
+      .sort((a, b) => a.lastUsed - b.lastUsed)
+    const proxy = healthy[0] ?? slice.sort((a, b) => a.lastUsed - b.lastUsed)[0]
+    if (proxy) proxy.lastUsed = Date.now()
+    return proxy
+  },
+
   allocateForWorkers(workerCount: number) {
     const available = this.getAvailableProxies()
-    if (available.length < workerCount) throw new Error('Not enough proxies')
+
+    // Degradar, no abortar: si hay menos proxies que workers, arrancan menos
+    // (antes lanzaba y tumbaba la corrida entera).
+    if (available.length < workerCount) {
+      console.warn(
+        `📡 Solo ${available.length} proxies disponibles para ${workerCount} workers: se arrancan ${available.length}`
+      )
+    }
 
     return available.slice(0, workerCount)
   },
 
+  /**
+   * Penaliza un proxy. El llamador debe invocarlo **solo** cuando el fallo es
+   * atribuible al proxy (`FetchError.proxyFault`): un 404, un 429 o credenciales
+   * inválidas son de la fuente (decisión H-07).
+   */
   reportFailure(proxyUrl: string) {
     const proxy = this.proxies.find((p) => p.url === proxyUrl)
     if (!proxy) return
     proxy.failures++
-    proxy.cooldownUntil =
-      Date.now() + Math.min(1000 * 2 ** proxy.failures, 60_000)
+    // El cooldown era exponencial (2^n s): con un 8 % de timeouts, las IPs
+    // buena quedaban fuera minutos y el pool se encogía (espiral mortal:
+    // menos IPs → más tráfico cada una → más 429 → más timeouts). 5 s y el
+    // LRU ya rotates las IPs; las que mueren de verdad se descartan por el
+    // filtro de salud.
+    proxy.cooldownUntil = Date.now() + 5_000
   },
 
   reportSuccess(proxyUrl: string) {

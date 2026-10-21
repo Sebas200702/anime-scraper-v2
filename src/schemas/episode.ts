@@ -1,15 +1,17 @@
-import {
-  integer,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from 'drizzle-orm/sqlite-core'
+/**
+ * ESPEJO de `anidev-v2/src/lib/db/schemas/episode` — anidev-v2 es el dueño del
+ * DDL y el scraper solo lo refleja para escribir en la misma forma.
+ *
+ * No editar a mano: `bun run schema:mirror` (drift check: `bun run schema:mirror --check`).
+ */
+
+import { integer, pgTable, serial, text, uniqueIndex } from 'drizzle-orm/pg-core'
 import { anime } from './anime.js'
 
-export const episode = sqliteTable(
+export const episode = pgTable(
   'episode',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: serial('id').primaryKey(),
     animeId: integer('anime_id')
       .notNull()
       .references(() => anime.malId, { onDelete: 'cascade' }),
@@ -21,11 +23,10 @@ export const episode = sqliteTable(
   },
   (t) => [uniqueIndex('episode_anime_number_unique').on(t.animeId, t.number)]
 )
-
-export const episodeSource = sqliteTable(
+export const episodeSource = pgTable(
   'episode_source',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: serial('id').primaryKey(),
     episodeId: integer('episode_id')
       .notNull()
       .references(() => episode.id, { onDelete: 'cascade' }),
@@ -33,11 +34,10 @@ export const episodeSource = sqliteTable(
   },
   (t) => [uniqueIndex('episode_source_unique').on(t.episodeId, t.src)]
 )
-
-export const episodeSubtitle = sqliteTable(
+export const episodeSubtitle = pgTable(
   'episode_subtitle',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: serial('id').primaryKey(),
     episodeId: integer('episode_id')
       .notNull()
       .references(() => episode.id, { onDelete: 'cascade' }),

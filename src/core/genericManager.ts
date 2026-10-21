@@ -1,32 +1,84 @@
-import { BaseWorkerManager } from './baseManager.js'
 import { taskRepository } from '../repositories/tasks.js'
 import { StatsReporter } from './statsReporter.js'
 import { proxyManager } from './proxyManager.js'
+import { RateGate } from './rateGate.js'
+import { proxyKey } from './rateGate.js'
+import { TaskDispatcher, type DispatcherTask } from './taskDispatcher.js'
+import { SINGLE_IP_SOURCES, SOURCE_HOSTS } from '../config/sources.js'
+import { KEY_SCOPED_HOSTS } from '../config/sources.js'
+import { DEFAULT_REFRESH_SECONDS } from '../config/sources.js'
 import { capitalize } from '../shared/parsers.js'
+import { sanitizeError } from '../utils/sanitizeError.js'
+import { FetchError } from '../libs/httpError.js'
+import { SkippedTaskError } from '../libs/skippedTaskError.js'
+import { takeDeferredDependencies } from '../shared/dependencyTracker.js'
 import type {
-  ProxyState,
   ScrapingTask,
   SourceConfig,
-  WorkerMessage,
   BufferedTask,
 } from '../types/index.js'
 
-export class GenericManager extends BaseWorkerManager {
+/**
+ * Una sola puerta de rate para toda la corrida: si se recreara en cada lote, las
+ * ventanas se resetearían y la cuota por (host, IP) no se respetaría.
+ */
+const rateGate = new RateGate()
+
+/**
+ * Ingesta de una fuente: el proceso padre fetchea y mapea (una tarea por IP,
+ * con la cuota por (host, IP) aplicada por el `TaskDispatcher`), bufferiza por
+ * tipo de tarea y guarda en lotes.
+ *
+ * Ya no hay `worker_threads`: a las tasas reales (≤ decenas de req/s) el trabajo
+ * es I/O y el mapeo es liviano, y un solo proceso elimina las clases de fallo
+ * de la etapa anterior (limiter por worker, un proxy fijo por worker, workers
+ * colgados, `dist/` obligatorio, nada que reporte al pool).
+ */
+export class GenericManager {
+  readonly maxWorkers: number
+  readonly source: string
+  sourceConfig: SourceConfig
+  taskQueue: DispatcherTask[] = []
+  pageBatch: number
+  bufferByTaskType = new Map<string, BufferedTask[]>()
+
   private readonly savingByTaskType: Set<string> = new Set()
+  private readonly refreshCache = new Map<string, number | undefined>()
   private cachedRepository: any = null
+  private cachedModules: { services: any; processors: any } | null = null
   private statsInterval: ReturnType<typeof setInterval> | null = null
-  private workersSpawned = false
   private readonly reporter: StatsReporter
 
   constructor(sourceConfig: SourceConfig) {
-    super({
-      maxWorkers: sourceConfig.maxWorkers,
-      source: sourceConfig.name,
-      workerPath: './dist/src/core/genericWorker.js',
-    })
+    this.maxWorkers = sourceConfig.maxWorkers
+    this.source = sourceConfig.name
     this.sourceConfig = sourceConfig
     this.pageBatch = sourceConfig.pageBatch
     this.reporter = new StatsReporter(sourceConfig.name)
+  }
+
+  /**
+   * Tope global de conexiones compartido entre fuentes (trial: 10). Cuando está
+   * presente, `maxWorker` deja de ser un tope de conexiones (el presupuesto lo
+   * es) y pasa a ser cuántas tareas puede tener en vuelo esta fuente.
+   */
+  private budget?: { acquire: () => Promise<void>; release: () => void }
+
+  private proxyShard?: { index: number; count: number }
+
+  useBudget(budget: { acquire: () => Promise<void>; release: () => void }) {
+    this.budget = budget
+    return this
+  }
+
+  /**
+   * Asigna a esta fuente un **shard** del pool de proxies (su propia porción de
+   * IPs), para que las fuentes que corren en paralelo no compitan por las mismas
+   * y no se disparen los 429 por IP.
+   */
+  useProxyShard(index: number, count: number) {
+    this.proxyShard = { index, count }
+    return this
   }
 
   private async getRepository() {
@@ -40,62 +92,133 @@ export class GenericManager extends BaseWorkerManager {
     return this.cachedRepository
   }
 
-  override async getTasks() {
+  private async getModules() {
+    if (!this.cachedModules) {
+      this.cachedModules = {
+        services: await import(`../services/${this.sourceConfig?.name}.js`),
+        processors: await import(`../processors/${this.sourceConfig?.name}.js`),
+      }
+    }
+    return this.cachedModules
+  }
+
+  async getTasks() {
     const batchSize = this.sourceConfig?.taskBatchSize || 2000
-    this.taskQueue = await taskRepository.getPendingTasks(
+    // Claim atómico: la tarea queda `in_progress` con lease desde aquí, así que
+    // un crash no pierde el lote (el reaper lo devuelve a `pending`).
+    this.taskQueue = await taskRepository.claimTasks(
       batchSize,
       this.sourceConfig?.name
     )
   }
 
-  override getWorkerData(id: number, tasks: ScrapingTask[], proxy: ProxyState) {
-    console.log(
-      `Spawning worker ${id} with ${tasks.length} tasks and proxy ${proxy.url}`
-    )
-    return {
-      workerId: id,
-      tasks,
-      proxy,
-      sourceName: this.sourceConfig?.name,
-      sourceConfig: this.sourceConfig,
-    }
+  /**
+   * Cadencia de refresh del taskType: `ingest.task_policy` manda, y si no hay
+   * política se usa el default del source (Memoria del plan de fill/refresh).
+   */
+  private async refreshSeconds(taskType: string): Promise<number | undefined> {
+    if (this.refreshCache.has(taskType)) return this.refreshCache.get(taskType)
+
+    const source = this.sourceConfig?.name ?? this.source
+    const seconds =
+      (await taskRepository.refreshSecondsFor(source, taskType)) ??
+      DEFAULT_REFRESH_SECONDS[taskType]
+
+    this.refreshCache.set(taskType, seconds)
+    return seconds
   }
 
-  private sendTasksToWorkers() {
-    const totalTasks = this.taskQueue.length
-    if (!totalTasks || this.workers.length === 0) return
-    const tasksPerWorker = Math.ceil(totalTasks / this.workers.length)
+  /** Fetch + mapeo en el proceso padre, con la IP que decidió el orquestador. */
+  private async runTask(task: ScrapingTask, proxyUrl: string | undefined) {
+    const modules = await this.getModules()
+    const taskConfig = this.sourceConfig?.tasks[task.taskType]
+    if (!taskConfig) throw new Error(`Unknown taskType: ${task.taskType}`)
 
-    for (let i = 0; i < this.workers.length; i++) {
-      const slice = this.taskQueue.slice(
-        i * tasksPerWorker,
-        (i + 1) * tasksPerWorker
+    const entity = capitalize(taskConfig.entity)
+    const fetchFn = modules.services[`fetch${entity}`]
+    if (typeof fetchFn !== 'function') {
+      throw new Error(`Missing fetch${entity} in services/${this.source}.js`)
+    }
+
+    const processFn = modules.processors[`process${entity}`]
+    if (typeof processFn !== 'function') {
+      throw new Error(
+        `Missing process${entity} in processors/${this.source}.js`
       )
-      if (slice.length > 0) {
-        this.workers[i]!.postMessage({ type: 'newTasks', tasks: slice })
-      }
     }
-    console.log(
-      `📨 Sent ${totalTasks} tasks to ${this.workers.length} existing workers`
-    )
+
+    const rawData = await fetchFn(task, proxyUrl)
+    return await processFn(rawData, task)
   }
 
-  private shutdownWorkers() {
-    for (const worker of this.workers) worker.postMessage({ type: 'shutdown' })
-    this.workers = []
-    this.workersSpawned = false
-  }
-
-  override async init() {
+  async init() {
     this.reporter.reset()
     await this.getRepository()
+    await this.getModules()
 
-    const resetCount = await taskRepository.resetStaleTasks(
-      this.sourceConfig?.name
-    )
+    const source = this.sourceConfig?.name ?? this.source
+    const hostLimits = SOURCE_HOSTS[source] ?? {
+      host: source,
+      limits: this.sourceConfig?.rateLimit ?? { perSecond: 1, perMinute: 60 },
+    }
+
+    const resetCount = await taskRepository.resetStaleTasks(source)
     if (resetCount > 0) console.log(`♻️  Reset ${resetCount} stale tasks`)
 
-    console.log(`\n🚀 Starting ${this.sourceConfig?.name}...\n`)
+    // Lo vencido por política vuelve a `pending`: sin esta llamada el refresh
+    // no existiría (las tareas `completed` nunca se re-armarían). Es un UPDATE
+    // barato y solo toca lo que ya venció.
+    const dueCount = await taskRepository.rearmDueTasks(source)
+    if (dueCount > 0)
+      console.log(`🔄 ${dueCount} tareas vencidas re-armadas por política`)
+
+    // Lo que quedó `skipped` por dependencia vuelve a intentarse: la dependencia
+    // pudo aterrizar en la corrida anterior.
+    const rearmed = await taskRepository.rearmSkippedTasks(source)
+    if (rearmed > 0) console.log(`⏸️→▶ ${rearmed} tareas skipped re-armadas`)
+
+    proxyManager.init()
+    const singleIp = SINGLE_IP_SOURCES.has(source)
+    const poolSize = proxyManager.getAvailableProxies().length
+    // Fuentes sin proxy (cuota por key/client id): pueden tener varias en vuelo
+    // sin tocar el tope de conexiones del proveedor; el gate por host las acota.
+    // En vuelo = `maxWorkers` (no el tamaño del pool): varias tareas pueden
+    // compartir IP, y el `RateGate` es quien limita por (host, IP). Limitarlo
+    // al tamaño del pool dejaba el 50 % de los workers ociosos.
+    const maxInFlight = Math.max(1, this.maxWorkers)
+
+    console.log(
+      `\n🚀 Starting ${source} — ${maxInFlight} tareas en vuelo · ` +
+        (singleIp
+          ? 'directo (cuota por API key)\n'
+          : `${poolSize} proxies en el pool\n`)
+    )
+
+    const dispatcher = new TaskDispatcher({
+      maxInFlight,
+      gate: rateGate,
+      acquireProxy: () =>
+        singleIp
+          ? undefined
+          : this.proxyShard
+            ? proxyManager.acquireShard(
+                this.proxyShard.index,
+                this.proxyShard.count
+              )
+            : proxyManager.acquire(),
+      limitsFor: () => hostLimits,
+      // Fuentes con cuota por API key (TVDB): una sola clave global, aunque el
+      // fetch salga por una IP distinta.
+      gateKeyFor: (host, proxyUrl) =>
+        proxyKey(host, KEY_SCOPED_HOSTS.has(host) ? undefined : proxyUrl),
+      budget: this.budget,
+      reportProxy: (proxyUrl, error) => {
+        if (!proxyUrl) return
+        if (error) proxyManager.reportFailure(proxyUrl)
+        else proxyManager.reportSuccess(proxyUrl)
+      },
+    })
+
     this.statsInterval = setInterval(() => this.reporter.print(), 30_000)
 
     try {
@@ -103,7 +226,7 @@ export class GenericManager extends BaseWorkerManager {
       while (true) {
         await this.getTasks()
         if (this.taskQueue.length === 0) {
-          if (batchNumber === 0) console.log(`✅ No tasks for ${this.source}\n`)
+          if (batchNumber === 0) console.log(`✅ No tasks for ${source}\n`)
           break
         }
         batchNumber++
@@ -111,25 +234,39 @@ export class GenericManager extends BaseWorkerManager {
           `\n📦 Batch ${batchNumber}: ${this.taskQueue.length} tasks\n`
         )
 
-        await taskRepository.markTasksInProgress(
-          this.taskQueue.map((t) => t.id)
+        const summary = await dispatcher.drain(
+          this.taskQueue as DispatcherTask[],
+          {
+            run: async (task, proxyUrl) => {
+              // Ya está claimada con lease: se ejecuta y nada más.
+              return await this.runTask(task as ScrapingTask, proxyUrl)
+            },
+            onDone: (task, data) =>
+              this.processWorkerData(task.id, task.taskType, data),
+            onError: async (task, error) => {
+              // Dependencia pendiente: se marca `skipped` (re-armable), no como
+              // fallo. Consumir reintentos aquí acabaría en dead_letter.
+              if (error instanceof SkippedTaskError) {
+                await taskRepository.skipTasks([task.id], error.reason)
+                return
+              }
+              await taskRepository.failTasks(
+                [task.id],
+                sanitizeError((error as Error)?.message),
+                error instanceof FetchError ? error.retryAfterMs : undefined,
+                error instanceof FetchError ? error.retryable : true
+              )
+            },
+          }
         )
-        this.finishedWorkers = 0
-        this.bufferByTaskType = new Map()
-        this.completionPromise = new Promise((r) => {
-          this.resolveCompletion = r
-        })
 
-        if (!this.workersSpawned) {
-          this.distributeTasks()
-          this.workersSpawned = true
-        } else {
-          this.sendTasksToWorkers()
-        }
-        await this.completionPromise
+        console.log(
+          `📦 Batch ${batchNumber}: ${summary.processed} ok · ${summary.failed} fallos ${JSON.stringify(summary.byKind)} · ${summary.proxiesUsed} IPs usadas`
+        )
       }
+
+      await this.flush()
     } finally {
-      this.shutdownWorkers()
       if (this.statsInterval) clearInterval(this.statsInterval)
       this.reporter.print()
       const health = proxyManager.getHealthSummary()
@@ -139,46 +276,18 @@ export class GenericManager extends BaseWorkerManager {
     }
   }
 
-  override async handleWorkerMessage(
-    id: number,
-    msg: WorkerMessage
-  ): Promise<void> {
-    const { status, taskId, taskType, data, error, proxyUrl } = msg
-
-    if (status === 'proxy-failure' && proxyUrl) {
-      proxyManager.reportFailure(proxyUrl)
-      return
-    }
-    if (status === 'proxy-success' && proxyUrl) {
-      proxyManager.reportSuccess(proxyUrl)
-      return
-    }
-
-    if (status === 'done') {
-      this.reporter.incrementProcessed()
-      await this.processWorkerData(taskId, taskType, data)
-    }
-    if (status === 'error') {
-      this.reporter.incrementErrors()
-      console.error(`Worker ${id} error on task ${taskId}:`, error)
-      await taskRepository.markTaskFailed(taskId, error || 'Unknown error')
-    }
-    if (status === 'finished') {
-      this.finishedWorkers++
-      console.log(
-        `Worker ${id} finished (${this.finishedWorkers}/${this.workers.length})`
-      )
-      if (this.finishedWorkers === this.workers.length) {
-        await this.flush()
-        if (this.resolveCompletion) this.resolveCompletion()
-      }
-    }
-  }
-
   // --- Buffering & Saving ---
 
   async processWorkerData(taskId: number, taskType: string, data: any) {
-    if (!data) return
+    // Un processor sin resultados no es un fallo: la tarea se completa con 0
+    // items y se programa su refresh por política.
+    if (!data) {
+      await taskRepository.completeTasks(
+        [taskId],
+        await this.refreshSeconds(taskType)
+      )
+      return
+    }
     if (!this.bufferByTaskType.has(taskType))
       this.bufferByTaskType.set(taskType, [])
     this.bufferByTaskType.get(taskType)!.push({ taskId, taskType, data })
@@ -192,9 +301,9 @@ export class GenericManager extends BaseWorkerManager {
 
     this.savingByTaskType.add(taskType)
     try {
+      // `saveData` no propaga fallos de escritura (marca las tareas `failed`).
+      // Sin catch a propósito: tragarse el error sería perder el lote.
       await this.saveData(buffer.splice(0, this.pageBatch))
-    } catch (error) {
-      console.error('Error saving batch:', error)
     } finally {
       this.savingByTaskType.delete(taskType)
     }
@@ -209,6 +318,9 @@ export class GenericManager extends BaseWorkerManager {
       try {
         while (buffer.length > 0)
           await this.saveData(buffer.splice(0, this.pageBatch))
+      } catch (error) {
+        // Un tipo que falle no puede abortar el volcado de los demás.
+        console.error(`Error flushing ${taskType}:`, error)
       } finally {
         this.savingByTaskType.delete(taskType)
       }
@@ -219,7 +331,6 @@ export class GenericManager extends BaseWorkerManager {
     if (batch.length === 0) return
     const first = batch[0]
     if (!first) return
-    const repository = await this.getRepository()
     const taskConfig = this.sourceConfig?.tasks[first.taskType]
     const entity = capitalize(taskConfig?.entity || '')
     const saveFnName = `save${entity}`
@@ -227,16 +338,79 @@ export class GenericManager extends BaseWorkerManager {
     const items = batch.flatMap((b) =>
       Array.isArray(b.data) ? b.data : [b.data]
     )
-    const totalSaved = (await repository[saveFnName](items)) ?? items.length
+    const taskIds = batch.map((b) => b.taskId)
 
-    await taskRepository.markTasksCompleted(batch.map((b) => b.taskId))
-    this.reporter.recordSaved(entity, totalSaved, batch.length)
-    console.log(
-      `💾 Saved ${totalSaved} ${entity}(s) from ${batch.length} task(s)`
-    )
+    try {
+      const repository = await this.getRepository()
+      const totalSaved = (await repository[saveFnName](items)) ?? items.length
+
+      // Si el filtro de FK dejó filas fuera (padre inexistente), la tarea queda
+      // `skipped` para reintentarla cuando el padre exista.
+      //
+      // El contador es del proceso, no de la tarea: como un lote lleva hasta
+      // `pageBatch` tareas, marcar todo el lote acusaba de "diferido" a tareas
+      // que guardaron bien (se veía con animeThemes: 1.500 tareas `skipped` con
+      // su música ya escrita). Por eso, cuando hay diferidos, se re-guarda
+      // **tarea por tarea** (idempotente: los repos hacen upsert) para saber
+      // cuáles fallaron de verdad; el costo extra solo aparece en ese caso.
+      const deferred = takeDeferredDependencies()
+      if (deferred > 0) {
+        const skipped: number[] = []
+        const completed: number[] = []
+        for (const buffered of batch) {
+          const taskItems = Array.isArray(buffered.data)
+            ? buffered.data
+            : [buffered.data]
+          await repository[saveFnName](taskItems)
+          if (takeDeferredDependencies() > 0) skipped.push(buffered.taskId)
+          else completed.push(buffered.taskId)
+        }
+
+        if (completed.length > 0) {
+          await taskRepository.completeTasks(
+            completed,
+            await this.refreshSeconds(first.taskType)
+          )
+        }
+        if (skipped.length > 0) {
+          await taskRepository.skipTasks(skipped, 'missing:dependency')
+        }
+        this.reporter.recordSaved(entity, totalSaved, completed.length)
+        console.log(
+          `⏸️  ${entity}: ${totalSaved} guardados · ${skipped.length} tareas diferidas por dependencia (re-armables)`
+        )
+        return
+      }
+
+      await taskRepository.completeTasks(
+        taskIds,
+        await this.refreshSeconds(first.taskType)
+      )
+      this.reporter.recordSaved(entity, totalSaved, batch.length)
+      console.log(
+        `💾 Saved ${totalSaved} ${entity}(s) from ${batch.length} task(s)`
+      )
+    } catch (error: any) {
+      // Una escritura fallida NO puede marcar la tarea como completada: eso
+      // sería pérdida silenciosa de datos.
+      const reason = sanitizeError(error?.message)
+      this.reporter.incrementErrors(batch.length)
+      console.error(`❌ Failed to save ${batch.length} ${entity}(s): ${reason}`)
+      try {
+        await taskRepository.failTasks(taskIds, reason)
+      } catch (markError) {
+        // Si ni marcar el fallo se puede (DB caída), es preferible dejar las
+        // tareas `in_progress`: el próximo arranque las re-encola. Propagar
+        // aquí colgaría la corrida.
+        console.error(
+          `Could not mark ${taskIds.length} task(s) as failed:`,
+          markError
+        )
+      }
+    }
   }
 
-  override printStats() {
+  printStats() {
     this.reporter.print()
   }
 }

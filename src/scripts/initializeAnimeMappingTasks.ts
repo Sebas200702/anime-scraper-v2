@@ -1,6 +1,8 @@
 import { db } from '../libs/db.js'
 import { taskRepository } from '../repositories/tasks.js'
 import { anime } from '../schemas/anime.js'
+import { animeExternalIds } from '../schemas/animeExternal.js'
+import { eq } from 'drizzle-orm'
 
 export const initializeAnimeMappingTasks = async () => {
   try {
@@ -25,9 +27,12 @@ export const initializeAnimeMappingTasks = async () => {
           titleEnglish: anime.titleEnglish,
           year: anime.year,
           type: anime.type,
+          kitsuId: animeExternalIds.kitsuId,
         })
         .from(anime)
+        .leftJoin(animeExternalIds, eq(animeExternalIds.animeId, anime.malId))
         .limit(fetchBatchSize)
+        .orderBy(anime.malId)
         .offset(offset)
 
       if (!animes || animes.length === 0) break
@@ -35,7 +40,7 @@ export const initializeAnimeMappingTasks = async () => {
       const tasks = animes
         .filter((a) => !existing.has(`anime_mapping_${a.malId}`))
         .map((a) => ({
-          entityType: 'animeMapping',
+          source: 'animeMapping',
           entityId: `anime_mapping_${a.malId}`,
           taskType: 'anime_mapping_hydration',
           priority: 5,
@@ -46,6 +51,9 @@ export const initializeAnimeMappingTasks = async () => {
             title_english: a.titleEnglish,
             year: a.year,
             type: a.type,
+            // Vía rápida del servicio: con kitsu_id evita las búsquedas por
+            // título (1 request a mappings en vez de hasta 4 búsquedas).
+            kitsu_id: a.kitsuId ?? null,
           },
         }))
 

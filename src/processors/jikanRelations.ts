@@ -1,5 +1,6 @@
 
 import type {
+  NewMedia,
   AnimeCharactersProcessorResult,
   AnimeRelationsProcessorResult,
   AnimeStaffProcessorResult,
@@ -84,7 +85,7 @@ export const processAnimeStaff = (
       role: item.positions.join(', ') ?? 'Unkwnown',
     })),
     staffMedia: data.flatMap((item) => {
-      const mediaList = []
+      const mediaList: NewMedia[] = []
       if (item.person.images.jpg) {
         mediaList.push({
           entityId: item.person.mal_id,

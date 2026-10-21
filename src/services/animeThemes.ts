@@ -1,52 +1,60 @@
-import { fetcher } from '../libs/fetcher.js'
 import { CONFIG } from '../config/config.js'
+import { fetchNextData } from '../libs/nextBuildId.js'
 import type { ScrapingTask } from 'types/index.js'
-import type { ProxyAgent } from 'undici'
+import type { ProxyTarget } from '../libs/transport.js'
 import type {
   AnimeThemesAnimeAllFile,
   AnimeThemesArtistAllFile,
 } from 'types/animeThemesApi.js'
 
+/**
+ * AnimeThemes se sirve como datos de Next.js (`/_next/data/{buildId}/…`), así
+ * que el buildId se resuelve en cada corrida (libs/nextBuildId.ts): hardcodearlo
+ * rompía el source con 404 en cada deploy del sitio.
+ *
+ * `ANIME_THEMES_BASE` es la base del sitio; `ANIME_THEMES_BUILD_ID` (opcional)
+ * lo fija a mano si hiciera falta.
+ */
+const siteBase = () => process.env.ANIME_THEMES_BASE || CONFIG.ANIME_THEMES_BASE
+const buildIdOverride = () => process.env.ANIME_THEMES_BUILD_ID || undefined
+
 export const fetchAnimeThemes = async (
   task: ScrapingTask,
-  agent: ProxyAgent
+  proxy?: ProxyTarget
 ) => {
   const { entityId } = task
-  const url = `${CONFIG.ANIME_THEMES_BASE}/anime/${entityId}.json`
-  const response = await fetcher({
-    url,
-    method: 'GET',
-    agent,
-  })
-  return response
-}
-export const fetchAnimeThemesSlugs = async () => {
-  const url = `${CONFIG.ANIME_THEMES_BASE}/anime.json`
-  console.log('Fetching anime themes slugs from:', url)
-  const response = await fetcher<AnimeThemesAnimeAllFile>({
-    url,
-    method: 'GET',
-
-  })
-  return response
+  return await fetchNextData(
+    siteBase,
+    `/anime/${entityId}.json`,
+    proxy,
+    buildIdOverride()
+  )
 }
 
-export const fetchArtist = async (task: ScrapingTask, agent: ProxyAgent) => {
+export const fetchArtist = async (task: ScrapingTask, proxy?: ProxyTarget) => {
   const { entityId } = task
-  const url = `${CONFIG.ANIME_THEMES_BASE}/artist/${entityId}.json`
-  const response = await fetcher({
-    url,
-    method: 'GET',
-    agent,
-  })
-  return response
+  return await fetchNextData(
+    siteBase,
+    `/artist/${entityId}.json`,
+    proxy,
+    buildIdOverride()
+  )
+}
+
+export const fetchAnimeThemesSlugs = async () => {
+  return await fetchNextData<AnimeThemesAnimeAllFile>(
+    siteBase,
+    '/anime.json',
+    undefined,
+    buildIdOverride()
+  )
 }
 
 export const fetchArtistsSlugs = async () => {
-  const url = `${CONFIG.ANIME_THEMES_BASE}/artist.json`
-  const response = await fetcher<AnimeThemesArtistAllFile>({
-    url,
-    method: 'GET',
-  })
-  return response
+  return await fetchNextData<AnimeThemesArtistAllFile>(
+    siteBase,
+    '/artist.json',
+    undefined,
+    buildIdOverride()
+  )
 }

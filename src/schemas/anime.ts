@@ -1,33 +1,61 @@
-import {
-  integer,
-  real,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from 'drizzle-orm/sqlite-core'
+/**
+ * ESPEJO de `anidev-v2/src/lib/db/schemas/anime` — anidev-v2 es el dueño del
+ * DDL y el scraper solo lo refleja para escribir en la misma forma.
+ *
+ * No editar a mano: `bun run schema:mirror` (drift check: `bun run schema:mirror --check`).
+ */
 
-export const anime = sqliteTable('anime', {
-  malId: integer('mal_id').primaryKey(),
-  title: text('title').notNull(),
-  titleEnglish: text('title_english'),
-  titleJapanese: text('title_japanese'),
-  type: text('type'),
-  status: text('status'),
-  episodes: integer('episodes'),
-  score: real('score'),
-  scoredBy: integer('scored_by'),
-  popularityRank: integer('popularity_rank'),
-  rating: text('rating'),
-  year: integer('year'),
-  season: text('season'),
-  synopsis: text('synopsis'),
-  background: text('background'),
-})
+import { index, integer, pgTable, real, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 
-export const animeTitleSynonym = sqliteTable(
+export const anime = pgTable(
+  'anime',
+  {
+    malId: integer('mal_id').primaryKey().notNull(),
+    title: text('title').notNull(),
+    titleEnglish: text('title_english'),
+    titleJapanese: text('title_japanese'),
+    type: text('type'),
+    status: text('status'),
+    episodes: integer('episodes'),
+    score: real('score'),
+    scoredBy: integer('scored_by'),
+    popularityRank: integer('popularity_rank'),
+    rating: text('rating'),
+    year: integer('year'),
+    season: text('season'),
+    synopsis: text('synopsis'),
+    background: text('background'),
+    // Cobertura del catálogo (change `catalog-coverage-fields`): todo nullable,
+    // lo puebla el pipeline (Modo A promoción o Modo B incremental), nunca
+    // request-time. `rank`/`members`/`favorites` son stats de MAL (Jikan);
+    // `trailer*`/`source`/aired los puede adelantar AniList.
+    broadcastDay: text('broadcast_day'),
+    broadcastTime: text('broadcast_time'),
+    broadcastTimezone: text('broadcast_timezone'),
+    airedFrom: timestamp('aired_from', { withTimezone: true }),
+    airedTo: timestamp('aired_to', { withTimezone: true }),
+    trailerYoutubeId: text('trailer_youtube_id'),
+    trailerEmbedUrl: text('trailer_embed_url'),
+    duration: text('duration'),
+    source: text('source'),
+    rank: integer('rank'),
+    members: integer('members'),
+    favorites: integer('favorites'),
+  },
+  (t) => [
+    index('anime_year_idx').on(t.year),
+    index('anime_season_idx').on(t.season),
+    index('anime_score_idx').on(t.score),
+    index('anime_status_idx').on(t.status),
+    index('anime_type_idx').on(t.type),
+    index('anime_rating_idx').on(t.rating),
+    index('anime_broadcast_day_idx').on(t.broadcastDay),
+  ]
+)
+export const animeTitleSynonym = pgTable(
   'anime_title_synonym',
   {
-    id: integer('id').primaryKey({ autoIncrement: true }),
+    id: serial('id').primaryKey(),
     animeId: integer('anime_id')
       .notNull()
       .references(() => anime.malId, { onDelete: 'cascade' }),
@@ -37,6 +65,10 @@ export const animeTitleSynonym = sqliteTable(
     uniqueIndex('anime_title_synonym_anime_id_title_idx').on(
       t.animeId,
       t.title
+    ),
+    index('anime_title_synonym_title_trgm_idx').using(
+      'gin',
+      t.title.op('gin_trgm_ops')
     ),
   ]
 )

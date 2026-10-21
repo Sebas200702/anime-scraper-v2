@@ -1,5 +1,6 @@
 import type { ScrapingTask } from '../types/index.js'
-import type { ProxyAgent } from 'undici'
+import type { ProxyTarget } from '../libs/transport.js'
+import { FetchError } from '../libs/fetcher.js'
 
 const extractId = (json: any) => {
   // TVDB
@@ -19,7 +20,13 @@ export const mapWithRetry = async (
   payload: ScrapingTask['payload'],
   mappingFunction: (searchParams: any, agent: any) => Promise<{ json: any }>,
   rateLimiter: (() => Promise<void>) | null,
-  agent: ProxyAgent
+  agent: ProxyTarget,
+  /**
+   * Tope de estrategias a probar. `mapWithRetry` genera hasta 9 (título/año,
+   * inglés, japonés y 3 sinónimos, con y sin año); en backfill se acota para no
+   * gastar 9 requests por título sin coincidencia.
+   */
+  maxStrategies = Number.POSITIVE_INFINITY
 ) => {
   const { title, title_english, title_japanese, year, type, title_synonyms } =
     payload as {
@@ -60,7 +67,10 @@ export const mapWithRetry = async (
   ].filter(Boolean)
 
   // Primero intentar con año, luego sin año
-  const strategies = [...strategiesWithYear, ...strategiesWithoutYear]
+  const strategies = [...strategiesWithYear, ...strategiesWithoutYear].slice(
+    0,
+    maxStrategies
+  )
 
   for (let attempt = 0; attempt < strategies.length; attempt++) {
     const searchParams = strategies[attempt]
@@ -98,12 +108,14 @@ export const mapWithRetry = async (
         }`
       )
 
-      // Si es rate limit (429), esperar más tiempo antes de continuar
-      if (error.message?.includes('429')) {
+      // El fetcher ya reintenta por su cuenta (respetando Retry-After); aquí
+      // solo se espacia el paso a la siguiente estrategia de búsqueda según la
+      // causa: rate limit espera de más, un 404 sin coincidencia no espera.
+      if (error instanceof FetchError && error.kind === 'rate_limit') {
         const waitTime = 5000 * (attempt + 1) // 5s, 10s, 15s, etc.
         console.log(`⏳ Rate limit hit, waiting ${waitTime / 1000}s...`)
         await new Promise((resolve) => setTimeout(resolve, waitTime))
-      } else {
+      } else if (!(error instanceof FetchError && error.kind === 'not_found')) {
         // Para otros errores, esperar menos
         await new Promise((resolve) => setTimeout(resolve, 2000))
       }

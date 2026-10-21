@@ -1,15 +1,162 @@
 # anime-scraper-v2
 
-To install dependencies:
+Ingesta del catálogo de **anidev-v2** (Track D).
+
+- Plan de ejecución (Fase 0–3, hallazgos, PRs): [`ROADMAP.md`](./ROADMAP.md)
+- Estrategia de fill/refresh (solo faltantes, Modo A/B):
+  [`docs/fill-and-refresh-strategy.md`](./docs/fill-and-refresh-strategy.md)
+
+## Requisitos
+
+- [Bun](https://bun.com) ≥ 1.4
+- **Postgres local** (misma versión que prod: `postgres:16`). El stack de
+  anidev-v2 ya lo levanta (`docker compose up -d`); la DB de ingesta por defecto
+  es `scraper_local`.
+- Un `.env` (copia `.env.example`) con `DATABASE_URL` (opcional: hay default
+  local) y `TVDB_API_KEY`.
+
+## Base de datos de ingesta
+
+La cola (`ingest.*`) y el catálogo viven en **Postgres local**: el mismo motor
+que prod, así que el DDL y las queries no cambian al promover.
+
+```bash
+# crear la DB y aplicar migraciones (una vez)
+createdb -h 127.0.0.1 -U anidev scraper_local
+psql -h 127.0.0.1 -U anidev -d scraper_local -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm'
+bun run db:migrate
+
+# el esquema del catálogo es un ESPEJO del de anidev-v2 (dueño del DDL)
+bun run schema:mirror          # regenera src/schemas/*.ts desde ../anidev-v2
+bun run schema:check           # falla si quedó desactualizado (drift check)
+```
+
+La cola da lo que la versión Turso no tenía: **claim atómico**
+(`FOR UPDATE SKIP LOCKED`), **lease + reaper**, `attempts → dead_letter` y
+`refresh_after` para re-armar lo vencido sin duplicar filas.
+
+## Uso
 
 ```bash
 bun install
+bun run dev jikanRelations   # sin build: Bun ejecuta el TS directamente
+bun run build                # tsc + tsc-alias → dist/ (typecheck/CI)
+bun run start jikanRelations # sobre dist/
 ```
 
-To run:
+`bun run dev <source>` corre el inicializador de tareas y luego la ingesta del
+source. Sources disponibles: `jikan`, `jikanRelations`, `animeThemes`,
+`animeMapping`, `animeEpisodes`, `tvdbSeriesArtworks`, `anilist`.
+
+## Banners y variantes de media
+
+Cada asset vive en la tabla de su entidad (`anime_media`, `character_media`, …)
+con dos columnas que permiten **tener varias variantes del mismo tipo y elegir
+una**:
+
+- `source` — de dónde vino (`anilist`, `tvdb`, `jikan`, `animethemes`).
+- `priority` — **menor = se prefiere** (mapa en `MEDIA_SOURCE_PRIORITY`:
+  AniList 10, Jikan 20, TVDB 30, AnimeThemes 40).
+
+AniList es la fuente **primaria de banners** (se consulta por `idMal`, su cuota
+real es 30 req/min por IP). La variante preferida se obtiene con:
+
+```sql
+SELECT source, src FROM anime_media
+WHERE anime_id = $1 AND media_type = 'Banner'
+ORDER BY priority ASC, id ASC
+LIMIT 1;  -- AniList primero, TVDB después
+```
+
+Los banners de AniList y de TVDB **coexisten** (variantes); no se pisa ninguna.
+Si cambia la prioridad de una fuente, las filas ya guardadas se reconcilian en
+la siguiente corrida.
+
+## Tests
 
 ```bash
-bun run indexjs
+bun test                 # unit (sin DB)
+bun run test:integration # cola ingest.* contra Postgres local (RUN_DB_TESTS=1)
 ```
 
-This project was created using `bun init` in bun v1.3.5. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+## Arquitectura de ingesta
+
+Un solo proceso: el **padre** fetchea y mapea, con una **IP por tarea** y la
+cuota aplicada por `(host, IP de salida)` (`core/rateGate.ts` +
+`core/taskDispatcher.ts`). No hay `worker_threads`.
+
+- El pool se alimenta con el resultado real de cada request: éxito limpia el
+  proxy, y solo se penaliza cuando `FetchError.proxyFault` lo justifica (un 404,
+  un 429 o credenciales inválidas no castigan la IP).
+- Un `Retry-After` pausa esa `(host, IP)` concreta, no todas.
+- Cuotas por IP en `SOURCE_HOSTS`: Jikan 3/s y 60/min, Kitsu 60/min,
+  AnimeThemes 2/s, TVDB 1/s y 30/min **en una sola IP** (su cuota es por API
+  key, así que repartirla entre proxies no multiplica nada).
+
+## Proxies
+
+El transporte acepta la **URL** del proxy: enruta bajo Bun con
+`fetch(url, { proxy })` y bajo Node con el `undici` real. El `ProxyAgent` de
+undici **no funciona bajo Bun** (su shim lo ignora, hallazgo H-17), así que el
+worker pasa la URL, no un agent.
+
+Formatos aceptados en `proxies.json` (array de strings; ver
+`proxies.example.json`):
+
+- `ip:port`
+- `user:pass@ip:port`
+- `http://host:port`, `https://host:port`
+
+**SOCKS no está soportado**: Bun solo enruta proxies HTTP/HTTPS en
+`fetch(url, { proxy })` (un `socks5://` se ignoraría en silencio), así que el
+transporte lo **rechaza con un mensaje explícito**. Si tu proveedor solo ofrece
+SOCKS, usa su endpoint HTTP/HTTPS, puentea con `gost`/`microsocks`, o corre bajo
+Node (undici `Socks5ProxyAgent`).
+
+Ojo también con `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY` en el entorno: **Bun las
+lee automáticamente** y toda request saldría por ahí (ignora valores `socks`).
+
+`proxies.json` está **fuera del control de versiones** porque puede llevar
+credenciales.
+
+### Modos
+
+| Modo | Cómo | Para qué |
+|---|---|---|
+| **incremental** (default) | `bun run dev <source>` | prod: una IP, ~3 min/día |
+| **backfill** | `SCRAPER_MODE=backfill bun run dev <source>` | barrido de una vez: **30 tareas en vuelo**, una IP por tarea |
+
+En modo backfill el pool usa hasta `min(30, tamaño del pool)` proxies (si hay
+menos, arrancan menos en vez de abortar). `SCRAPER_MAX_WORKERS` acota ese número.
+
+Credenciales globales para proxies que no las traen: `PROXY_USER` / `PROXY_PASS`.
+
+Verificar candidatos (descarga listas públicas, mide liveness, IP de egreso y
+una request real; escribe `proxies.verified.json`):
+
+```bash
+# solo tu lista de proveedor (sin listas públicas ni proxies.json)
+bun run proxies:probe --only ~/Downloads/mi-proveedor.txt --concurrency 10
+
+# mezcla: listas públicas + tu archivo + proxies.json actual
+bun run proxies:probe --limit 200 --concurrency 40
+bun run proxies:probe --from ./proxies.txt --check-url https://kitsu.io/api/edge/anime/1
+```
+
+`--only <archivo>` es el modo para validar un proveedor (mide exactamente esa
+lista); `--check-url <url>` cambia el objetivo de la etapa 2 (por defecto Jikan;
+usa Kitsu si tu red no alcanza `api.jikan.moe`); `--stage1-only` omite la etapa
+2; `--out <archivo>` cambia la salida.
+
+> ⚠️ Las listas públicas son de operadores desconocidos: úsalas solo contra
+> fuentes **sin credenciales** (Jikan, Kitsu, AnimeThemes). Nunca mandes el token
+> de TVDB por un proxy libre, y valida el payload antes de escribirlo al catálogo
+> (pueden inyectar datos).
+>
+> Medición 2026-10-15: de 200 candidatos de 5 listas auto-verificadas, 26 vivos
+> (13%) y **0** pasaron una request JSON real; 11 de ellos devolvieron un body
+> modificado. Los proxies libres no son una base viable para este catálogo.
+
+**La cuota es por IP**: el `RateGate` la aplica por `(host, IP de salida)` con
+los límites de `SOURCE_HOSTS`, y cada tarea usa una IP distinta del pool. TVDB es
+la excepción (cuota por API key): va sin proxy y con una sola tarea en vuelo.

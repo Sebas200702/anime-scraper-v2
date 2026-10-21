@@ -6,11 +6,30 @@ export const CONFIG = {
   MAL_BASE: 'https://myanimelist.net',
   TVDB_API_KEY: process.env.TVDB_API_KEY,
   TVDB_BASE: process.env.TVDB_BASE || 'https://api4.thetvdb.com/v4',
-  ANIME_THEMES_BASE:
-    process.env.ANIME_THEMES_BASE ||
-    'https://animethemes.moe/_next/data/VWF_eO0-IV7PSTArS1q1e',
+  ANIME_THEMES_BASE: process.env.ANIME_THEMES_BASE || 'https://animethemes.moe',
   KITSU_BASE: process.env.KITSU_BASE || 'https://kitsu.io/api/edge',
   ANILIST_BASE: process.env.ANILIST_BASE || 'https://graphql.anilist.co',
-  TURSO_DATABASE_URL: process.env.TURSO_DATABASE_URL || '',
-  TURSO_AUTH_TOKEN: process.env.TURSO_AUTH_TOKEN || '',
+
+  /** MAL API oficial v2 (requiere client_id gratuito de myanimelist.net/apiconfig). */
+  MAL_API_BASE: process.env.MAL_API_BASE || 'https://api.myanimelist.net/v2',
+  MAL_CLIENT_ID: process.env.MAL_CLIENT_ID,
+
+  /** Web de MAL (HTML): personajes/seiyuus/staff, que la API no expone. */
+  MAL_WEB_BASE: process.env.MAL_WEB_BASE || 'https://myanimelist.net',
+
+  /** Postgres de ingesta (cola `ingest.*` + catálogo). Local por defecto. */
+  DATABASE_URL:
+    process.env.DATABASE_URL ||
+    'postgres://anidev:anidev@127.0.0.1:5432/scraper_local',
+
+  /** Lease del claim: si el proceso muere, el reaper lo devuelve a `pending`. */
+  TASK_LEASE_SECONDS: Number(process.env.TASK_LEASE_SECONDS || 900),
+
+  /** Timeout por intento de fetch (ms). Un cuelgue no debe ocupar un slot. */
+  FETCH_TIMEOUT_MS: Number(process.env.FETCH_TIMEOUT_MS || 15000),
+
+  // Credenciales para proxies que las requieren (los listados públicos suelen
+  // responder 407 sin ellas, H-18).
+  PROXY_USER: process.env.PROXY_USER,
+  PROXY_PASS: process.env.PROXY_PASS,
 }

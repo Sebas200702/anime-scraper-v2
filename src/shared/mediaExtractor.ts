@@ -12,7 +12,7 @@ interface ImageSet {
 export function extractMediaFromImages(
   images: ImageSet,
   entityId: number,
-  entityType: string,
+  entityType: NewMedia['entityType'],
   mediaType: string
 ): NewMedia[] {
   const source = images.webp || images.jpg
@@ -60,7 +60,7 @@ export function extractMediaFromImages(
 export function extractSingleMedia(
   images: ImageSet,
   entityId: number,
-  entityType: string,
+  entityType: NewMedia['entityType'],
   mediaType: string
 ): NewMedia[] {
   const source = images.webp || images.jpg

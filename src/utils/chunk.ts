@@ -1,8 +1,8 @@
 /**
- * SQLite has a limit on the number of SQL variables in a single statement.
- * libsql/turso typically enforces ~32766, but to be safe we use a lower limit.
+ * Postgres limita el número de parámetros por sentencia (65535). Se usa un
+ * tope prudente para que `floor(MAX / columnas)` siga siendo conservador.
  */
-export const SQLITE_MAX_VARIABLES = 900
+export const MAX_PARAMS_PER_STATEMENT = 30_000
 
 /**
  * Split an array into chunks of a given size.
@@ -25,7 +25,7 @@ export function chunk<T>(array: T[], size: number): T[][] {
  */
 export function maxInsertRows(
   columnsPerRow: number,
-  maxVariables = SQLITE_MAX_VARIABLES
+  maxVariables = MAX_PARAMS_PER_STATEMENT
 ): number {
   return Math.max(1, Math.floor(maxVariables / columnsPerRow))
 }

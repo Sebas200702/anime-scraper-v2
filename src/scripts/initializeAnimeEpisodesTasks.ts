@@ -20,6 +20,7 @@ export async function initializeAnimeEpisodesTasks() {
       .select()
       .from(animeExternalIds)
       .limit(BATCH_SIZE)
+      .orderBy(animeExternalIds.animeId)
       .offset(offset)
 
     if (!animes || animes.length === 0) break
@@ -27,7 +28,7 @@ export async function initializeAnimeEpisodesTasks() {
     const tasks = animes
       .filter((anime) => !existing.has(`anime_episodes_${anime.animeId}`))
       .map((anime) => ({
-        entityType: 'animeEpisodes',
+        source: 'animeEpisodes',
         entityId: `anime_episodes_${anime.animeId}`,
         taskType: 'anime_episodes_hydration',
         priority: 5,

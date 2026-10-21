@@ -32,7 +32,7 @@ export const initializeAnimeThemesTasks = async () => {
       const tasks = batch
         .filter((anime: { slug: string }) => !existing.has(anime.slug))
         .map((anime: { slug: string }) => ({
-          entityType: 'animeThemes',
+          source: 'animeThemes',
           entityId: anime.slug,
           taskType: 'anime_themes_hydration',
           priority: 10,
@@ -55,7 +55,7 @@ export const initializeAnimeThemesTasks = async () => {
       const tasks = batch
         .filter((artist: { slug: string }) => !existing.has(artist.slug))
         .map((artist: { slug: string }) => ({
-          entityType: 'animeThemes',
+          source: 'animeThemes',
           entityId: artist.slug,
           taskType: 'artist_hydration',
           priority: 5,

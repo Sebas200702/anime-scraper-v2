@@ -1,24 +1,19 @@
 import type { ArtworksProcessorResult, NewMedia } from '../types/index.js'
-import { media } from '../schemas/media.js'
-import { db } from '../libs/db.js'
-import { chunk, SQLITE_MAX_VARIABLES } from '../utils/chunk.js'
+import { mediaRepository } from './media.js'
 
 export const tvdbSeriesArtworksRepository = {
   async upsertTvdbSeriesArtworksBatch(
     tvdbSeriesArtworkEntries: NewMedia[]
   ): Promise<number> {
     try {
-      const batchSize = Math.floor(SQLITE_MAX_VARIABLES / 6)
-      const chunks = chunk(tvdbSeriesArtworkEntries, batchSize)
-      await db.transaction(async (tx) => {
-        for (const batch of chunks) {
-          await tx.insert(media).values(batch).onConflictDoNothing()
-        }
-      })
-      return tvdbSeriesArtworkEntries.length
+      // La media vive por entidad y sin índice único en el DDL: el router
+      // descarta lo ya presente, así que re-ejecutar no duplica.
+      return await mediaRepository.saveMedia(tvdbSeriesArtworkEntries, 'tvdb')
     } catch (e) {
+      // Re-lanzar (ver `saveData`): un fallo de escritura no puede contar como
+      // tarea completada.
       console.error('Failed to upsert TVDB series artworks batch:', e)
-      return 0
+      throw e
     }
   },
   async saveTvdbSeriesArtworks(

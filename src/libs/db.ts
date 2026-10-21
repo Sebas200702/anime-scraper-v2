@@ -1,13 +1,18 @@
-import { drizzle } from 'drizzle-orm/libsql'
-import { createClient } from '@libsql/client'
-import { sql } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { Pool } from 'pg'
 import { CONFIG } from '../config/config.js'
 
-const client = createClient({
-  url: CONFIG.TURSO_DATABASE_URL,
-  authToken: CONFIG.TURSO_AUTH_TOKEN,
+/**
+ * Postgres local para la ingesta (cola `ingest.*` + catálogo). El mismo motor
+ * que prod, así que el DDL y las queries no cambian al promover.
+ *
+ * `TURSO_*` quedó atrás con la Fase 2: la cola y el catálogo viven en la DB.
+ */
+const pool = new Pool({
+  connectionString: CONFIG.DATABASE_URL,
+  max: 10,
 })
 
-export const db = drizzle(client)
+export const db = drizzle(pool)
 
-export const enableForeignKeys = async () => await db.run(sql`PRAGMA foreign_keys = ON`)
+export const closeDb = () => pool.end()

@@ -6,11 +6,10 @@ import { staff, staffAlternativeName } from '../schemas/staff.js'
 import { artist } from '../schemas/artist.js'
 import { music, musicResolution, musicVersion } from '../schemas/music.js'
 import { episode, episodeSource, episodeSubtitle } from '../schemas/episode.js'
-import { scrapingTasks } from '../schemas/scrapingTasks.js'
+import { ingestTask } from '../schemas/ingest.js'
 import { genre, demographic, theme } from '../schemas/animeTaxonomy.js'
 import { characterVoiceActor } from '../schemas/characterRelations.js'
 import { musicArtist } from '../schemas/musicRelations.js'
-import { media } from '../schemas/media.js'
 import {
   animeGenre,
   animeDemographic,
@@ -55,8 +54,8 @@ export type EpisodeSource = InferSelectModel<typeof episodeSource>
 export type NewEpisodeSource = InferInsertModel<typeof episodeSource>
 export type EpisodeSubtitle = InferSelectModel<typeof episodeSubtitle>
 export type NewEpisodeSubtitle = InferInsertModel<typeof episodeSubtitle>
-export type BbScrapingTask = InferSelectModel<typeof scrapingTasks>
-export type NewBbScrapingTask = InferInsertModel<typeof scrapingTasks>
+export type BbScrapingTask = InferSelectModel<typeof ingestTask>
+export type NewBbScrapingTask = InferInsertModel<typeof ingestTask>
 export type Genre = InferSelectModel<typeof genre>
 export type NewGenre = InferInsertModel<typeof genre>
 export type Demographic = InferSelectModel<typeof demographic>
@@ -87,8 +86,35 @@ export type AnimeRelatedAnime = InferSelectModel<typeof animeRelatedAnime>
 export type NewAnimeRelatedAnime = InferInsertModel<typeof animeRelatedAnime>
 export type AnimeProducer = InferSelectModel<typeof animeProducer>
 export type NewAnimeProducer = InferInsertModel<typeof animeProducer>
-export type Media = InferSelectModel<typeof media>
-export type NewMedia = InferInsertModel<typeof media>
+/**
+ * Media en el catálogo de anidev, que la normaliza **por entidad** (una tabla
+ * por tipo): `entityType` decide a qué tabla enruta `mediaRepository.saveMedia`.
+ */
+export interface Media {
+  id: number
+  entityType:
+    | 'anime'
+    | 'character'
+    | 'staff'
+    | 'producer'
+    | 'episode'
+    | 'music'
+    /** Sin tabla en el DDL de anidev: el router lo avisa y lo descarta. */
+    | 'artist'
+  entityId: number
+  mediaType: string
+  src: string
+  size: string | null
+  /** Origen del asset (`anilist`, `tvdb`, `jikan`…). */
+  source: string | null
+  /** Menor = se prefiere al elegir una variante del mismo `mediaType`. */
+  priority: number
+}
+export type NewMedia = Omit<Media, 'id' | 'source' | 'priority'> & {
+  id?: number
+  source?: string | null
+  priority?: number
+}
 export interface SourceConfig {
   name: string
   maxWorkers: number
@@ -129,37 +155,14 @@ export interface BufferedTask {
 }
 
 export interface SourceRepository {
-  [key: `save${string}`]: (items: ProcessorResult[]) => Promise<number | undefined>
+  [key: `save${string}`]: (
+    items: ProcessorResult[]
+  ) => Promise<number | undefined>
 }
 
-export interface ScrapingTask {
-  id: number
-  taskType: string
-  entityId: string
-  entityType: string
-  priority: number
-  status: string
-  attempts: number
-  error: string | null
-  payload: Record<string, any> | null
-  scheduledAt: Date | null
-  createdAt: Date
-  updatedAt: Date
-}
-export interface NewScrapingTask {
-  id?: number
-  taskType: string
-  entityId: string
-  entityType: string
-  priority: number
-  status: string
-  attempts?: number
-  error?: string | null
-  payload?: Record<string, any> | null
-  scheduledAt?: Date
-  createdAt?: Date
-  updatedAt?: Date
-}
+/** Tarea de la cola `ingest.task` (una fila por unidad de trabajo). */
+export type ScrapingTask = InferSelectModel<typeof ingestTask>
+export type NewScrapingTask = InferInsertModel<typeof ingestTask>
 
 export interface ProxyState {
   url: string
@@ -167,25 +170,6 @@ export interface ProxyState {
   lastUsed: number
   cooldownUntil: number
   totalRequests: number
-}
-export interface WorkerData {
-  workerId: number
-  tasks: ScrapingTask[]
-  /** Array of proxy URL strings for this worker to rotate through */
-  proxyUrls: string[]
-  sourceName: string | undefined
-  sourceConfig: SourceConfig | null
-}
-
-export interface WorkerMessage {
-  workerId: number
-  status: 'done' | 'error' | 'finished' | 'proxy-failure' | 'proxy-success'
-  taskType: string
-  entity?: string
-  taskId: number
-  error?: string
-  data?: ProcessorResult | ProcessorResult[]
-  proxyUrl?: string
 }
 
 export interface AnimeProcessorResult {
@@ -230,6 +214,193 @@ export interface AnimeStaffProcessorResult {
   staffMedia: NewMedia[]
 }
 
+/** Resultado del processor de banners (AniList). */
+export interface AnimeBannersProcessorResult {
+  animeMedias: NewMedia[]
+  /**
+   * Parche disperso para la fila `anime`: solo trae las columnas que AniList
+   * conoce (tráiler, origen, fechas de emisión). Lo ausente se omite, nunca
+   * se escribe como null.
+   */
+  animePatch?: AnimePatch
+  /** Relations tipadas hacia otros anime (solo nodos ANIME con idMal). */
+  animeRelations?: NewAnimeRelatedAnime[]
+}
+
+/** Resultado de la fuente `mal` (API oficial v2). */
+export interface AnimeMalDetailsProcessorResult {
+  /** Fila `anime` con stats/descriptivos (MAL es la fuente canónica). */
+  animeStats?: {
+    malId: number
+    titleEnglish?: string
+    titleJapanese?: string
+    type?: string
+    status?: string
+    episodes?: number
+    score?: number
+    scoredBy?: number
+    popularityRank?: number
+    rating?: string
+    year?: number
+    season?: string
+    synopsis?: string
+    background?: string
+    airedFrom?: string
+    airedTo?: string
+    duration?: string
+    source?: string
+    rank?: number
+    members?: number
+    broadcastDay?: string
+    broadcastTime?: string
+    broadcastTimezone?: string
+  }
+  genres: { malId: number; name: string }[]
+  demographics: { malId: number; name: string }[]
+  themes: { malId: number; name: string }[]
+  /** Compañías de animación (`producer` solo tiene `mal_id`). */
+  producers: { malId: number }[]
+  animeGenres: { animeId: number; genreId: number }[]
+  animeDemographics: { animeId: number; demographicId: number }[]
+  /** Poster de MAL (`main_picture`), como variante de menor prioridad. */
+  animeMedia: NewMedia[]
+  animeThemes: { animeId: number; themeId: number }[]
+  animeProducers: {
+    animeId: number
+    producerId: number
+    role: 'studio' | 'licensor' | 'producer'
+  }[]
+}
+
+/**
+ * Subconjunto escribible de `anime` desde AniList. `malId` es la clave;
+ * el resto son opcionales y el repositorio solo actualiza los presentes.
+ */
+export interface AnimePatch {
+  malId: number
+  trailerYoutubeId?: string
+  trailerEmbedUrl?: string
+  source?: string
+  /** Fecha ISO `YYYY-MM-DD` (el repo la convierte a timestamptz). */
+  airedFrom?: string
+  airedTo?: string
+  /** Sinopsis en texto plano (el processor pela el HTML de AniList). */
+  synopsis?: string
+  /** Día de emisión estilo Jikan ("Mondays") derivado del próximo episodio. */
+  broadcastDay?: string
+  broadcastTime?: string
+  broadcastTimezone?: string
+}
+
+/** Resultado de la fuente `malHtml` (ficha HTML: personajes/staff/seiyuus). */
+export interface MalCharactersProcessorResult {
+  characters: { malId: number; name: string }[]
+  staff: { malId: number; name: string }[]
+  animeCharacters: { animeId: number; characterId: number; role: string }[]
+  animeStaff: { animeId: number; staffId: number; role: string }[]
+  characterVoiceActors: {
+    characterId: number
+    staffId: number
+    language: string
+  }[]
+  /** Seiyuus que deben existir como `staff` antes de la junction de VAs. */
+  voiceActorStaff: { malId: number; name: string }[]
+  characterMedia: { entityId: number; src: string; mediaType: string }[]
+  staffMedia: { entityId: number; src: string; mediaType: string }[]
+  /** Favoritos (miembros) del anime: solo en la ficha HTML. */
+  animeFavorites: { animeId: number; favorites: number }[]
+  /** Taxonomía exacta de MAL: géneros, temas y demográficas con id nativo. */
+  animeTaxonomy: {
+    genres: { animeId: number; genreId: number; name: string }[]
+    themes: { animeId: number; themeId: number; name: string }[]
+    demographics: { animeId: number; demographicId: number; name: string }[]
+  }
+  /** Relaciones tipo MAL ("Prequel", "Sequel", …): solo en la ficha HTML. */
+  animeRelations: {
+    animeId: number
+    relationType: string
+    relatedAnimeId: number
+  }[]
+  /** Compañías con rol (productora/licenciadora/estudio): solo en el HTML. */
+  animeCompanies: {
+    animeId: number
+    producerId: number
+    role: string
+    name: string
+  }[]
+  /**
+   * Temas OP/ED de la ficha de MAL: la fuente de canciones con más cobertura.
+   * Trae el nº de tema, el rango de episodios y los enlaces/ids de tienda
+   * (Spotify/Apple/Amazon) que después permiten localizar el audio completo.
+   */
+  themes: MalThemeRow[]
+}
+
+/** Un OP/ED tal cual lo publica MAL, listo para persistir. */
+export interface MalThemeRow {
+  animeId: number
+  kind: 'OP' | 'ED'
+  sequence: number | null
+  title: string
+  artist: string | null
+  malSongId: number | null
+  episodes: string | null
+  streams: {
+    provider: string
+    url: string
+    externalId: string | null
+    country: string | null
+  }[]
+}
+
+/** Resultado de la fuente `tmdb` (banner y miniaturas de episodio de TMDB). */
+export interface TmdbProcessorResult {
+  animeId: number
+  backdrops: { src: string; lang: string | null }[]
+  stills: { number: number; src: string }[]
+  /** Episodios con su título y fecha (rellenan los "Episode NN"). */
+  episodes: { number: number; title: string | null; aired: string | null }[]
+  seriesName: string | null
+}
+
+/** Resultado de la fuente `tvdbEpisodes` (miniaturas de episodio de TVDB). */
+export interface TvdbEpisodesProcessorResult {
+  animeId: number
+  episodes: {
+    number: number | null
+    absoluteNumber: number | null
+    aired: string | null
+    name: string | null
+    image: string
+  }[]
+}
+
+/** Resultado de la fuente `ann` (OP/ED de la enciclopedia de ANN). */
+export interface AnnProcessorResult {
+  themes: {
+    annId: number
+    animeId: number
+    kind: 'OP' | 'ED'
+    sequence: number | null
+    title: string
+    artist: string | null
+    variant: string | null
+    episodes: string | null
+  }[]
+  /** La ficha declarada otro anime: se descarta. */
+  mismatched: boolean
+}
+
+/** Resultado de la fuente `malPeople` (retrato de una persona de MAL). */
+export interface MalPeopleProcessorResult {
+  staffMedia: { entityId: number; src: string; mediaType: string }[]
+}
+
+/** Resultado del catálogo en bulk (una página = 50 anime). */
+export interface AnimeCatalogProcessorResult {
+  results: AnimeBannersProcessorResult[]
+}
+
 export interface ArtworksProcessorResult {
   artworks: NewMedia[]
 }
@@ -260,4 +431,10 @@ export interface AnimeExternalIdsProcessorResult {
 
 export interface EpisodeProcessorResult {
   episodes: NewEpisode[]
+  /**
+   * Miniaturas de episodio. No se pueden insertar con el episodio (su fila
+   * `episode_media` necesita el `id` surrogate que asigna la DB), así que van
+   * aparte y el repositorio las resuelve por `(anime_id, number)`.
+   */
+  episodeMedia?: { animeId: number; number: number; src: string }[]
 }
