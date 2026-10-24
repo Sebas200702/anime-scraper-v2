@@ -57,6 +57,37 @@ const APPLY_HOT = `
     )
 `
 
+/**
+ * Prioridad por urgencia, **sin importar el estado**: una tarea de un anime en
+ * emisión que quedó `pending` por un timeout en la corrida anterior sigue
+ * siendo urgente y no puede quedar detrás de los 28k huecos de relleno.
+ */
+const PRIORITIZE_AIRING = `
+  WITH hot AS (
+    SELECT mal_id FROM anime
+    WHERE status = 'Currently Airing'
+       OR (status = 'Not yet aired'
+           AND (aired_from IS NULL OR aired_from <= now() + interval '30 days'))
+       OR (aired_to IS NOT NULL AND aired_to >= now() - interval '7 days')
+  )
+  UPDATE ingest.task t
+  SET priority = 20
+  FROM hot h
+  WHERE (
+    ((t.payload->>'animeId') ~ '^[0-9]+$' AND (t.payload->>'animeId')::int = h.mal_id)
+    OR ((t.payload->>'anime_id') ~ '^[0-9]+$' AND (t.payload->>'anime_id')::int = h.mal_id)
+  )
+`
+
+/** Los huecos de jikanRelations (catálogo terminado sin datos) van al final. */
+const DEMOTE_FILL_GAPS = `
+  UPDATE ingest.task
+  SET priority = 1
+  WHERE source = 'jikanRelations'
+    AND status = 'pending'
+    AND priority < 20
+`
+
 const main = async () => {
   const client = await pool.connect()
   try {
@@ -79,6 +110,14 @@ const main = async () => {
 
     const airing = await client.query(APPLY_HOT)
     console.log(`3/3 cadencia airing aplicada: ${airing.rowCount ?? 0} tareas`)
+
+    const prioritized = await client.query(PRIORITIZE_AIRING)
+    console.log(
+      `🔥 prioridad 20 (airing, cualquier estado): ${prioritized.rowCount ?? 0}`
+    )
+
+    const demoted = await client.query(DEMOTE_FILL_GAPS)
+    console.log(`🧱 huecos de relleno al final: ${demoted.rowCount ?? 0}`)
 
     const due = await client.query<{ count: string }>(`
       SELECT count(*)::text AS count FROM ingest.task

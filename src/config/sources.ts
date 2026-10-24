@@ -370,7 +370,9 @@ export const REFRESH_POLICY: Record<string, RefreshPolicy> = {
 
   // Mapping y stats.
   anime_mapping_hydration: { cold: null, hot: 180 * 86400 },
-  anime_mal_details_hydration: { cold: null, hot: 7 * 86400 },
+  // Fallback de ficha mientras Jikan no esté disponible: MAL da status,
+  // episodios, score, broadcast y aired. 24 h para que una temporada cierre a tiempo.
+  anime_mal_details_hydration: { cold: null, hot: 24 * 3600 },
   anime_mal_html_hydration: { cold: null, hot: 90 * 86400 },
   // Bulks: una tarea por ranking/año, baratas de repetir.
   anime_mal_ranking_hydration: { cold: 7 * 86400, hot: 7 * 86400 },
@@ -430,8 +432,10 @@ export const SOURCE_HOSTS: Record<
     limits: { perSecond: 1, perMinute: 25 },
   },
   mal: {
+    // Una sola IP en Modo B: 1/s (60/min) es el techo prudente de la API v2.
+    // En backfill con proxies la cuota real se multiplica por IP.
     host: 'api.myanimelist.net',
-    limits: { perSecond: 2, perMinute: 120 },
+    limits: { perSecond: 1, perMinute: 60 },
   },
   malHtml: {
     host: 'myanimelist.net',
