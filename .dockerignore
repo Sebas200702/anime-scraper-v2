@@ -1,0 +1,12 @@
+node_modules
+dist
+.cache
+.git
+.github
+tests
+.env
+.env.*
+proxies.json
+proxies.verified.json
+*.log
+coverage

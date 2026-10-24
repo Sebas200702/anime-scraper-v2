@@ -18,6 +18,7 @@ import type {
   AnimeRelationsProcessorResult,
   AnimeCharactersProcessorResult,
   AnimeStaffProcessorResult,
+  NewAnime,
   NewAnimeCharacter,
   NewAnimeDemographic,
   NewAnimeGenre,
@@ -34,6 +35,7 @@ export const jikanRelationsRepository = {
   async saveAnimeDetails(
     results: AnimeRelationsProcessorResult[]
   ): Promise<number> {
+    const animes: NewAnime[] = []
     const genres: NewAnimeGenre[] = []
     const themes: NewAnimeTheme[] = []
     const demographics: NewAnimeDemographic[] = []
@@ -41,6 +43,7 @@ export const jikanRelationsRepository = {
     const related: NewAnimeRelatedAnime[] = []
 
     for (const r of results) {
+      if (r.anime) animes.push(r.anime)
       if (r.animeGenres) genres.push(...r.animeGenres)
       if (r.animeThemes) themes.push(...r.animeThemes)
       if (r.animeDemographics) demographics.push(...r.animeDemographics)
@@ -48,6 +51,7 @@ export const jikanRelationsRepository = {
       if (r.animeRelatedAnime) related.push(...r.animeRelatedAnime)
     }
 
+    const uAnimes = unique(animes, (a) => a.malId)
     const uGenres = unique(genres, (g) => `${g.animeId}:${g.genreId}`)
     const uThemes = unique(themes, (t) => `${t.animeId}:${t.themeId}`)
     const uDemo = unique(demographics, (d) => `${d.animeId}:${d.demographicId}`)
@@ -65,6 +69,20 @@ export const jikanRelationsRepository = {
       anime.malId
     )
 
+    // La fila `anime` primero (padre). `update: true` es el corazón del Modo B:
+    // con `DO NOTHING` el refresh descartaba el `/full` y `status`/`episodes`
+    // nunca cambiaban. `COALESCE` evita degradar con nulos de la fuente.
+    const animeSaved = await batchUpsert(
+      anime,
+      uAnimes,
+      26,
+      'anime',
+      undefined,
+      {
+        update: true,
+      }
+    )
+
     await Promise.all([
       batchUpsert(animeGenre, uGenres, 2, 'anime-genres'),
       batchUpsert(animeTheme, uThemes, 2, 'anime-themes'),
@@ -73,8 +91,14 @@ export const jikanRelationsRepository = {
       batchUpsert(animeRelatedAnime, validRelated, 4, 'anime-related'),
     ])
 
-    return uGenres.length + uThemes.length + uDemo.length +
-      uProducers.length + validRelated.length
+    return (
+      animeSaved +
+      uGenres.length +
+      uThemes.length +
+      uDemo.length +
+      uProducers.length +
+      validRelated.length
+    )
   },
 
   async saveAnimeCharacters(

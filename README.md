@@ -160,3 +160,60 @@ usa Kitsu si tu red no alcanza `api.jikan.moe`); `--stage1-only` omite la etapa
 **La cuota es por IP**: el `RateGate` la aplica por `(host, IP de salida)` con
 los límites de `SOURCE_HOSTS`, y cada tarea usa una IP distinta del pool. TVDB es
 la excepción (cuota por API key): va sin proxy y con una sola tarea en vuelo.
+
+## Actualizaciones incrementales (Modo B)
+
+En prod **no se re-barre el catálogo**. El listado y los datos terminados quedan
+con `refresh_after = NULL` (nunca); solo se refresca lo que puede cambiar:
+
+- **hot set** (`src/repositories/tasks.ts → hotAnimeIds`): `status = 'Currently
+  Airing'`, `Not yet aired` con estreno en ≤30 d, y `aired_to` en los últimos
+  7 d (ventana de cierre: la pasada final cuando termina la temporada).
+- **Por tarea**: `anime_details_hydration` y `anime_episodes_hydration` cada
+  24 h en airing; el catálogo terminado, nunca. El resto de tipos usan su
+  cadencia cold (bulks 7–30 d, personas/mapping 180 d, etc.).
+- **La ficha `/full` actualiza la fila `anime`** (`status`, `episodes`, `score`,
+  `aired_*`, `broadcast_*`, stats, tráiler). Antes solo escribía junctions y el
+  `status` solo cambiaba re-barriendo el listado.
+- **Descubrimiento delta**: `initializeTasks` usa `MAX(mal_id)` como cursor y
+  solo siembra las últimas páginas del listado. Los anime nuevos pasan por el
+  generador idempotente y reciben sus tareas derivadas.
+
+```bash
+bun run incremental:hot        # cada 15 min en prod (presupuesto 150/fuente)
+bun run incremental:slow       # cada 6 h (manga, personas, temas…)
+bun run incremental:discover   # diario: páginas nuevas + derivados + cierre de temporada
+bun run incremental:normalize  # one-off tras cambiar la política (o en el seed)
+```
+
+Todas respetan `--budget=N` (por fuente), `--deadline=SEGUNDOS` y un
+`pg_try_advisory_lock` (dos ticks no compiten). Cada corrida queda en
+`ingest.run`.
+
+### Seed de una DB ya ingerida
+
+```bash
+bun run db:ingest-schema        # crea ingest.* (idempotente)
+bun run db:seed-policy          # política en la DB (no pisa ediciones)
+bun run db:seed-task-history    # reconstruye tareas jikanRelations ya hechas
+bun run incremental:normalize   # refresh_after según la política nueva
+```
+
+`seed-task-history` marca `completed` los anime que **ya tienen datos** (géneros,
+reparto, staff) y deja `pending` solo los huecos reales: sin él, el primer
+discovery crearía 91k tareas y volvería a bajar todo el catálogo.
+
+## Despliegue (Dokploy)
+
+- `Dockerfile`: Bun 1.4.2, build (`tsc` + `tsc-alias`) y runtime de producción.
+  El contenedor corre `src/server.ts` (health/stats) y los schedules de Dokploy
+  lanzan el incremental por `docker exec`.
+- `GET /health` → 503 si la DB no responde o no hay corrida en 8 h.
+  `GET /stats` → cola por fuente/tipo/estado, vencidas, hot set y últimas
+  corridas (protegido con `STATUS_TOKEN` si se define).
+- Schedules (zona UTC): `*/15 * * * *` hot, `0 */6 * * *` slow,
+  `0 3 * * *` discovery.
+- El scraper escribe **directo en la Postgres de anidev** (`DATABASE_URL`). El
+  esquema `ingest.*` lo crea el contenedor al arrancar; el catálogo (DDL de
+  anidev) no se toca.
+

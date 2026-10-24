@@ -1,4 +1,3 @@
-
 import type {
   NewMedia,
   AnimeCharactersProcessorResult,
@@ -11,6 +10,7 @@ import type {
   JikanAnimeCharactersResponse,
   JikanAnimeStaffResponse,
 } from 'types/jikanDetailsApi.js'
+import { mapAnime } from './jikan/animeMapper.js'
 export const processAnimeDetails = (
   rawData: JikanAnimeFullResponse,
   task: ScrapingTask
@@ -19,6 +19,11 @@ export const processAnimeDetails = (
   const { animeId } = task.payload as { animeId: number }
 
   const animeRelationResult: AnimeRelationsProcessorResult = {
+    // La ficha completa es la única fuente que actualiza la fila `anime` sin
+    // re-barrido (Modo B). El mapper reutiliza el del listado y añade la
+    // cobertura que `/full` sí trae (broadcast, aired, stats, tráiler).
+    anime: mapAnime(animeData as unknown as Parameters<typeof mapAnime>[0])
+      .anime,
     animeGenres: animeData.genres.map((genre) => ({
       animeId: animeId,
       genreId: genre.mal_id,
@@ -42,8 +47,6 @@ export const processAnimeDetails = (
         relationType: relatedAnime.relation ?? 'Other',
       }))
     ),
-
-
   }
   return animeRelationResult
 }
@@ -67,7 +70,6 @@ export const processAnimeCharacters = (
         language: va.language || 'Unknown',
       }))
     ),
-    
   }
   return animeCharactersResult
 }

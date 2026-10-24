@@ -1,46 +1,13 @@
 import { GenericManager } from './core/genericManager.js'
 import { getSourceConfig } from './config/sources.js'
-// Initializers
-import { initializeTasks } from './scripts/initializeTasks.js'
-import { initializeJikanRelationsTasks } from './scripts/initializeJikanRelationsTasks.js'
-import { initializeAnimeThemesTasks } from './scripts/initializeAnimeThemesTasks.js'
-import { initializeAnimeMappingTasks } from './scripts/initializeAnimeMappingTasks.js'
-import { initializeAnimeEpisodesTasks } from './scripts/initializeAnimeEpisodesTasks.js'
-import { initializeTvdbSeriesArtworksTasks } from './scripts/initializeTvdbSeriesArtworksTasks.js'
-import { initializeAnilistTasks } from './scripts/initializeAnilistTasks.js'
-import { initializeMalDetailsTasks } from './scripts/initializeMalDetailsTasks.js'
-import { initializeMalHtmlTasks } from './scripts/initializeMalHtmlTasks.js'
-import { initializeMalPeopleTasks } from './scripts/initializeMalPeopleTasks.js'
-import { initializeAnnTasks } from './scripts/initializeAnnTasks.js'
-import { initializeTvdbEpisodesTasks } from './scripts/initializeTvdbEpisodesTasks.js'
-import { initializeTmdbTasks } from './scripts/initializeTmdbTasks.js'
-import { initializeMalMangaTasks } from './scripts/initializeMalMangaTasks.js'
-import { initializeMalCharactersTasks } from './scripts/initializeMalCharactersTasks.js'
-import { initializeMalPersonTasks } from './scripts/initializeMalPersonTasks.js'
-import { initializeAnilistMediaTasks } from './scripts/initializeAnilistMediaTasks.js'
-import { initializeMusicMetaTasks } from './scripts/initializeMusicMetaTasks.js'
-import { initializeMalMangaPageTasks } from './scripts/initializeMalMangaPageTasks.js'
-const INITIALIZERS: Record<string, () => Promise<void>> = {
-  jikan: initializeTasks,
-  jikanRelations: initializeJikanRelationsTasks,
-  animeThemes: initializeAnimeThemesTasks,
-  animeMapping: initializeAnimeMappingTasks,
-  animeEpisodes: initializeAnimeEpisodesTasks,
-  tvdbSeriesArtworks: initializeTvdbSeriesArtworksTasks,
-  anilist: initializeAnilistTasks,
-  mal: initializeMalDetailsTasks,
-  malHtml: initializeMalHtmlTasks,
-  malPeople: initializeMalPeopleTasks,
-  ann: initializeAnnTasks,
-  tvdbEpisodes: initializeTvdbEpisodesTasks,
-  tmdb: initializeTmdbTasks,
-  malManga: initializeMalMangaTasks,
-  malCharacters: initializeMalCharactersTasks,
-  malPerson: initializeMalPersonTasks,
-  anilistMedia: initializeAnilistMediaTasks,
-  musicMeta: initializeMusicMetaTasks,
-  malMangaPage: initializeMalMangaPageTasks,
-}
+import { INITIALIZERS } from './scripts/initializers.js'
+
+/**
+ * Ingesta de una fuente: siembra lo que falta y drena lo pendiente/vencido.
+ *
+ * En prod (Modo B) se usa `incremental.ts` con presupuesto; este entrypoint
+ * sigue sirviendo para una pasada completa de una fuente concreta.
+ */
 async function main() {
   const arg = process.argv[2] || 'jikan'
   const sourceName = Object.keys(INITIALIZERS).includes(arg) ? arg : 'jikan'
@@ -50,7 +17,7 @@ async function main() {
     if (!initializer) {
       throw new Error(`No initializer found for: ${sourceName}`)
     }
-    console.log(`\n��� Starting ${sourceName}\n`)
+    console.log(`\n🚀 Starting ${sourceName}\n`)
     await initializer()
     const manager = new GenericManager(config)
     await manager.init()

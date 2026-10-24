@@ -6,8 +6,9 @@ import { proxyKey } from './rateGate.js'
 import { TaskDispatcher, type DispatcherTask } from './taskDispatcher.js'
 import { SINGLE_IP_SOURCES, SOURCE_HOSTS } from '../config/sources.js'
 import { KEY_SCOPED_HOSTS } from '../config/sources.js'
-import { DEFAULT_REFRESH_SECONDS } from '../config/sources.js'
+import type { RefreshPolicy } from '../config/sources.js'
 import { capitalize } from '../shared/parsers.js'
+import { animeIdForTask } from '../shared/refreshTarget.js'
 import { sanitizeError } from '../utils/sanitizeError.js'
 import { FetchError } from '../libs/httpError.js'
 import { SkippedTaskError } from '../libs/skippedTaskError.js'
@@ -17,6 +18,26 @@ import type {
   SourceConfig,
   BufferedTask,
 } from '../types/index.js'
+
+/** Presupuesto de una corrida incremental (Modo B). */
+export interface IncrementalOptions {
+  /** Máximo de tareas a procesar (claim + drain) en esta corrida. */
+  maxTasks?: number
+  /** Epoch ms en que la corrida debe cortar (deja lo pendiente para la próxima). */
+  deadline?: number
+  /** Tope de tareas en vuelo (prod: una IP, no hace falta fan-out). */
+  maxInFlight?: number
+}
+
+/** Resumen agregado de la corrida (alimenta `ingest.run`). */
+export interface RunSummary {
+  processed: number
+  failed: number
+  retried: number
+  deadLettered: number
+  blocked: number
+  byKind: Record<string, number>
+}
 
 /**
  * Una sola puerta de rate para toda la corrida: si se recreara en cada lote, las
@@ -43,7 +64,9 @@ export class GenericManager {
   bufferByTaskType = new Map<string, BufferedTask[]>()
 
   private readonly savingByTaskType: Set<string> = new Set()
-  private readonly refreshCache = new Map<string, number | undefined>()
+  private readonly refreshCache = new Map<string, RefreshPolicy>()
+  private readonly incremental: IncrementalOptions = {}
+  private hotCache?: { ids: Set<number>; at: number }
   private cachedRepository: any = null
   private cachedModules: { services: any; processors: any } | null = null
   private statsInterval: ReturnType<typeof setInterval> | null = null
@@ -68,6 +91,16 @@ export class GenericManager {
 
   useBudget(budget: { acquire: () => Promise<void>; release: () => void }) {
     this.budget = budget
+    return this
+  }
+
+  /**
+   * Modo B: la corrida no drena la cola entera. Sin presupuesto, el manager se
+   * comporta como el backfill (hasta vaciar), que es lo que quieren los scripts
+   * de una sola pasada.
+   */
+  useIncremental(options: IncrementalOptions) {
+    Object.assign(this.incremental, options)
     return this
   }
 
@@ -102,8 +135,16 @@ export class GenericManager {
     return this.cachedModules
   }
 
-  async getTasks() {
-    const batchSize = this.sourceConfig?.taskBatchSize || 2000
+  async getTasks(limit?: number) {
+    const configured = this.sourceConfig?.taskBatchSize || 2000
+    const batchSize =
+      limit === undefined
+        ? configured
+        : Math.min(configured, Math.max(0, limit))
+    if (batchSize <= 0) {
+      this.taskQueue = []
+      return
+    }
     // Claim atómico: la tarea queda `in_progress` con lease desde aquí, así que
     // un crash no pierde el lote (el reaper lo devuelve a `pending`).
     this.taskQueue = await taskRepository.claimTasks(
@@ -112,20 +153,38 @@ export class GenericManager {
     )
   }
 
-  /**
-   * Cadencia de refresh del taskType: `ingest.task_policy` manda, y si no hay
-   * política se usa el default del source (Memoria del plan de fill/refresh).
-   */
-  private async refreshSeconds(taskType: string): Promise<number | undefined> {
-    if (this.refreshCache.has(taskType)) return this.refreshCache.get(taskType)
+  /** Política de refresh del taskType (DB manda; código de fallback). */
+  private async refreshPolicy(taskType: string): Promise<RefreshPolicy> {
+    if (this.refreshCache.has(taskType)) return this.refreshCache.get(taskType)!
 
     const source = this.sourceConfig?.name ?? this.source
-    const seconds =
-      (await taskRepository.refreshSecondsFor(source, taskType)) ??
-      DEFAULT_REFRESH_SECONDS[taskType]
+    const policy = await taskRepository.refreshPolicyFor(source, taskType)
+    this.refreshCache.set(taskType, policy)
+    return policy
+  }
 
-    this.refreshCache.set(taskType, seconds)
-    return seconds
+  /** Set de anime "hot", cacheado 10 min por corrida. */
+  private async hotAnimeIds(): Promise<Set<number>> {
+    const now = Date.now()
+    if (!this.hotCache || now - this.hotCache.at > 10 * 60_000) {
+      this.hotCache = { ids: await taskRepository.hotAnimeIds(), at: now }
+    }
+    return this.hotCache.ids
+  }
+
+  /**
+   * Intervalo de refresh de **esta** tarea: airing si su anime está en
+   * emisión (o recién terminado), cold en el resto. `null` = nunca.
+   */
+  async refreshSecondsForTask(task: ScrapingTask): Promise<number | null> {
+    const policy = await this.refreshPolicy(task.taskType)
+    if (policy.hot === null) return policy.cold
+
+    const animeId = animeIdForTask(task)
+    if (!animeId) return policy.cold
+
+    const hot = await this.hotAnimeIds()
+    return hot.has(animeId) ? policy.hot : policy.cold
   }
 
   /** Fetch + mapeo en el proceso padre, con la IP que decidió el orquestador. */
@@ -151,7 +210,7 @@ export class GenericManager {
     return await processFn(rawData, task)
   }
 
-  async init() {
+  async init(): Promise<RunSummary> {
     this.reporter.reset()
     await this.getRepository()
     await this.getModules()
@@ -172,8 +231,8 @@ export class GenericManager {
     if (dueCount > 0)
       console.log(`🔄 ${dueCount} tareas vencidas re-armadas por política`)
 
-    // Lo que quedó `skipped` por dependencia vuelve a intentarse: la dependencia
-    // pudo aterrizar en la corrida anterior.
+    // Lo que quedó `skipped` por dependencia vuelve a intentarse (con backoff):
+    // la dependencia pudo aterrizar en una corrida anterior.
     const rearmed = await taskRepository.rearmSkippedTasks(source)
     if (rearmed > 0) console.log(`⏸️→▶ ${rearmed} tareas skipped re-armadas`)
 
@@ -185,7 +244,10 @@ export class GenericManager {
     // En vuelo = `maxWorkers` (no el tamaño del pool): varias tareas pueden
     // compartir IP, y el `RateGate` es quien limita por (host, IP). Limitarlo
     // al tamaño del pool dejaba el 50 % de los workers ociosos.
-    const maxInFlight = Math.max(1, this.maxWorkers)
+    const maxInFlight = Math.max(
+      1,
+      Math.min(this.maxWorkers, this.incremental.maxInFlight ?? this.maxWorkers)
+    )
 
     console.log(
       `\n🚀 Starting ${source} — ${maxInFlight} tareas en vuelo · ` +
@@ -221,10 +283,37 @@ export class GenericManager {
 
     this.statsInterval = setInterval(() => this.reporter.print(), 30_000)
 
+    const runSummary: RunSummary = {
+      processed: 0,
+      failed: 0,
+      retried: 0,
+      deadLettered: 0,
+      blocked: 0,
+      byKind: {},
+    }
+
     try {
       let batchNumber = 0
       while (true) {
-        await this.getTasks()
+        const remaining =
+          this.incremental.maxTasks === undefined
+            ? undefined
+            : this.incremental.maxTasks - runSummary.processed
+        if (remaining !== undefined && remaining <= 0) {
+          console.log(
+            `⏱️  Presupuesto agotado (${this.incremental.maxTasks} tareas)`
+          )
+          break
+        }
+        if (
+          this.incremental.deadline &&
+          Date.now() >= this.incremental.deadline
+        ) {
+          console.log('⏱️  Deadline de la corrida alcanzado')
+          break
+        }
+
+        await this.getTasks(remaining)
         if (this.taskQueue.length === 0) {
           if (batchNumber === 0) console.log(`✅ No tasks for ${source}\n`)
           break
@@ -242,7 +331,7 @@ export class GenericManager {
               return await this.runTask(task as ScrapingTask, proxyUrl)
             },
             onDone: (task, data) =>
-              this.processWorkerData(task.id, task.taskType, data),
+              this.processWorkerData(task as ScrapingTask, data),
             onError: async (task, error) => {
               // Dependencia pendiente: se marca `skipped` (re-armable), no como
               // fallo. Consumir reintentos aquí acabaría en dead_letter.
@@ -250,15 +339,28 @@ export class GenericManager {
                 await taskRepository.skipTasks([task.id], error.reason)
                 return
               }
-              await taskRepository.failTasks(
+              const result = await taskRepository.failTasks(
                 [task.id],
                 sanitizeError((error as Error)?.message),
                 error instanceof FetchError ? error.retryAfterMs : undefined,
                 error instanceof FetchError ? error.retryable : true
               )
+              // El dispatcher cuenta el fallo igual; aquí se distingue si
+              // volvió a `pending` (reintento) o cayó a `dead_letter`.
+              runSummary.retried += result.retried
+              runSummary.deadLettered += result.deadLettered
             },
           }
         )
+
+        runSummary.processed += summary.processed
+        runSummary.failed += summary.failed
+        for (const [kind, count] of Object.entries(summary.byKind)) {
+          runSummary.byKind[kind] = (runSummary.byKind[kind] ?? 0) + count
+          if (kind === 'rate_limit' || kind === 'blocked') {
+            runSummary.blocked += count
+          }
+        }
 
         console.log(
           `📦 Batch ${batchNumber}: ${summary.processed} ok · ${summary.failed} fallos ${JSON.stringify(summary.byKind)} · ${summary.proxiesUsed} IPs usadas`
@@ -274,24 +376,28 @@ export class GenericManager {
         `📡 Proxies — healthy: ${health.healthy}, cooldown: ${health.cooldown}, dead: ${health.dead}/${health.total}`
       )
     }
+
+    return runSummary
   }
 
   // --- Buffering & Saving ---
 
-  async processWorkerData(taskId: number, taskType: string, data: any) {
+  async processWorkerData(task: ScrapingTask, data: any) {
+    const refreshSeconds = await this.refreshSecondsForTask(task)
     // Un processor sin resultados no es un fallo: la tarea se completa con 0
-    // items y se programa su refresh por política.
+    // items y se programa su refresh por política (airing vs. nunca).
     if (!data) {
-      await taskRepository.completeTasks(
-        [taskId],
-        await this.refreshSeconds(taskType)
-      )
+      await taskRepository.completeTasksWithRefresh([
+        { id: task.id, refreshSeconds },
+      ])
       return
     }
-    if (!this.bufferByTaskType.has(taskType))
-      this.bufferByTaskType.set(taskType, [])
-    this.bufferByTaskType.get(taskType)!.push({ taskId, taskType, data })
-    await this.saveIfNeeded(taskType)
+    if (!this.bufferByTaskType.has(task.taskType))
+      this.bufferByTaskType.set(task.taskType, [])
+    this.bufferByTaskType
+      .get(task.taskType)!
+      .push({ taskId: task.id, taskType: task.taskType, data, refreshSeconds })
+    await this.saveIfNeeded(task.taskType)
   }
 
   private async saveIfNeeded(taskType: string) {
@@ -356,21 +462,22 @@ export class GenericManager {
       const deferred = takeDeferredDependencies()
       if (deferred > 0) {
         const skipped: number[] = []
-        const completed: number[] = []
+        const completed: { id: number; refreshSeconds: number | null }[] = []
         for (const buffered of batch) {
           const taskItems = Array.isArray(buffered.data)
             ? buffered.data
             : [buffered.data]
           await repository[saveFnName](taskItems)
           if (takeDeferredDependencies() > 0) skipped.push(buffered.taskId)
-          else completed.push(buffered.taskId)
+          else
+            completed.push({
+              id: buffered.taskId,
+              refreshSeconds: buffered.refreshSeconds ?? null,
+            })
         }
 
         if (completed.length > 0) {
-          await taskRepository.completeTasks(
-            completed,
-            await this.refreshSeconds(first.taskType)
-          )
+          await taskRepository.completeTasksWithRefresh(completed)
         }
         if (skipped.length > 0) {
           await taskRepository.skipTasks(skipped, 'missing:dependency')
@@ -382,9 +489,11 @@ export class GenericManager {
         return
       }
 
-      await taskRepository.completeTasks(
-        taskIds,
-        await this.refreshSeconds(first.taskType)
+      await taskRepository.completeTasksWithRefresh(
+        batch.map((b) => ({
+          id: b.taskId,
+          refreshSeconds: b.refreshSeconds ?? null,
+        }))
       )
       this.reporter.recordSaved(entity, totalSaved, batch.length)
       console.log(

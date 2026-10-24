@@ -329,29 +329,62 @@ const BACKFILL_PROFILES: Record<
 }
 
 /**
- * Cadencia de refresh por defecto (segundos) cuando `ingest.task_policy` no
- * tiene entrada para ese taskType. Es la "memoria del barrido rodante" del plan
- * de fill/refresh: airing semanal, catálogo estable cada meses.
+ * Política de refresco por taskType (Modo B). Es **dato editable** (se siembra
+ * en `ingest.task_policy`), no código: cambiar la cadencia es un UPDATE.
+ *
+ * - `cold`: anime/normal terminado. `null` = **nunca** se re-arma (sin
+ *   re-ingesta del catálogo ya completo).
+ * - `hot`: anime en emisión (o recién terminado, ventana de 7 días). `null` =
+ *   el tipo no es sensible a emisión.
+ *
+ * El listado (`anime_page_hydration`) queda en `null`/`null` a propósito: el
+ * descubrimiento es delta por páginas nuevas, nunca un re-barrido diario.
  */
-export const DEFAULT_REFRESH_SECONDS: Record<string, number> = {
-  anime_page_hydration: 24 * 3600,
-  character_page_hydration: 90 * 86400,
-  staff_page_hydration: 90 * 86400,
-  producer_page_hydration: 90 * 86400,
-  anime_details_hydration: 7 * 86400,
-  anime_characters_hydration: 180 * 86400,
-  anime_staff_hydration: 180 * 86400,
-  anime_themes_hydration: 30 * 86400,
-  artist_hydration: 90 * 86400,
-  anime_mapping_hydration: 180 * 86400,
-  anime_episodes_hydration: 7 * 86400,
-  tvdb_series_artworks: 180 * 86400,
-  anime_banner_hydration: 180 * 86400,
-  anilist_year_hydration: 30 * 86400,
-  anime_mal_details_hydration: 30 * 86400,
-  anime_mal_ranking_hydration: 7 * 86400,
-  anime_mal_html_hydration: 90 * 86400,
-  staff_image_hydration: 180 * 86400,
+export interface RefreshPolicy {
+  cold: number | null
+  hot: number | null
+}
+
+export const REFRESH_POLICY: Record<string, RefreshPolicy> = {
+  // Jikan listado: solo páginas nuevas (discovery), nunca refresh.
+  anime_page_hydration: { cold: null, hot: null },
+  character_page_hydration: { cold: 365 * 86400, hot: null },
+  staff_page_hydration: { cold: 365 * 86400, hot: null },
+  producer_page_hydration: { cold: 365 * 86400, hot: null },
+
+  // Jikan ficha completa: mantiene `status`/`episodes`/`score` al día.
+  anime_details_hydration: { cold: null, hot: 24 * 3600 },
+  anime_characters_hydration: { cold: null, hot: 180 * 86400 },
+  anime_staff_hydration: { cold: null, hot: 180 * 86400 },
+
+  // Episodios: la novedad es el capítulo que acaba de salir.
+  anime_episodes_hydration: { cold: null, hot: 24 * 3600 },
+  tvdb_episodes_hydration: { cold: null, hot: 24 * 3600 },
+
+  // Imágenes/arte: estables; solo se refrescan mientras el anime es hot.
+  anime_themes_hydration: { cold: null, hot: null },
+  anime_banner_hydration: { cold: null, hot: 90 * 86400 },
+  tvdb_series_artworks: { cold: null, hot: 180 * 86400 },
+  tmdb_images_hydration: { cold: null, hot: 30 * 86400 },
+  ann_themes_hydration: { cold: null, hot: 90 * 86400 },
+
+  // Mapping y stats.
+  anime_mapping_hydration: { cold: null, hot: 180 * 86400 },
+  anime_mal_details_hydration: { cold: null, hot: 7 * 86400 },
+  anime_mal_html_hydration: { cold: null, hot: 90 * 86400 },
+  // Bulks: una tarea por ranking/año, baratas de repetir.
+  anime_mal_ranking_hydration: { cold: 7 * 86400, hot: 7 * 86400 },
+  anilist_year_hydration: { cold: 30 * 86400, hot: 30 * 86400 },
+
+  // Reparto profundo, música, manga y personas: no sensibles a emisión.
+  media_anilist_details_hydration: { cold: 365 * 86400, hot: null },
+  music_meta_hydration: { cold: null, hot: 180 * 86400 },
+  artist_hydration: { cold: null, hot: 180 * 86400 },
+  anime_mal_characters_hydration: { cold: null, hot: 180 * 86400 },
+  manga_mal_details_hydration: { cold: null, hot: null },
+  manga_page_hydration: { cold: null, hot: null },
+  person_mal_details_hydration: { cold: null, hot: null },
+  staff_image_hydration: { cold: 365 * 86400, hot: null },
 }
 
 /**

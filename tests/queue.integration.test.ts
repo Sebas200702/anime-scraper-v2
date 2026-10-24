@@ -207,7 +207,13 @@ describe.skipIf(!RUN)('cola ingest.* (Postgres local)', () => {
     const duringSkip = await taskRepository.claimTasks(5, SOURCE)
     expect(duringSkip.map((t) => t.id)).not.toContain(target.id)
 
-    // la siguiente corrida lo re-arma (self-healing)
+    // Backoff: no se re-arma en el tick inmediato (evita claim→skip→claim).
+    expect(await taskRepository.rearmSkippedTasks(SOURCE)).toBe(0)
+
+    // Pasadas las 6 h, la siguiente corrida lo re-arma (self-healing).
+    await db.execute(
+      sql`UPDATE ingest.task SET updated_at = now() - interval '7 hours' WHERE id = ${target.id}`
+    )
     expect(await taskRepository.rearmSkippedTasks(SOURCE)).toBe(1)
     const after = await taskRepository.claimTasks(5, SOURCE)
     expect(after.map((t) => t.id)).toContain(target.id)

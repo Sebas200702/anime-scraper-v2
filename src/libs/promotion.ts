@@ -579,6 +579,14 @@ export const promote = async ({
         (column) => !(entry.surrogateId && column === 'id')
       )
 
+      // La DB de prod puede ser anterior al esquema local (p. ej. aún sin
+      // `manga`): promover una tabla inexistente rompería la transacción
+      // entera. Se omite con aviso y el resto sigue.
+      if (columns.length === 0) {
+        log(`⏭  ${entry.table}: no existe en destino (omitida)`)
+        continue
+      }
+
       // Remaps: el id del padre en destino, emparejando por clave natural.
       const remapColumns = entry.remaps ?? []
       for (const remap of remapColumns) {

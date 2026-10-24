@@ -15,4 +15,7 @@ const pool = new Pool({
 
 export const db = drizzle(pool)
 
+/** Pool crudo para locks de sesión (advisory lock) y scripts operativos. */
+export { pool }
+
 export const closeDb = () => pool.end()

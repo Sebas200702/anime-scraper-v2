@@ -1,8 +1,10 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { CONFIG } from '../config/config.js'
+import { REFRESH_POLICY, type RefreshPolicy } from '../config/sources.js'
 import { db } from '../libs/db.js'
 import {
   TASK_STATUSES,
+  ingestRun,
   ingestTask,
   ingestTaskPolicy,
   type TaskStatus,
@@ -80,6 +82,41 @@ export const taskRepository = {
         updatedAt: sql`now()`,
       })
       .where(inArray(ingestTask.id, taskIds))
+  },
+
+  /**
+   * Completa tareas **cada una con su intervalo**: un lote puede mezclar un
+   * anime en emisión (24 h) con uno terminado (`null` = nunca). Agrupa por
+   * intervalo para no hacer un UPDATE por fila.
+   */
+  async completeTasksWithRefresh(
+    entries: { id: number; refreshSeconds: number | null }[]
+  ): Promise<void> {
+    if (entries.length === 0) return
+
+    const groups = new Map<number | null, number[]>()
+    for (const entry of entries) {
+      const ids = groups.get(entry.refreshSeconds) ?? []
+      ids.push(entry.id)
+      groups.set(entry.refreshSeconds, ids)
+    }
+
+    await Promise.all(
+      [...groups.entries()].map(([seconds, ids]) =>
+        db
+          .update(ingestTask)
+          .set({
+            status: 'completed',
+            leasedUntil: null,
+            lastScrapedAt: sql`now()`,
+            refreshAfter: seconds
+              ? sql`now() + (${seconds} * interval '1 second')`
+              : null,
+            updatedAt: sql`now()`,
+          })
+          .where(inArray(ingestTask.id, ids))
+      )
+    )
   },
 
   /**
@@ -224,10 +261,14 @@ export const taskRepository = {
 
   /** Re-arma lo `skipped`: la dependencia pudo aparecer en la corrida anterior. */
   async rearmSkippedTasks(source?: string): Promise<number> {
+    // Backoff de 6 h: sin esto, un `skipped` por dependencia inexistente se
+    // re-armaba en **cada** tick (claim → skip → claim) y quemaba cuota.
     const result = await db.execute(sql`
       UPDATE ingest.task
       SET status = 'pending', scheduled_at = now(), updated_at = now()
-      WHERE status = 'skipped' ${sourceFilter(source)}
+      WHERE status = 'skipped'
+        AND updated_at < now() - interval '6 hours'
+        ${sourceFilter(source)}
     `)
     return result.rowCount ?? 0
   },
@@ -339,15 +380,19 @@ export const taskRepository = {
     return touched
   },
 
-  /** Cadencia de refresh declarada en la DB (si existe). */
-  async refreshSecondsFor(
+  /**
+   * Política de refresh del taskType. `ingest.task_policy` manda (es dato
+   * editable); si no hay fila se usa `REFRESH_POLICY` (código) y, si tampoco
+   * existe, **nunca** se refresca (evita re-barridos accidentales).
+   */
+  async refreshPolicyFor(
     source: string,
     taskType: string
-  ): Promise<number | undefined> {
+  ): Promise<RefreshPolicy> {
     const rows = await db
       .select({
-        refresh: ingestTaskPolicy.refreshIntervalSeconds,
-        airing: ingestTaskPolicy.refreshIntervalAiringSeconds,
+        cold: ingestTaskPolicy.refreshIntervalSeconds,
+        hot: ingestTaskPolicy.refreshIntervalAiringSeconds,
       })
       .from(ingestTaskPolicy)
       .where(
@@ -359,7 +404,102 @@ export const taskRepository = {
       .limit(1)
 
     const row = rows[0]
-    return row?.airing ?? row?.refresh ?? undefined
+    if (row) return { cold: row.cold ?? null, hot: row.hot ?? null }
+    return REFRESH_POLICY[taskType] ?? { cold: null, hot: null }
+  },
+
+  /**
+   * Hot set del Modo B: anime cuyo estado puede cambiar en las próximas horas.
+   *
+   * Incluye una **ventana de cierre** de 7 días tras `aired_to`: es lo que
+   * garantiza la pasada final de detalles/episodios cuando la temporada
+   * termina, sin volver a tocar el catálogo terminado.
+   */
+  async hotAnimeIds(): Promise<Set<number>> {
+    const rows = await db.execute(sql`
+      SELECT mal_id FROM anime
+      WHERE status = 'Currently Airing'
+         OR (status = 'Not yet aired'
+             AND (aired_from IS NULL OR aired_from <= now() + interval '30 days'))
+         OR (aired_to IS NOT NULL AND aired_to >= now() - interval '7 days')
+    `)
+    return new Set(
+      (rows.rows as unknown as { mal_id: number }[]).map((r) => r.mal_id)
+    )
+  },
+
+  /** Abre una fila en `ingest.run` y devuelve su id. */
+  async startRun(
+    source: string,
+    mode: string,
+    notes?: Record<string, unknown>
+  ): Promise<number> {
+    const rows = await db
+      .insert(ingestRun)
+      .values({ source, mode, notes: notes ? JSON.stringify(notes) : null })
+      .returning({ id: ingestRun.id })
+    return rows[0]!.id
+  },
+
+  /** Cierra la corrida con sus contadores. */
+  async finishRun(
+    id: number,
+    counts: {
+      processed: number
+      retried: number
+      blocked: number
+      deadLettered: number
+      notes?: Record<string, unknown>
+    }
+  ): Promise<void> {
+    await db
+      .update(ingestRun)
+      .set({
+        finishedAt: sql`now()`,
+        tasksProcessed: counts.processed,
+        tasksRetried: counts.retried,
+        tasksBlocked: counts.blocked,
+        tasksDeadLettered: counts.deadLettered,
+        notes: counts.notes ? JSON.stringify(counts.notes) : null,
+      })
+      .where(eq(ingestRun.id, id))
+  },
+
+  /** Últimas corridas (para /stats y el healthcheck). */
+  async recentRuns(limit = 20) {
+    return await db
+      .select()
+      .from(ingestRun)
+      .orderBy(sql`started_at DESC`)
+      .limit(limit)
+  },
+
+  /** Conteo por fuente/tipo/estado (para /stats). */
+  async statsByType(): Promise<
+    { source: string; taskType: string; status: string; count: number }[]
+  > {
+    const rows = await db
+      .select({
+        source: ingestTask.source,
+        taskType: ingestTask.taskType,
+        status: ingestTask.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(ingestTask)
+      .groupBy(ingestTask.source, ingestTask.taskType, ingestTask.status)
+    return rows
+  },
+
+  /** Tareas vencidas ahora (sin re-armarlas), por tipo. */
+  async dueByType(): Promise<{ taskType: string; count: number }[]> {
+    const rows = await db.execute(sql`
+      SELECT task_type, count(*)::int AS count
+      FROM ingest.task
+      WHERE status = 'completed' AND refresh_after IS NOT NULL
+        AND refresh_after <= now()
+      GROUP BY 1 ORDER BY 2 DESC
+    `)
+    return rows.rows as unknown as { taskType: string; count: number }[]
   },
 
   /** Métricas por estado (salud de la cola), con los estados en 0 incluidos. */

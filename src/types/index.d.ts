@@ -152,6 +152,12 @@ export interface BufferedTask {
   taskId: number
   taskType: string
   data: ProcessorResult | ProcessorResult[]
+  /**
+   * Intervalo de refresh calculado al terminar la tarea (airing vs. cold).
+   * `null` = nunca. Se calcula con la tarea en mano porque depende de si su
+   * anime está en emisión.
+   */
+  refreshSeconds?: number | null
 }
 
 export interface SourceRepository {
@@ -197,6 +203,12 @@ export interface ProducerProcessorResult {
 }
 
 export interface AnimeRelationsProcessorResult {
+  /**
+   * Fila `anime` de la ficha completa (`/anime/{id}/full`). El Modo B la
+   * refresca con `ON CONFLICT DO UPDATE`: es lo que mantiene al día `status`,
+   * `episodes`, `score`, fechas y stats sin re-barrido del listado.
+   */
+  anime?: NewAnime
   animeGenres: NewAnimeGenre[]
   animeDemographics: NewAnimeDemographic[]
   animeThemes: NewAnimeTheme[]

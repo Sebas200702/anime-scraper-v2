@@ -9,6 +9,7 @@ import { db } from '../libs/db.js'
 import { mediaRepository } from './media.js'
 import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 import { unique } from '../utils/deduplicate.js'
+import { batchUpsert } from '../shared/batchUpsert.js'
 
 /** Par (anime, número) → id surrogate del episodio en la DB. */
 const resolveEpisodeIds = async (
@@ -46,7 +47,14 @@ export const animeEpisodesRepository = {
       const chunks = chunk(episodeEntries, batchSize)
       await db.transaction(async (tx) => {
         for (const batch of chunks) {
-          await tx.insert(episode).values(batch).onConflictDoNothing()
+          // Refresh real: un airing estrena capítulos y Kitsu corrige títulos,
+          // sinopsis y fechas. La identidad es `(anime_id, number)` — el `id`
+          // surrogate es del destino y no se toca.
+          await batchUpsert(episode, batch, 8, 'episode', tx, {
+            update: true,
+            conflictTarget: ['anime_id', 'number'],
+            omitFromUpdate: ['id'],
+          })
         }
       })
       return episodeEntries.length
