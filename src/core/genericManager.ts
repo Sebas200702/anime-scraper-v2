@@ -377,6 +377,15 @@ export class GenericManager {
         console.log(
           `📦 Batch ${batchNumber}: ${summary.processed} ok · ${summary.failed} fallos ${JSON.stringify(summary.byKind)} · ${summary.proxiesUsed} IPs usadas`
         )
+
+        // La fuente está caída (circuit breaker): no se piden más lotes en esta
+        // corrida. Lo pendiente lo toma el próximo tick o la recuperación.
+        if (summary.aborted) {
+          console.log(
+            `⚡ ${source}: fuente cortada por fallos transitorios; se pasa a la siguiente`
+          )
+          break
+        }
       }
 
       await this.flush()

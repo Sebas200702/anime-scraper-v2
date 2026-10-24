@@ -43,6 +43,8 @@ export interface DispatchSummary {
    * deadline. Quien llama las devuelve a `pending` (no se pierden con un lease).
    */
   unprocessedIds: number[]
+  /** El circuit breaker cortó la fuente en esta corrida. */
+  aborted: boolean
 }
 
 export interface TaskDispatcherOptions {
@@ -102,6 +104,7 @@ export class TaskDispatcher {
       byKind: {},
       proxiesUsed: 0,
       unprocessedIds: [],
+      aborted: false,
     }
     const usedProxies = new Set<string>()
 
@@ -123,6 +126,7 @@ export class TaskDispatcher {
     await Promise.all(runners)
     summary.proxiesUsed = usedProxies.size
     summary.unprocessedIds = queue.map((task) => task.id)
+    summary.aborted = this.aborted
     return summary
   }
 
