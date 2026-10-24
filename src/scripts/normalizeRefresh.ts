@@ -19,7 +19,7 @@ const dryRun = process.argv.includes('--dry-run')
 
 const NULL_ALL = `
   UPDATE ingest.task
-  SET refresh_after = NULL, updated_at = now()
+  SET refresh_after = NULL, priority = 0, updated_at = now()
   WHERE status = 'completed' AND refresh_after IS NOT NULL
 `
 
@@ -44,6 +44,7 @@ const APPLY_HOT = `
   )
   UPDATE ingest.task t
   SET refresh_after = now() + (random() * interval '6 hours'),
+      priority = 20,
       updated_at = now()
   FROM hot h, ingest.task_policy p
   WHERE t.status = 'completed'

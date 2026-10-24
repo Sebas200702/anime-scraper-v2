@@ -11,12 +11,12 @@
  */
 export const INCREMENTAL_GROUPS: Record<'hot' | 'slow', string[]> = {
   hot: [
-    'jikanRelations', // ficha /full: status, episodios, score, fechas
-    'animeEpisodes', // capítulo recién emitido
-    'mal', // stats/rank/members (7d en airing)
+    'animeEpisodes', // capítulo recién emitido (Kitsu): la novedad manda
     'tvdbEpisodes', // miniaturas del capítulo
     'tmdb', // stills del capítulo
     'anilist', // banners/relaciones
+    'mal', // stats/rank/members y fallback de ficha (7d en airing)
+    'jikanRelations', // ficha /full: status, episodios, score, fechas
     'malHtml', // personajes/seiyuus (90d)
   ],
   slow: [

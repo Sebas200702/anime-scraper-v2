@@ -349,6 +349,15 @@ const columnsOf = async (pool: Pool, table: string): Promise<string[]> => {
     .map((row) => row.column_name)
 }
 
+/**
+ * Lee una tabla completa del origen.
+ *
+ * Usa un **cursor** de Postgres en vez de `LIMIT/OFFSET`: con OFFSET, cada
+ * página re-ordena y re-escanea lo que queda (O(n²) en tablas de cientos de
+ * miles de filas, como `anime_character`), y la promoción se volvía horas.
+ * El cursor hace un solo escaneo. El orden de las filas no importa: el diff se
+ * resuelve por clave natural.
+ */
 const readTable = async (
   pool: Pool,
   table: string,
@@ -357,21 +366,32 @@ const readTable = async (
   batchSize: number,
   where?: string
 ): Promise<Record<string, unknown>[]> => {
-  const order = key.map(quote).join(', ')
-  const rows: Record<string, unknown>[] = []
-  let offset = 0
+  const selectColumns = [...new Set([...columns, ...key])]
   const filter = where ? ` WHERE ${where}` : ''
+  const client = await pool.connect()
+  const rows: Record<string, unknown>[] = []
 
-  for (;;) {
-    const { rows: page } = await pool.query(
-      `SELECT ${columns.map(quote).join(', ')} FROM ${quote(table)}${filter}
-       ORDER BY ${order} LIMIT $1 OFFSET $2`,
-      [batchSize, offset]
+  try {
+    await client.query('BEGIN')
+    await client.query(
+      `DECLARE promote_read_cursor NO SCROLL CURSOR FOR
+         SELECT ${selectColumns.map(quote).join(', ')} FROM ${quote(table)}${filter}`
     )
-    if (page.length === 0) break
-    rows.push(...page)
-    if (page.length < batchSize) break
-    offset += batchSize
+    for (;;) {
+      const { rows: page } = await client.query(
+        `FETCH ${batchSize} FROM promote_read_cursor`
+      )
+      if (page.length === 0) break
+      rows.push(...(page as Record<string, unknown>[]))
+      if (page.length < batchSize) break
+    }
+    await client.query('CLOSE promote_read_cursor')
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    throw error
+  } finally {
+    client.release()
   }
 
   return rows

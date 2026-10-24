@@ -56,7 +56,8 @@ const INSERT = `
          p.task_type,
          p.entity_id,
          jsonb_build_object('animeId', p.mal_id),
-         5,
+         -- Los huecos van al final de la cola: primero la frescura del airing.
+         CASE WHEN p.covered THEN 20 ELSE 1 END,
          CASE WHEN p.covered THEN 'completed' ELSE 'pending' END,
          CASE WHEN p.covered THEN 1 ELSE 0 END,
          CASE WHEN p.covered THEN now() END,

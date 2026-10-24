@@ -25,8 +25,12 @@ export const CONFIG = {
   /** Lease del claim: si el proceso muere, el reaper lo devuelve a `pending`. */
   TASK_LEASE_SECONDS: Number(process.env.TASK_LEASE_SECONDS || 900),
 
-  /** Timeout por intento de fetch (ms). Un cuelgue no debe ocupar un slot. */
-  FETCH_TIMEOUT_MS: Number(process.env.FETCH_TIMEOUT_MS || 15000),
+  /**
+   * Timeout por intento de fetch (ms). Un cuelgue no debe ocupar un slot; con
+   * 30 s y reintentos, una fuente throttled deja miles de tareas con lease vivo
+   * (se vio en el backfill). 8 s es el valor recomendado por operación.
+   */
+  FETCH_TIMEOUT_MS: Number(process.env.FETCH_TIMEOUT_MS || 8000),
 
   // Credenciales para proxies que las requieren (los listados públicos suelen
   // responder 407 sin ellas, H-18).

@@ -258,6 +258,7 @@ export class GenericManager {
 
     const dispatcher = new TaskDispatcher({
       maxInFlight,
+      deadline: this.incremental.deadline,
       gate: rateGate,
       acquireProxy: () =>
         singleIp
@@ -360,6 +361,15 @@ export class GenericManager {
           if (kind === 'rate_limit' || kind === 'blocked') {
             runSummary.blocked += count
           }
+        }
+
+        // El deadline corta el lote: lo claimado y no ejecutado vuelve a
+        // `pending` (sin consumir intento) en vez de quedar con lease vivo.
+        if (summary.unprocessedIds.length > 0) {
+          const released = await taskRepository.releaseTasks(
+            summary.unprocessedIds
+          )
+          console.log(`↩️  ${released} tareas devueltas a pending (deadline)`)
         }
 
         console.log(

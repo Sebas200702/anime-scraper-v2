@@ -9,10 +9,24 @@
  */
 import { Pool } from 'pg'
 import { CONFIG } from '../config/config.js'
-import { promote } from '../libs/promotion.js'
+import { PROMOTION_PLAN, promote } from '../libs/promotion.js'
 
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
+/**
+ * `--only=manga,music_stream` promueve solo esas tablas. Útil para una DB de
+ * destino con esquema parcial (p. ej. recién creadas) sin repetir el catálogo
+ * entero.
+ */
+const only = args
+  .find((arg) => arg.startsWith('--only='))
+  ?.split('=')[1]
+  ?.split(',')
+  .map((table) => table.trim())
+  .filter(Boolean)
+const plan = only?.length
+  ? PROMOTION_PLAN.filter((entry) => only.includes(entry.table))
+  : PROMOTION_PLAN
 
 const toUrl = process.env.PROMOTE_TO_URL
 const fromUrl = process.env.PROMOTE_FROM_URL ?? CONFIG.DATABASE_URL
@@ -43,6 +57,7 @@ try {
     source,
     target,
     dryRun,
+    plan,
     log: (message) => console.log(message),
   })
 

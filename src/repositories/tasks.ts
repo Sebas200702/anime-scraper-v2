@@ -259,6 +259,46 @@ export const taskRepository = {
     return result.length
   },
 
+  /**
+   * Devuelve a `pending` las tareas claimadas que no se ejecutaron (deadline de
+   * la corrida). No consumen intento: se decrementa el `attempts` que sumó el
+   * claim, porque el fetch ni siquiera empezó.
+   */
+  async releaseTasks(taskIds: number[]): Promise<number> {
+    if (taskIds.length === 0) return 0
+    const result = await db.execute(sql`
+      UPDATE ingest.task
+      SET status = 'pending',
+          leased_until = NULL,
+          scheduled_at = now(),
+          attempts = greatest(attempts - 1, 0),
+          updated_at = now()
+      WHERE id IN (${idList(taskIds)}) AND status = 'in_progress'
+    `)
+    return result.rowCount ?? 0
+  },
+
+  /**
+   * Re-encola `dead_letter` por causas **transitorias** (timeout, conexión,
+   * bloqueo, rate limit, lease): no son huecos reales y no deben quedarse
+   * muertas tras una caída de la fuente.
+   */
+  async requeueTransientDeadLetters(limit = 5000): Promise<number> {
+    const result = await db.execute(sql`
+      UPDATE ingest.task
+      SET status = 'pending', scheduled_at = now(), attempts = 0,
+          leased_until = NULL, updated_at = now()
+      WHERE id IN (
+        SELECT id FROM ingest.task
+        WHERE status = 'dead_letter'
+          AND last_error ~* '(timeout|timed out|ECONN|socket|blocked|rate.?limit|lease|fetch failed|network)'
+        ORDER BY updated_at ASC
+        LIMIT ${limit}
+      )
+    `)
+    return result.rowCount ?? 0
+  },
+
   /** Re-arma lo `skipped`: la dependencia pudo aparecer en la corrida anterior. */
   async rearmSkippedTasks(source?: string): Promise<number> {
     // Backoff de 6 h: sin esto, un `skipped` por dependencia inexistente se

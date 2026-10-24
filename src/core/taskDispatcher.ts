@@ -38,6 +38,11 @@ export interface DispatchSummary {
   byKind: Record<string, number>
   /** IPs de salida realmente usadas en la corrida. */
   proxiesUsed: number
+  /**
+   * Tareas claimadas que no llegaron a ejecutarse porque se alcanzó el
+   * deadline. Quien llama las devuelve a `pending` (no se pierden con un lease).
+   */
+  unprocessedIds: number[]
 }
 
 export interface TaskDispatcherOptions {
@@ -63,6 +68,12 @@ export interface TaskDispatcherOptions {
    * IPs no multiplica la cuota y sí la rompería.
    */
   gateKeyFor?: (host: string, proxyUrl?: string) => string
+  /**
+   * Epoch ms de corte: al alcanzarlo no se desencolan más tareas (las que están
+   * en vuelo terminan). Evita que una fuente caída (timeouts) bloquee el
+   * presupuesto entero de la corrida.
+   */
+  deadline?: number
   onProgress?: (summary: DispatchSummary) => void
 }
 
@@ -79,6 +90,7 @@ export class TaskDispatcher {
       failed: 0,
       byKind: {},
       proxiesUsed: 0,
+      unprocessedIds: [],
     }
     const usedProxies = new Set<string>()
 
@@ -86,6 +98,9 @@ export class TaskDispatcher {
       { length: Math.max(1, Math.min(this.options.maxInFlight, queue.length)) },
       async () => {
         for (;;) {
+          if (this.options.deadline && Date.now() >= this.options.deadline) {
+            return
+          }
           const task = queue.shift()
           if (!task) return
           await this.dispatchOne(task, hooks, summary, usedProxies)
@@ -95,6 +110,7 @@ export class TaskDispatcher {
 
     await Promise.all(runners)
     summary.proxiesUsed = usedProxies.size
+    summary.unprocessedIds = queue.map((task) => task.id)
     return summary
   }
 

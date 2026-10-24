@@ -97,17 +97,26 @@ const drainSources = async (
 ): Promise<RunSummary> => {
   const total = emptySummary()
 
-  for (const source of sources) {
+  for (const [index, source] of sources.entries()) {
     if (Date.now() >= deadline) {
       console.log('⏱️  Deadline alcanzado: el resto queda para el próximo tick')
       break
     }
     try {
       console.log(`\n── ${source} ──`)
+      // Reparto justo del tiempo: una fuente caída (timeouts) no puede comerse
+      // el presupuesto de las demás. Si una termina antes, la siguiente hereda.
+      const remainingSources = sources.length - index
+      const sliceMs = Math.max(
+        30_000,
+        Math.floor((deadline - Date.now()) / remainingSources)
+      )
+      const sourceDeadline = Math.min(deadline, Date.now() + sliceMs)
+
       const manager = new GenericManager(getSourceConfig(source))
       manager.useIncremental({
         maxTasks: args.budget,
-        deadline,
+        deadline: sourceDeadline,
         maxInFlight: args.maxInFlight,
       })
       const summary = await manager.init()
@@ -182,6 +191,12 @@ const discover = async (args: Args, deadline: number): Promise<RunSummary> => {
   const swept = await seasonSweep()
   if (swept > 0)
     console.log(`🏁 ${swept} tareas re-armadas por cierre de temporada`)
+
+  // 5) Lo que murió por causas transitorias (timeout/bloqueo durante una caída
+  // de la fuente) vuelve a la cola; no son huecos reales.
+  const requeued = await taskRepository.requeueTransientDeadLetters()
+  if (requeued > 0)
+    console.log(`♻️  ${requeued} dead_letter transitorias re-encoladas`)
 
   return total
 }
