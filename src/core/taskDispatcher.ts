@@ -74,10 +74,19 @@ export interface TaskDispatcherOptions {
    * presupuesto entero de la corrida.
    */
   deadline?: number
+  /**
+   * Circuit breaker: si se acumulan N fallos **transitorios** seguidos (timeout,
+   * red, bloqueo, rate limit), se corta la fuente en esta corrida. Una API caída
+   * no debe quemar el presupuesto ni los intentos de decenas de tareas.
+   */
+  maxConsecutiveFailures?: number
   onProgress?: (summary: DispatchSummary) => void
 }
 
 export class TaskDispatcher {
+  private consecutiveFailures = 0
+  private aborted = false
+
   constructor(private readonly options: TaskDispatcherOptions) {}
 
   async drain<T>(
@@ -85,6 +94,8 @@ export class TaskDispatcher {
     hooks: DispatchHooks<T>
   ): Promise<DispatchSummary> {
     const queue = [...tasks]
+    this.consecutiveFailures = 0
+    this.aborted = false
     const summary: DispatchSummary = {
       processed: 0,
       failed: 0,
@@ -98,6 +109,7 @@ export class TaskDispatcher {
       { length: Math.max(1, Math.min(this.options.maxInFlight, queue.length)) },
       async () => {
         for (;;) {
+          if (this.aborted) return
           if (this.options.deadline && Date.now() >= this.options.deadline) {
             return
           }
@@ -146,6 +158,7 @@ export class TaskDispatcher {
       this.options.reportProxy?.(proxyUrl)
       await hooks.onDone(task, data, proxyUrl)
       summary.processed++
+      this.consecutiveFailures = 0
     } catch (error) {
       const fetchError = error instanceof FetchError ? error : undefined
 
@@ -166,6 +179,20 @@ export class TaskDispatcher {
           : (fetchError?.kind ?? 'unknown')
       summary.byKind[kind] = (summary.byKind[kind] ?? 0) + 1
       summary.failed++
+
+      // `not_found` y `skipped` son datos, no una caída: no cortan la fuente.
+      if (kind !== 'not_found' && kind !== 'skipped') {
+        this.consecutiveFailures++
+        const limit = this.options.maxConsecutiveFailures
+        if (limit && this.consecutiveFailures >= limit) {
+          this.aborted = true
+          console.warn(
+            `⚡ Circuit breaker: ${this.consecutiveFailures} fallos transitorios seguidos; se corta la fuente en esta corrida`
+          )
+        }
+      } else {
+        this.consecutiveFailures = 0
+      }
 
       await hooks.onError(task, error, proxyUrl)
     }

@@ -279,4 +279,65 @@ describe('TaskDispatcher', () => {
 
     expect(outcomes).toEqual([undefined])
   })
+
+  test('circuit breaker: corta la fuente tras N fallos transitorios y devuelve el resto', async () => {
+    const dispatcher = new TaskDispatcher({
+      maxInFlight: 1,
+      gate: new RateGate(fakeTime()),
+      acquireProxy: () => undefined,
+      limitsFor: () => noLimits,
+      maxConsecutiveFailures: 3,
+    })
+
+    let calls = 0
+    const summary = await dispatcher.drain(
+      Array.from({ length: 10 }, (_, i) => task(i)),
+      {
+        run: async () => {
+          calls++
+          throw new FetchError({
+            kind: 'timeout',
+            url: 'https://api.jikan.moe/v4/anime/1/full',
+          })
+        },
+        onDone: () => {},
+        onError: () => {},
+      }
+    )
+
+    expect(calls).toBe(3) // no sigue intentando una fuente caída
+    expect(summary.failed).toBe(3)
+    expect(summary.unprocessedIds).toHaveLength(7) // se devuelven a pending
+  })
+
+  test('circuit breaker: not_found no corta la fuente (es un hueco, no una caída)', async () => {
+    const dispatcher = new TaskDispatcher({
+      maxInFlight: 1,
+      gate: new RateGate(fakeTime()),
+      acquireProxy: () => undefined,
+      limitsFor: () => noLimits,
+      maxConsecutiveFailures: 2,
+    })
+
+    let calls = 0
+    const summary = await dispatcher.drain(
+      Array.from({ length: 5 }, (_, i) => task(i)),
+      {
+        run: async () => {
+          calls++
+          throw new FetchError({
+            kind: 'not_found',
+            url: 'https://api.jikan.moe/v4/anime/x',
+            status: 404,
+          })
+        },
+        onDone: () => {},
+        onError: () => {},
+      }
+    )
+
+    expect(calls).toBe(5)
+    expect(summary.failed).toBe(5)
+    expect(summary.unprocessedIds).toHaveLength(0)
+  })
 })

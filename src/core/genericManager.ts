@@ -260,6 +260,8 @@ export class GenericManager {
       maxInFlight,
       deadline: this.incremental.deadline,
       gate: rateGate,
+      // Una fuente caída no quema el presupuesto de las demás.
+      maxConsecutiveFailures: 10,
       acquireProxy: () =>
         singleIp
           ? undefined
