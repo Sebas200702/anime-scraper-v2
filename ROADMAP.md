@@ -383,8 +383,10 @@ bun run start <source>   # smoke manual contra el stack local
   huecos reales (28k), sin volver a bajar el catálogo.
 - **Prod**: app Dokploy `anime-scraper` (Dockerfile + status server `/health`,
   `/stats`) escribiendo en la Postgres de anidev; schedules `*/15` (hot),
-  `0 */6` (slow) y `0 3` (discovery). Seed: `promote` diff-upsert (2,9M filas),
-  copia de `ingest.task`/`task_policy` (594k filas) y `incremental:normalize`.
+  `0 */6` (slow), `0 3` (discovery) y `fill-api`/`fill-web` (relleno one-off en
+  paralelo, 60/min por host). El advisory lock es **por fuente**, así el relleno
+  no frena la frescura. Seed: `promote` diff-upsert (4,2M filas), copia de
+  `ingest.task`/`task_policy` (594k filas) y `incremental:normalize`.
 - **Incidente externo**: `api.jikan.moe` estuvo inaccesible desde varias redes
   (incluido el VPS) durante el despliegue; MAL API v2 quedó como fallback de
   ficha cada 24 h (status, episodios, score, broadcast, aired). El discovery

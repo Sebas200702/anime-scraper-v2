@@ -231,9 +231,10 @@ secuencia): conserva los ~594k estados de tarea y evita re-ingestar.
   `GET /stats` → cola por fuente/tipo/estado, vencidas, hot set y últimas
   corridas (protegido con `STATUS_TOKEN` si se define).
 - Schedules (zona UTC): `*/15 * * * *` hot, `0 */6 * * *` slow,
-  `0 3 * * *` discovery y `*/30 * * * *` `catalog-fill` (relleno one-off del
-  backlog con `--sources=malPerson,malPeople,malMangaPage,malCharacters`;
-  se puede desactivar cuando el `pending` de esas fuentes llegue a 0).
+  `0 3 * * *` discovery y dos de relleno one-off que corren en paralelo (cada
+  uno usa su host): `fill-api` (`0,30 * * * *`, `malPerson,malCharacters`) y
+  `fill-web` (`1,31 * * * *`, `malPeople,malMangaPage`). Cuando el `pending` de
+  esas fuentes llegue a 0 se desactivan sin tocar nada más.
 - El scraper escribe **directo en la Postgres de anidev** (`DATABASE_URL`). El
   esquema `ingest.*` lo crea el contenedor al arrancar; el catálogo (DDL de
   anidev) no se toca.
