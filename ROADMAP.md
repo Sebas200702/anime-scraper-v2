@@ -365,3 +365,27 @@ bun run start <source>   # smoke manual contra el stack local
 | Promoción mal ordenada rompe FKs | Validación referencial previa + transacción + rollback (Track D, D.0) |
 | Drift de esquema scraper ↔ anidev | Drift check en CI contra el repo de anidev |
 | Cambios de esquema rompen el scraper en fase de transición | Modo A local siempre contra el espejo; prod solo cuando el change esté archivado |
+
+---
+
+## 9. Modo B desplegado (2026-10-24)
+
+- **Motor**: `src/scripts/incremental.ts` (`--drain --group=hot|slow`, `--discover`)
+  con presupuesto por fuente, deadline por fuente, `pg_try_advisory_lock` y
+  registro en `ingest.run`. El dispatcher corta una fuente caída tras 10 fallos
+  transitorios y devuelve a `pending` lo claimado sin ejecutar.
+- **Frescura**: hot set airing (incluye la ventana de cierre de 7 días) con
+  `refresh_after`/`priority` por tarea; el catálogo terminado nunca se
+  re-ingiere. `anime_details_hydration` ahora actualiza la fila `anime` (antes
+  solo junctions) y `batchUpsert` tiene modo `update` con `COALESCE`.
+- **Descubrimiento**: paginación delta por `MAX(mal_id)`; `seedTaskHistory`
+  reconstruye las tareas `jikanRelations` ya ingeridas y deja `pending` solo los
+  huecos reales (28k), sin volver a bajar el catálogo.
+- **Prod**: app Dokploy `anime-scraper` (Dockerfile + status server `/health`,
+  `/stats`) escribiendo en la Postgres de anidev; schedules `*/15` (hot),
+  `0 */6` (slow) y `0 3` (discovery). Seed: `promote` diff-upsert (2,9M filas),
+  copia de `ingest.task`/`task_policy` (594k filas) y `incremental:normalize`.
+- **Incidente externo**: `api.jikan.moe` estuvo inaccesible desde varias redes
+  (incluido el VPS) durante el despliegue; MAL API v2 quedó como fallback de
+  ficha cada 24 h (status, episodios, score, broadcast, aired). El discovery
+  re-encola las `dead_letter` por timeout cuando la fuente vuelve.
