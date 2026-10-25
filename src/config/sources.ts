@@ -456,8 +456,10 @@ export const SOURCE_HOSTS: Record<
     limits: { perSecond: 10, perMinute: 600 },
   },
   malPeople: {
+    // 1/s (60/min) con una sola IP. El tope de 40/min era para el backfill con
+    // 30 IPs; para el relleno secuencial de prod deja el backlog en ~9 h.
     host: 'myanimelist.net',
-    limits: { perSecond: 1, perMinute: 40 },
+    limits: { perSecond: 1, perMinute: 60 },
   },
   malManga: {
     host: 'api.myanimelist.net',
@@ -469,7 +471,7 @@ export const SOURCE_HOSTS: Record<
   },
   malMangaPage: {
     host: 'myanimelist.net',
-    limits: { perSecond: 1, perMinute: 40 },
+    limits: { perSecond: 1, perMinute: 60 },
   },
   malPerson: {
     host: 'api.myanimelist.net',
