@@ -194,7 +194,8 @@ bun run incremental:normalize  # one-off tras cambiar la política (o en el seed
 ```
 
 Todas respetan `--budget=N` (por fuente), `--deadline=SEGUNDOS` y un
-`pg_try_advisory_lock` (dos ticks no compiten). Cada corrida queda en
+advisory lock **por fuente** (dos ticks de la misma fuente no compiten; un
+relleno de personas puede correr en paralelo al hot). Cada corrida queda en
 `ingest.run`.
 
 ### Seed de una DB ya ingerida
@@ -230,7 +231,9 @@ secuencia): conserva los ~594k estados de tarea y evita re-ingestar.
   `GET /stats` → cola por fuente/tipo/estado, vencidas, hot set y últimas
   corridas (protegido con `STATUS_TOKEN` si se define).
 - Schedules (zona UTC): `*/15 * * * *` hot, `0 */6 * * *` slow,
-  `0 3 * * *` discovery.
+  `0 3 * * *` discovery y `*/30 * * * *` `catalog-fill` (relleno one-off del
+  backlog con `--sources=malPerson,malPeople,malMangaPage,malCharacters`;
+  se puede desactivar cuando el `pending` de esas fuentes llegue a 0).
 - El scraper escribe **directo en la Postgres de anidev** (`DATABASE_URL`). El
   esquema `ingest.*` lo crea el contenedor al arrancar; el catálogo (DDL de
   anidev) no se toca.
