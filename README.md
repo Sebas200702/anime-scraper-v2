@@ -178,6 +178,13 @@ con `refresh_after = NULL` (nunca); solo se refresca lo que puede cambiar:
 - **Descubrimiento delta**: `initializeTasks` usa `MAX(mal_id)` como cursor y
   solo siembra las últimas páginas del listado. Los anime nuevos pasan por el
   generador idempotente y reciben sus tareas derivadas.
+- **Resiliencia**: el dispatcher corta una fuente tras 10 fallos transitorios
+  seguidos (circuit breaker) y devuelve a `pending` lo claimado sin ejecutar; el
+  discovery diario re-encola las `dead_letter` por timeout/red/bloqueo.
+- **Fallback de ficha**: `anime_mal_details_hydration` (MAL API v2) actualiza
+  `status`, `episodes`, `score`, `broadcast`, `aired_*` y stats cada 24 h en
+  airing. Es la red de seguridad cuando Jikan no está disponible (su API se cayó
+  globalmente el 2026-10-24) y también la fuente de stats de MAL.
 
 ```bash
 bun run incremental:hot        # cada 15 min en prod (presupuesto 150/fuente)
@@ -196,12 +203,23 @@ Todas respetan `--budget=N` (por fuente), `--deadline=SEGUNDOS` y un
 bun run db:ingest-schema        # crea ingest.* (idempotente)
 bun run db:seed-policy          # política en la DB (no pisa ediciones)
 bun run db:seed-task-history    # reconstruye tareas jikanRelations ya hechas
-bun run incremental:normalize   # refresh_after según la política nueva
+bun run incremental:normalize   # refresh_after + prioridad según la política
 ```
 
 `seed-task-history` marca `completed` los anime que **ya tienen datos** (géneros,
 reparto, staff) y deja `pending` solo los huecos reales: sin él, el primer
 discovery crearía 91k tareas y volvería a bajar todo el catálogo.
+
+Para una DB de destino con esquema parcial (tablas nuevas o columnas añadidas),
+la promoción se puede acotar:
+
+```bash
+bun run promote --only=manga,manga_staff,music_stream   # diff-upsert de un subconjunto
+```
+
+El copy inicial de la cola entre dos Postgres es un `pg_dump --data-only -t
+ingest.task -t ingest.task_policy` + `psql` (incluye el `setval` de la
+secuencia): conserva los ~594k estados de tarea y evita re-ingestar.
 
 ## Despliegue (Dokploy)
 
