@@ -66,6 +66,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # `anime_title_synonym_title_trgm_idx` usa `gin_trgm_ops`: sin la extensión
+      # la migración 0000 falla. En local se crea a mano (README); en CI tiene
+      # que ser explícito.
+      - name: Extensiones requeridas (pg_trgm)
+        run: psql "$DATABASE_URL" -c 'CREATE EXTENSION IF NOT EXISTS pg_trgm'
+
       - name: Migrar DB de integración
         run: bun run db:migrate
 
