@@ -30,6 +30,7 @@ export const INCREMENTAL_GROUPS: Record<'hot' | 'slow', string[]> = {
     'musicMeta',
     'ann',
     'malPeople',
+    'malProducer',
     'animeMapping',
   ],
 }

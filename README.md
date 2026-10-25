@@ -58,6 +58,11 @@ una**:
 - `priority` — **menor = se prefiere** (mapa en `MEDIA_SOURCE_PRIORITY`:
   AniList 10, Jikan 20, TVDB 30, AnimeThemes 40).
 
+Los **logos de productora** (`producer_media`, `media_type = 'logo'`) vienen de
+la ficha HTML de MAL (`/anime/producer/{id}`, fuente `malProducer`, prioridad 25)
+y, cuando Jikan está disponible, de `/producers` (prioridad 20). La API v2 de MAL
+no expone el logo y AniList no lo tiene.
+
 AniList es la fuente **primaria de banners** (se consulta por `idMal`, su cuota
 real es 30 req/min por IP). La variante preferida se obtiene con:
 

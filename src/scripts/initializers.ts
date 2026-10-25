@@ -24,6 +24,7 @@ import { initializeMalPersonTasks } from './initializeMalPersonTasks.js'
 import { initializeAnilistMediaTasks } from './initializeAnilistMediaTasks.js'
 import { initializeMusicMetaTasks } from './initializeMusicMetaTasks.js'
 import { initializeMalMangaPageTasks } from './initializeMalMangaPageTasks.js'
+import { initializeMalProducerTasks } from './initializeMalProducerTasks.js'
 
 export type Initializer = () => Promise<void>
 
@@ -47,6 +48,7 @@ export const INITIALIZERS: Record<string, Initializer> = {
   anilistMedia: initializeAnilistMediaTasks,
   musicMeta: initializeMusicMetaTasks,
   malMangaPage: initializeMalMangaPageTasks,
+  malProducer: initializeMalProducerTasks,
 }
 
 /** Fuentes que dependen de que `anime` ya exista (se siembran después de jikan). */

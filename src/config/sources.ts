@@ -244,6 +244,18 @@ export const SOURCES: SourceConfig[] = [
     },
   },
   {
+    name: 'malProducer',
+    // Logo, fundación y descripción de productoras/estudios desde la ficha
+    // HTML de MAL (`/anime/producer/{id}`). La API v2 no expone el logo.
+    maxWorkers: 8,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 1, perMinute: 60 },
+    tasks: {
+      producer_logo_hydration: { entity: 'malProducer', needsPayload: true },
+    },
+  },
+  {
     name: 'malPeople',
     // Fichas de persona (HTML): solo para las que no tienen retrato.
     maxWorkers: 8,
@@ -387,6 +399,8 @@ export const REFRESH_POLICY: Record<string, RefreshPolicy> = {
   manga_page_hydration: { cold: null, hot: null },
   person_mal_details_hydration: { cold: null, hot: null },
   staff_image_hydration: { cold: 365 * 86400, hot: null },
+  // Logo de estudio: inmutable; solo se rellena una vez.
+  producer_logo_hydration: { cold: null, hot: null },
 }
 
 /**
@@ -458,6 +472,10 @@ export const SOURCE_HOSTS: Record<
   malPeople: {
     // 1/s (60/min) con una sola IP. El tope de 40/min era para el backfill con
     // 30 IPs; para el relleno secuencial de prod deja el backlog en ~9 h.
+    host: 'myanimelist.net',
+    limits: { perSecond: 1, perMinute: 60 },
+  },
+  malProducer: {
     host: 'myanimelist.net',
     limits: { perSecond: 1, perMinute: 60 },
   },
