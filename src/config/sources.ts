@@ -467,15 +467,17 @@ export const SOURCE_HOSTS: Record<
   },
   malCharacters: {
     host: 'api.myanimelist.net',
-    limits: { perSecond: 2, perMinute: 120 },
+    limits: { perSecond: 1, perMinute: 60 },
   },
   malMangaPage: {
     host: 'myanimelist.net',
     limits: { perSecond: 1, perMinute: 60 },
   },
   malPerson: {
+    // Sostener 2/s con una sola IP provoca timeouts intermitentes de MAL; a
+    // 1/s (60/min) el relleno avanza de forma estable (~50/min efectivos).
     host: 'api.myanimelist.net',
-    limits: { perSecond: 2, perMinute: 120 },
+    limits: { perSecond: 1, perMinute: 60 },
   },
   anilistMedia: {
     host: 'graphql.anilist.co',
