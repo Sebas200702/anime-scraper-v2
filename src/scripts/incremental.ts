@@ -90,6 +90,39 @@ const sourcesForGroup = (args: Args): string[] => {
   return INCREMENTAL_GROUPS[args.group]
 }
 
+/**
+ * Lock **por fuente**, no global: el relleno del catálogo (personas, retratos)
+ * puede correr en paralelo con el incremental hot sin competir por la cuota de
+ * las fuentes que cada uno toca. Dos corridas de la misma fuente sí se excluyen
+ * (el claim ya es atómico; esto evita duplicar el trabajo y el gasto de cuota).
+ */
+const withSourceLock = async (
+  source: string,
+  run: () => Promise<RunSummary>
+): Promise<RunSummary | null> => {
+  const client = await pool.connect()
+  const key = `anime-scraper:src:${source}`
+  try {
+    const lock = await client.query<{ ok: boolean }>(
+      `SELECT pg_try_advisory_lock(hashtext($1)) AS ok`,
+      [key]
+    )
+    if (!lock.rows[0]?.ok) {
+      console.log(`⏳ ${source}: ya hay una corrida activa; salto`)
+      return null
+    }
+    try {
+      return await run()
+    } finally {
+      await client
+        .query(`SELECT pg_advisory_unlock(hashtext($1))`, [key])
+        .catch(() => {})
+    }
+  } finally {
+    client.release()
+  }
+}
+
 const drainSources = async (
   sources: string[],
   args: Args,
@@ -113,14 +146,16 @@ const drainSources = async (
       )
       const sourceDeadline = Math.min(deadline, Date.now() + sliceMs)
 
-      const manager = new GenericManager(getSourceConfig(source))
-      manager.useIncremental({
-        maxTasks: args.budget,
-        deadline: sourceDeadline,
-        maxInFlight: args.maxInFlight,
+      const summary = await withSourceLock(source, async () => {
+        const manager = new GenericManager(getSourceConfig(source))
+        manager.useIncremental({
+          maxTasks: args.budget,
+          deadline: sourceDeadline,
+          maxInFlight: args.maxInFlight,
+        })
+        return await manager.init()
       })
-      const summary = await manager.init()
-      addSummary(total, summary)
+      if (summary) addSummary(total, summary)
     } catch (error) {
       // Una fuente rota no puede tumbar la corrida: las demás siguen.
       console.error(`❌ ${source}: ${(error as Error)?.message ?? error}`)
@@ -205,60 +240,41 @@ const main = async () => {
   const args = parseArgs(process.argv.slice(2))
   const deadline = Date.now() + args.deadlineSeconds * 1000
 
-  // Lock de sesión: dos ticks solapados no compiten por la misma cuota. El
-  // claim ya es atómico, pero el lock evita además duplicar el discovery.
-  const lockClient = await pool.connect()
+  // El lock es por fuente (ver `withSourceLock`): un relleno de personas puede
+  // convivir con el hot de episodios/ficha sin pisarse.
+  const runId = await taskRepository.startRun('all', args.mode, {
+    group: args.group,
+    budget: args.budget,
+    sources: args.sources ?? null,
+  })
+
+  let total = emptySummary()
   try {
-    const lock = await lockClient.query<{ ok: boolean }>(
-      `SELECT pg_try_advisory_lock(hashtext('anime-scraper:incremental')) AS ok`
-    )
-    if (!lock.rows[0]?.ok) {
-      console.log('⏳ Ya hay una corrida incremental activa; salto este tick.')
-      return
+    if (args.mode === 'discover') {
+      total = await discover(args, deadline)
+    } else {
+      addSummary(total, await drainSources(sourcesForGroup(args), args, deadline))
     }
-
-    const runId = await taskRepository.startRun('all', args.mode, {
-      group: args.group,
-      budget: args.budget,
-      sources: args.sources ?? null,
-    })
-
-    let total = emptySummary()
-    try {
-      if (args.mode === 'discover') {
-        total = await discover(args, deadline)
-      } else {
-        addSummary(
-          total,
-          await drainSources(sourcesForGroup(args), args, deadline)
-        )
-      }
-    } finally {
-      await taskRepository.finishRun(runId, {
-        processed: total.processed,
-        retried: total.retried,
-        blocked: total.blocked,
-        deadLettered: total.deadLettered,
-        notes: {
-          mode: args.mode,
-          group: args.group,
-          budget: args.budget,
-          failed: total.failed,
-          byKind: total.byKind,
-        },
-      })
-    }
-
-    console.log(
-      `\n✅ incremental ${args.mode}: ${total.processed} ok · ${total.failed} fallos · ` +
-        `${total.retried} reintentos · ${total.blocked} bloqueadas · ${total.deadLettered} dead_letter`
-    )
   } finally {
-    await lockClient
-      .query(`SELECT pg_advisory_unlock(hashtext('anime-scraper:incremental'))`)
-      .catch(() => {})
-    lockClient.release()
+    await taskRepository.finishRun(runId, {
+      processed: total.processed,
+      retried: total.retried,
+      blocked: total.blocked,
+      deadLettered: total.deadLettered,
+      notes: {
+        mode: args.mode,
+        group: args.group,
+        budget: args.budget,
+        failed: total.failed,
+        byKind: total.byKind,
+      },
+    })
   }
+
+  console.log(
+    `\n✅ incremental ${args.mode}: ${total.processed} ok · ${total.failed} fallos · ` +
+      `${total.retried} reintentos · ${total.blocked} bloqueadas · ${total.deadLettered} dead_letter`
+  )
 }
 
 try {
