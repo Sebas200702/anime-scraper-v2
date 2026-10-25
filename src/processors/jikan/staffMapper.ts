@@ -1,5 +1,6 @@
 import type { StaffProcessorResult } from '../../types/index.js'
 import type { Staff } from '../../types/jikanApi.js'
+import { extractSingleMedia } from '../../shared/mediaExtractor.js'
 
 export const mapStaff = (staff: Staff): StaffProcessorResult => {
   return {
@@ -15,5 +16,11 @@ export const mapStaff = (staff: Staff): StaffProcessorResult => {
       staffId: staff.mal_id,
       name,
     })),
+    staffMedia: extractSingleMedia(
+      staff.images,
+      staff.mal_id,
+      'staff',
+      'poster'
+    ),
   }
 }

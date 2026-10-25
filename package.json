@@ -20,6 +20,7 @@
     "incremental:normalize": "bun src/scripts/normalizeRefresh.ts",
     "db:ingest-schema": "bun src/scripts/ingestSchema.ts",
     "db:seed-task-history": "bun src/scripts/seedTaskHistory.ts",
+    "db:seed-producer-pages": "bun src/scripts/seedProducerPages.ts",
     "test": "bun test",
     "proxies:probe": "bun src/scripts/probeProxies.ts",
     "test:integration": "RUN_DB_TESTS=1 bun test tests/queue.integration.test.ts tests/promotion.integration.test.ts tests/fkFilter.integration.test.ts tests/incremental.integration.test.ts",

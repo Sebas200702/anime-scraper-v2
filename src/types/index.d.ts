@@ -195,6 +195,8 @@ export interface CharacterProcessorResult {
 export interface StaffProcessorResult {
   staff: NewStaff
   alternativeNames: NewStaffAlternativeName[]
+  /** Retrato del listado de Jikan (`/people`). */
+  staffMedia?: NewMedia[]
 }
 export interface ProducerProcessorResult {
   producer: NewProducer

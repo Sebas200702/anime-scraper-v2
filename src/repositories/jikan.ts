@@ -109,11 +109,13 @@ export const jikanRepository = {
   async saveStaff(staffResults: StaffProcessorResult[]) {
     const staffs: NewStaff[] = []
     const alternativeNames: NewStaffAlternativeName[] = []
+    const staffMedia: NewMedia[] = []
 
     for (const result of staffResults) {
       if (result.staff) staffs.push(result.staff)
       if (result.alternativeNames?.length)
         alternativeNames.push(...result.alternativeNames)
+      if (result.staffMedia?.length) staffMedia.push(...result.staffMedia)
     }
 
     const uniqueStaffs = unique(staffs, (s) => s.malId)
@@ -121,9 +123,20 @@ export const jikanRepository = {
       alternativeNames,
       (a) => `${a.staffId}:${normalizeText(a.name)}`
     )
+    const uniqueMedia = unique(
+      staffMedia,
+      (m) => `${m.entityId}:${m.mediaType}:${m.src}`
+    )
 
-    await batchUpsert(staff, uniqueStaffs, 6, 'staff')
-    await batchUpsert(staffAlternativeName, uniqueAltNames, 3, 'staff-alt-names')
+    // `update: true`: la ficha de Jikan enriquece filas creadas antes por otras
+    // fuentes (MAL solo traía `mal_id`); `COALESCE` no degrada lo existente.
+    await batchUpsert(staff, uniqueStaffs, 6, 'staff', undefined, {
+      update: true,
+    })
+    await Promise.all([
+      batchUpsert(staffAlternativeName, uniqueAltNames, 3, 'staff-alt-names'),
+      mediaRepository.saveMedia(uniqueMedia, 'jikan'),
+    ])
 
     return uniqueStaffs.length
   },
@@ -131,10 +144,13 @@ export const jikanRepository = {
   async saveProducer(producersResult: ProducerProcessorResult[]) {
     const producers: NewProducer[] = []
     const producerTitles: NewProducerTitle[] = []
+    const producerMedia: NewMedia[] = []
 
     for (const result of producersResult) {
       if (result.producer) producers.push(result.producer)
       if (result.titles?.length) producerTitles.push(...result.titles)
+      if (result.producerMedia?.length)
+        producerMedia.push(...result.producerMedia)
     }
 
     const uniqueProducers = unique(producers, (p) => p.malId)
@@ -142,9 +158,21 @@ export const jikanRepository = {
       producerTitles,
       (t) => `${t.producerId}:${normalizeText(t.title)}`
     )
+    // El logo del productor/estudio viene SOLO de la página de Jikan
+    // (`/producers`). Antes se descartaba: la fila `producer` la creaba `mal`
+    // con solo `mal_id` y este upsert no actualizaba (DO NOTHING).
+    const uniqueMedia = unique(
+      producerMedia,
+      (m) => `${m.entityId}:${m.mediaType}:${m.src}`
+    )
 
-    await batchUpsert(producer, uniqueProducers, 5, 'producers')
+    await batchUpsert(producer, uniqueProducers, 5, 'producers', undefined, {
+      update: true,
+    })
     await batchUpsert(producerTitle, uniqueTitles, 4, 'producer-titles')
+    if (uniqueMedia.length > 0) {
+      await mediaRepository.saveMedia(uniqueMedia, 'jikan')
+    }
 
     return uniqueProducers.length
   },

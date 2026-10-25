@@ -27,7 +27,9 @@ export const DEFAULT_RETRY: RetryPolicy = {
   jitter: 0.5,
 }
 
-const DEFAULT_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS ?? 30_000)
+// 8 s: un cuelgue no debe ocupar un slot (ver docs/BACKFILL.md). El env
+// `FETCH_TIMEOUT_MS` lo pisa; el default es el mismo que CONFIG.
+const DEFAULT_TIMEOUT_MS = Number(process.env.FETCH_TIMEOUT_MS ?? 8_000)
 const SNIPPET_LENGTH = 200
 
 const HTML_CONTENT_TYPE = /text\/html|application\/xhtml/i

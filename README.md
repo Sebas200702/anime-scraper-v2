@@ -204,6 +204,7 @@ relleno de personas puede correr en paralelo al hot). Cada corrida queda en
 bun run db:ingest-schema        # crea ingest.* (idempotente)
 bun run db:seed-policy          # política en la DB (no pisa ediciones)
 bun run db:seed-task-history    # reconstruye tareas jikanRelations ya hechas
+bun run db:seed-producer-pages  # páginas de /producers (logos + about/established)
 bun run incremental:normalize   # refresh_after + prioridad según la política
 ```
 
