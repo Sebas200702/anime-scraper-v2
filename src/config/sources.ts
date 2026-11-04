@@ -364,10 +364,14 @@ export const REFRESH_POLICY: Record<string, RefreshPolicy> = {
   staff_page_hydration: { cold: 365 * 86400, hot: null },
   producer_page_hydration: { cold: 365 * 86400, hot: null },
 
-  // Jikan ficha completa: mantiene `status`/`episodes`/`score` al día.
-  anime_details_hydration: { cold: null, hot: 24 * 3600 },
-  anime_characters_hydration: { cold: null, hot: 180 * 86400 },
-  anime_staff_hydration: { cold: null, hot: 180 * 86400 },
+  // Jikan ficha completa: RETIRADA (api.jikan.moe caída). Sin cadencia hot para
+  // que estos taskTypes dejen de venir `due` e inertes (no hay fuente que los
+  // drene). La cobertura la dan los taskTypes MAL: `anime_mal_details_hydration`
+  // (ficha/status/score, 24 h), `anime_mal_html_hydration` + `anime_mal_characters_hydration`
+  // (personajes) y `person_mal_details_hydration` (staff).
+  anime_details_hydration: { cold: null, hot: null },
+  anime_characters_hydration: { cold: null, hot: null },
+  anime_staff_hydration: { cold: null, hot: null },
 
   // Episodios: la novedad es el capítulo que acaba de salir.
   anime_episodes_hydration: { cold: null, hot: 24 * 3600 },
