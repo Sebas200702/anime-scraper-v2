@@ -8,6 +8,12 @@
  *
  * `hot` se ejecuta seguido (la novedad manda); `slow` pocas veces al día.
  * `jikan` no se drena: su listado es discovery (páginas nuevas).
+ *
+ * Jikan (`api.jikan.moe`) está caído (timeouts sostenidos, HTTP 000): se retira
+ * `jikanRelations` del hot. Su cobertura la da MAL, ya presente: `mal` (API v2,
+ * ficha/status/score/episodios) y `malHtml` (personajes). El staff queda en
+ * `slow` vía `malPerson`. MAL es directo a bajo volumen (solo el delta hot), sin
+ * depender del pool de proxies.
  */
 export const INCREMENTAL_GROUPS: Record<'hot' | 'slow', string[]> = {
   hot: [
@@ -15,8 +21,7 @@ export const INCREMENTAL_GROUPS: Record<'hot' | 'slow', string[]> = {
     'tvdbEpisodes', // miniaturas del capítulo
     'tmdb', // stills del capítulo
     'anilist', // banners/relaciones
-    'mal', // stats/rank/members y fallback de ficha (7d en airing)
-    'jikanRelations', // ficha /full: status, episodios, score, fechas
+    'mal', // canónica de la ficha: status, episodios, score, fechas, stats
     'malHtml', // personajes/seiyuus (90d)
   ],
   slow: [
