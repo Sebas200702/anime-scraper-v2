@@ -43,11 +43,17 @@ describe('buildPolicySeedRows (siembra de ingest.task_policy)', () => {
       refreshIntervalAiringSeconds: null,
     })
 
-    // Ficha y episodios: airing sí, terminado nunca (salvo cierre de temporada).
+    // Ficha airing: la cadencia 24 h vive ahora en el taskType MAL (Jikan muerto,
+    // `anime_details_hydration` retirado a hot null para que deje de venir due).
     expect(rows['anime_details_hydration']).toMatchObject({
+      refreshIntervalSeconds: null,
+      refreshIntervalAiringSeconds: null,
+    })
+    expect(rows['anime_mal_details_hydration']).toMatchObject({
       refreshIntervalSeconds: null,
       refreshIntervalAiringSeconds: 24 * 3600,
     })
+    // Episodios: airing sí, terminado nunca (salvo cierre de temporada).
     expect(rows['anime_episodes_hydration']).toMatchObject({
       refreshIntervalSeconds: null,
       refreshIntervalAiringSeconds: 24 * 3600,

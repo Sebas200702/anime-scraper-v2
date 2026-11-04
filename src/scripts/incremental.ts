@@ -167,9 +167,10 @@ const drainSources = async (
 }
 
 /**
- * Cierre de temporada: una pasada final de detalles + episodios para los anime
- * que terminaron en las últimas dos semanas. Es un UPDATE acotado (decenas de
- * filas), no un barrido.
+ * Cierre de temporada: una pasada final de detalles + personajes + episodios
+ * para los anime que terminaron en las últimas dos semanas. Es un UPDATE acotado
+ * (decenas de filas), no un barrido. Los detalles/personajes salen por MAL
+ * (`anime_mal_*`): Jikan está caído y sus taskTypes ya no se drenan.
  */
 const seasonSweep = async (): Promise<number> => {
   const result = await pool.query(`
@@ -185,7 +186,7 @@ const seasonSweep = async (): Promise<number> => {
              END AS anime_id
       FROM ingest.task t
       WHERE t.status = 'completed'
-        AND t.task_type IN ('anime_details_hydration', 'anime_episodes_hydration')
+        AND t.task_type IN ('anime_mal_details_hydration', 'anime_mal_html_hydration', 'anime_episodes_hydration')
     )
     UPDATE ingest.task t
     SET status = 'pending', scheduled_at = now(), refresh_after = NULL,
