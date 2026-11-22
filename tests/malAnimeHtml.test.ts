@@ -53,6 +53,13 @@ describe('parseMalAnimeCharacters (ficha HTML de MAL)', () => {
     })
   })
 
+  test('el rol en mayúsculas sale en el vocabulario MAL (S3)', () => {
+    const { animeCharacters } = parseMalAnimeCharacters(
+      HTML.replace('<small>Main</small>', '<small>SUPPORTING</small>')
+    )
+    expect(animeCharacters[0]?.role).toBe('Supporting')
+  })
+
   test('HTML sin secciones no rompe', () => {
     expect(parseMalAnimeCharacters('<html></html>')).toEqual({
       animeCharacters: [],

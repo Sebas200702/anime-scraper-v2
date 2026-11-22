@@ -31,6 +31,7 @@ import { normalizeText } from '../utils/normalize.js'
 import { malMusicId, normalizeSongTitle } from '../shared/malMusicIds.js'
 import { resolveArtistIds } from '../shared/artistResolver.js'
 import { filterByExistingFk } from '../shared/fkFilter.js'
+import { characterExternalMalSql } from './mal/characterWrites.js'
 import type {
   MalCharactersProcessorResult,
   MalThemeRow,
@@ -210,6 +211,11 @@ export const malHtmlRepository = {
       2,
       'character'
     )
+    // Id externo de MAL de cada personaje (S8).
+    for (const batch of chunk(unique(characters, (c) => c.malId), 1_000)) {
+      const external = characterExternalMalSql(batch.map((c) => c.malId))
+      if (external) await db.execute(external)
+    }
     await batchUpsert(
       staff,
       unique([...staffRows, ...voiceActorStaff], (s) => s.malId),

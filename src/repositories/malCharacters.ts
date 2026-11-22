@@ -9,6 +9,10 @@ import { batchUpsert } from '../shared/batchUpsert.js'
 import { chunk } from '../utils/chunk.js'
 import { unique } from '../utils/deduplicate.js'
 import type { MalCharactersProcessorResult } from '../processors/malCharacters.js'
+import {
+  characterExternalMalSql,
+  malCharacterUpsertSql,
+} from './mal/characterWrites.js'
 
 /**
  * Guarda el reparto completo de un anime con los datos de la página de
@@ -36,22 +40,12 @@ export const malCharactersRepository = {
     )
     if (characters.length === 0 && voiceActors.length === 0) return 0
 
-    // 1) Los personajes (id de MAL del personaje, con su nombre y nativo).
+    // 1) Los personajes (id de MAL del personaje, con su nombre y nativo) y
+    //    su id externo de MAL.
     for (const batch of chunk(characters, 1_000)) {
-      await db.execute(sql`
-        INSERT INTO character (mal_id, name, name_kanji)
-        SELECT v.id, v.name, v.native_name
-        FROM (VALUES ${sql.join(
-          batch.map(
-            (c) =>
-              sql`(${c.characterId}::int, ${c.name}::text, ${c.nativeName}::text)`
-          ),
-          sql`, `
-        )}) AS v(id, name, native_name)
-        ON CONFLICT (mal_id) DO UPDATE SET
-          name = COALESCE(NULLIF(EXCLUDED.name, ''), character.name),
-          name_kanji = COALESCE(EXCLUDED.name_kanji, character.name_kanji)
-      `)
+      await db.execute(malCharacterUpsertSql(batch))
+      const external = characterExternalMalSql(batch.map((c) => c.characterId))
+      if (external) await db.execute(external)
     }
 
     // 2) Las voces son personas: se crean (o completan) como staff para que

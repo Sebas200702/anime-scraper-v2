@@ -12,7 +12,7 @@
  * <tr>
  *   <td> <a href="/character/3/Jet_Black"><img data-src="https://cdn…/r/42x62/images/characters/11/253723.jpg?s=…"></a> </td>
  *   <td>
- *     <div class="js-chara-roll-and-name" style="display:none">m_Black, Jet</div>
+ *     <div class="js-chara-roll-and-name" style="display:none">m_Black, Jet</div>  (rol + romaji, NO nativo)
  *     <div class="js-anime-character-favorites" style="display:none;">2321</div>
  *     <div class="spaceit_pad"><a href="/character/3/Jet_Black"><h3 class="h3_character_name">Black, Jet</h3></a></div>
  *     <div class="spaceit_pad">Main</div>
@@ -34,7 +34,11 @@ export interface ParsedCharacterRow {
   /** Id de MAL del personaje (espacio de personajes, no de personas). */
   malId: number
   name: string
-  /** Nombre nativo (japonés) cuando MAL lo publica. */
+  /**
+   * Nombre nativo: esta página no lo publica (el div oculto
+   * `js-chara-roll-and-name` es prefijo de rol + romaji), así que siempre es
+   * null; el nativo real llega por la ficha de persona (API v2).
+   */
   nativeName: string | null
   role: string
   favourites: number | null
@@ -45,6 +49,20 @@ export interface ParsedCharacterRow {
     language: string
     image?: string
   }[]
+}
+
+const CAST_ROLES = ['Main', 'Supporting', 'Background'] as const
+
+/**
+ * Rol del reparto en el vocabulario de MAL (Main / Supporting / Background)
+ * sin importar la capitalización; cualquier otro valor se conserva recortado.
+ */
+export const normalizeCastRole = (role: string): string => {
+  const trimmed = role.trim()
+  return (
+    CAST_ROLES.find((r) => r.toLowerCase() === trimmed.toLowerCase()) ??
+    trimmed
+  )
 }
 
 const idFromHref = (href: string | undefined, kind: string): number | null => {
@@ -85,8 +103,8 @@ export const parseMalCharactersPage = (html: string): ParsedCharacterRow[] => {
     if (!malId) return
 
     // El rol es el `div.spaceit_pad` que no contiene el nombre ni los
-    // favoritos; el nombre nativo va en un div oculto con prefijo `m_`.
-    const role =
+    // favoritos.
+    const roleText =
       $info
         .find('div.spaceit_pad')
         .filter((__, el) => {
@@ -101,13 +119,7 @@ export const parseMalCharactersPage = (html: string): ParsedCharacterRow[] => {
         .text()
         .replace(/&nbsp;/g, ' ')
         .trim() || 'Unknown'
-
-    const nativeRaw = $info
-      .find('div.js-chara-roll-and-name')
-      .first()
-      .text()
-      .trim()
-    const nativeName = nativeRaw.startsWith('m_') ? nativeRaw.slice(2) : null
+    const role = normalizeCastRole(roleText)
 
     const favouritesRaw = $info
       .find('div.js-anime-character-favorites')
@@ -155,7 +167,7 @@ export const parseMalCharactersPage = (html: string): ParsedCharacterRow[] => {
       // MAL llama "Ector" a los personajes sin ficha propia: se deja el
       // nombre tal cual, pero sin retrato (su imagen es un interrogante).
       name,
-      nativeName,
+      nativeName: null,
       role,
       favourites,
       ...(image ? { image } : {}),
