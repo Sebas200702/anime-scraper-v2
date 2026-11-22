@@ -18,6 +18,7 @@
     "incremental:slow": "bun src/scripts/incremental.ts --drain --group=slow",
     "incremental:discover": "bun src/scripts/incremental.ts --discover",
     "incremental:normalize": "bun src/scripts/normalizeRefresh.ts",
+    "incremental:report": "bun src/scripts/stalenessReport.ts",
     "db:ingest-schema": "bun src/scripts/ingestSchema.ts",
     "db:seed-task-history": "bun src/scripts/seedTaskHistory.ts",
     "db:seed-producer-pages": "bun src/scripts/seedProducerPages.ts",

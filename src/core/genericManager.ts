@@ -224,6 +224,15 @@ export class GenericManager {
     const resetCount = await taskRepository.resetStaleTasks(source)
     if (resetCount > 0) console.log(`♻️  Reset ${resetCount} stale tasks`)
 
+    // Anime hot o con estado inconsistente: re-arma lo que la cadencia normal
+    // no tomaría (refresh NULL, dead_letter, skipped) con prioridad 20, y lo
+    // vencido de esos anime antes que `rearmDueTasks` (que no toca prioridad).
+    const hot = await taskRepository.rearmHotTasks(source)
+    if (hot.rearmed + hot.payloads + hot.seeded > 0)
+      console.log(
+        `🔥 hot: ${hot.rearmed} re-armadas · ${hot.payloads} payloads · ${hot.seeded} sembradas`
+      )
+
     // Lo vencido por política vuelve a `pending`: sin esta llamada el refresh
     // no existiría (las tareas `completed` nunca se re-armarían). Es un UPDATE
     // barato y solo toca lo que ya venció.

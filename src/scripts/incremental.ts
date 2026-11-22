@@ -166,38 +166,6 @@ const drainSources = async (
   return total
 }
 
-/**
- * Cierre de temporada: una pasada final de detalles + personajes + episodios
- * para los anime que terminaron en las últimas dos semanas. Es un UPDATE acotado
- * (decenas de filas), no un barrido. Los detalles/personajes salen por MAL
- * (`anime_mal_*`): Jikan está caído y sus taskTypes ya no se drenan.
- */
-const seasonSweep = async (): Promise<number> => {
-  const result = await pool.query(`
-    WITH recently_finished AS (
-      SELECT mal_id FROM anime
-      WHERE aired_to IS NOT NULL
-        AND aired_to BETWEEN now() - interval '14 days' AND now()
-    ), mapped AS (
-      SELECT t.id,
-             CASE
-               WHEN (t.payload->>'animeId') ~ '^[0-9]+$' THEN (t.payload->>'animeId')::int
-               WHEN (t.payload->>'anime_id') ~ '^[0-9]+$' THEN (t.payload->>'anime_id')::int
-             END AS anime_id
-      FROM ingest.task t
-      WHERE t.status = 'completed'
-        AND t.task_type IN ('anime_mal_details_hydration', 'anime_mal_html_hydration', 'anime_episodes_hydration')
-    )
-    UPDATE ingest.task t
-    SET status = 'pending', scheduled_at = now(), refresh_after = NULL,
-        attempts = 0, leased_until = NULL, updated_at = now()
-    FROM mapped m
-    JOIN recently_finished a ON a.mal_id = m.anime_id
-    WHERE t.id = m.id
-  `)
-  return result.rowCount ?? 0
-}
-
 const discover = async (args: Args, deadline: number): Promise<RunSummary> => {
   const total = emptySummary()
 
@@ -223,10 +191,12 @@ const discover = async (args: Args, deadline: number): Promise<RunSummary> => {
     }
   }
 
-  // 4) Pasada final de los que acaban de terminar.
-  const swept = await seasonSweep()
-  if (swept > 0)
-    console.log(`🏁 ${swept} tareas re-armadas por cierre de temporada`)
+  // 4) Re-armado hot de todas las fuentes (absorbe el antiguo barrido de
+  // cierre de temporada; cada drain hot lo corre también para su fuente).
+  const hot = await taskRepository.rearmHotTasks()
+  console.log(
+    `🔥 hot: ${hot.rearmed} re-armadas · ${hot.payloads} payloads · ${hot.seeded} sembradas`
+  )
 
   // 5) Lo que murió por causas transitorias (timeout/bloqueo durante una caída
   // de la fuente) vuelve a la cola; no son huecos reales.
