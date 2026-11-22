@@ -49,10 +49,7 @@ describe('characterNameKeys', () => {
       '',
       null,
     ])
-    expect(keys).toEqual([
-      normalizeCharacterName('Suneo Honekawa'),
-      normalizeCharacterName('Suneo'),
-    ])
+    expect(keys).toEqual(['honekawa suneo', 'suneo'])
   })
 
   test('sin nombre utilizable → lista vacía', () => {
