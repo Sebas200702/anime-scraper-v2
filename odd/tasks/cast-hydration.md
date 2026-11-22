@@ -48,7 +48,7 @@ Branch: `fix/cast-hydration` (base `main`). Promotion target: prod via `promote`
 |----|-------|------|-------|--------|
 | T1 | S2 | Mirror `character_external` schema + PROMOTION_PLAN entry | worker | 3a25c02 ✅ |
 | T2 | S1 | Character name normalizer helper + tests | worker | ecc48f3 ✅ |
-| T3 | S1, S2, S3, S5, S6 | AniList deep pass | worker | |
+| T3 | S1, S2, S3, S5, S6 | AniList deep pass | worker | dc2380e ✅ |
 | T4 | S4, S7, S8 | MAL writers + AniList patch fill-only | worker | 2f68013 ✅ |
 | T6 | S9 | Hydration scheduling: re-arm stale airing / not-yet-aired anime, episodes for airing anime, staleness report | explore → worker | |
 | T5 | — | Verify (`bun test`, `bun run build`) | worker | |
@@ -59,3 +59,4 @@ Branch: `fix/cast-hydration` (base `main`). Promotion target: prod via `promote`
   ajustar el scraper para que la hidratacion continua de los animes funcione
   correctamente"
 - **L2** — User asked "pregunta la hidratacion actual si funciona si mantiene la info actualizada ?"; measured staleness (S9) and proposed T6; user: "si vamos hacer es correcion tambien".
+- **L3** — T3 done. Relation vocabularies were already mixed in the app DB (anime_relation: `Sequel` and `sequel`; manga_relation: `SEQUEL` and `sequel`). The deep pass now writes the MAL form per media: anime `Side story`, manga `SIDE_STORY` (parent change, test-first). Voice actors/staff are still matched by global staff name (out of scope, noted). Old `character.anilist_id` values written by the global matcher stay until the data promotion.
