@@ -25,8 +25,10 @@ export interface AniListCharacterEdge {
     name: {
       full: string | null
       native: string | null
-      alternative: string | null
+      /** AniList lo publica como lista (`[String]`). */
+      alternative: (string | null)[] | null
     }
+    image: { large: string | null } | null
     description: string | null
     gender: string | null
     dateOfBirth: { year: number | null } | null
@@ -93,6 +95,7 @@ const MEDIA_DEEP_QUERY = `query ($id: Int, $type: MediaType, $charPage: Int, $st
         node {
           id
           name { full native alternative }
+          image { large }
           description(asHtml: false)
           gender
           dateOfBirth { year }
