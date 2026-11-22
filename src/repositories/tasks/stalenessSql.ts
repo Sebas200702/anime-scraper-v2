@@ -42,7 +42,8 @@ export const STALENESS_VIEWS: StalenessView[] = [
       FROM anime a
       LEFT JOIN ingest.task t
         ON t.task_type IN (${WATCHED_TYPES}) AND ${taskAnimeId('t')} = a.mal_id
-      WHERE ${INCONSISTENT_ANIME_WHERE}
+      -- Subconsulta: el predicado no va calificado y ingest.task también tiene status.
+      WHERE a.mal_id IN (SELECT mal_id FROM anime WHERE ${INCONSISTENT_ANIME_WHERE})
       ORDER BY a.mal_id, t.task_type
       LIMIT 600
     `,
