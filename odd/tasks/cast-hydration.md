@@ -40,6 +40,8 @@ Branch: `fix/cast-hydration` (base `main`). Promotion target: prod via `promote`
 - **S8** MAL writers record `character_external.mal_id` for the characters they
   write.
 
+- **S9** — Continuous hydration must keep airing state current. Evidence (local clone of prod, 2026-11-22): 49 anime "Currently Airing" whose `aired_to` passed more than 14 days ago (e.g. MILGЯAM ended 2021); 47 "Not yet aired" already started (5 already ended); 237 of 349 airing anime have no dated episode; `anime_external_ids.updated_at` stops at 2026-10-20. Suspected cause: the season sweep only re-arms anime that finished in the last 14 days, so stale statuses are never revisited. User: "si vamos hacer es correcion tambien".
+
 ## Tasks
 
 | ID | Specs | Task | Route | Commit |
@@ -48,6 +50,7 @@ Branch: `fix/cast-hydration` (base `main`). Promotion target: prod via `promote`
 | T2 | S1 | Character name normalizer helper + tests | worker | ecc48f3 ✅ |
 | T3 | S1, S2, S3, S5, S6 | AniList deep pass | worker | |
 | T4 | S4, S7, S8 | MAL writers + AniList patch fill-only | worker | 2f68013 ✅ |
+| T6 | S9 | Hydration scheduling: re-arm stale airing / not-yet-aired anime, episodes for airing anime, staleness report | explore → worker | |
 | T5 | — | Verify (`bun test`, `bun run build`) | worker | |
 
 ## Log
@@ -55,3 +58,4 @@ Branch: `fix/cast-hydration` (base `main`). Promotion target: prod via `promote`
 - **L1** (user request): "bueno vamos a promover esto a produccin y vamos a
   ajustar el scraper para que la hidratacion continua de los animes funcione
   correctamente"
+- **L2** — User asked "pregunta la hidratacion actual si funciona si mantiene la info actualizada ?"; measured staleness (S9) and proposed T6; user: "si vamos hacer es correcion tambien".
