@@ -53,10 +53,17 @@ describe.skipIf(!RUN)('incremental (Postgres local)', () => {
   })
 
   test('refreshPolicyFor usa ingest.task_policy y cae al código sin fila', async () => {
-    // Sin fila para el source de prueba: fallback a REFRESH_POLICY.
+    // Sin fila para el source de prueba: fallback a REFRESH_POLICY. La ficha
+    // la refresca MAL (`anime_mal_details_hydration`); la de Jikan está retirada.
+    expect(
+      await taskRepository.refreshPolicyFor(
+        SOURCE,
+        'anime_mal_details_hydration'
+      )
+    ).toEqual({ cold: null, hot: 24 * 3600 })
     expect(
       await taskRepository.refreshPolicyFor(SOURCE, 'anime_details_hydration')
-    ).toEqual({ cold: null, hot: 24 * 3600 })
+    ).toEqual({ cold: null, hot: null })
 
     // Discovery puro: nunca.
     expect(
