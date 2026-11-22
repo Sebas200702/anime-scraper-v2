@@ -50,3 +50,15 @@ export function characterNameKeys(
   }
   return [...keys]
 }
+
+/**
+ * Nombre nativo (kanji/kana) o null. Un valor solo ASCII es romaji, no un nombre
+ * nativo: AniList a veces devuelve "JUN" y el HTML de MAL "Black, Jet".
+ */
+export function nativeNameOrNull(
+  name: string | null | undefined
+): string | null {
+  const trimmed = name?.trim()
+  if (!trimmed) return null
+  return /[^\x00-\x7F]/.test(trimmed) ? trimmed : null
+}

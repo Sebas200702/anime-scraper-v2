@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   characterNameKeys,
+  nativeNameOrNull,
   normalizeCharacterName,
 } from '../src/utils/characterName.js'
 
@@ -57,5 +58,19 @@ describe('characterNameKeys', () => {
   test('sin nombre utilizable → lista vacía', () => {
     expect(characterNameKeys(null)).toEqual([])
     expect(characterNameKeys('', [' '])).toEqual([])
+  })
+})
+
+describe('nativeNameOrNull', () => {
+  test('acepta un nombre nativo con escritura no latina', () => {
+    expect(nativeNameOrNull(' 日向翔陽 ')).toBe('日向翔陽')
+  })
+  test('rechaza un nombre solo ASCII: es romaji, no kanji', () => {
+    expect(nativeNameOrNull('JUN')).toBeNull()
+    expect(nativeNameOrNull('Black, Jet')).toBeNull()
+  })
+  test('rechaza vacíos', () => {
+    expect(nativeNameOrNull('  ')).toBeNull()
+    expect(nativeNameOrNull(null)).toBeNull()
   })
 })
