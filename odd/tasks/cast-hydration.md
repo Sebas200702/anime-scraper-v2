@@ -44,8 +44,8 @@ Branch: `fix/cast-hydration` (base `main`). Promotion target: prod via `promote`
 
 | ID | Specs | Task | Route | Commit |
 |----|-------|------|-------|--------|
-| T1 | S2 | Mirror `character_external` schema + PROMOTION_PLAN entry | worker | |
-| T2 | S1 | Character name normalizer helper + tests | worker | |
+| T1 | S2 | Mirror `character_external` schema + PROMOTION_PLAN entry | worker | 3a25c02 ✅ |
+| T2 | S1 | Character name normalizer helper + tests | worker | ecc48f3 ✅ |
 | T3 | S1, S2, S3, S5, S6 | AniList deep pass | worker | |
 | T4 | S4, S7, S8 | MAL writers + AniList patch fill-only | worker | |
 | T5 | — | Verify (`bun test`, `bun run build`) | worker | |
