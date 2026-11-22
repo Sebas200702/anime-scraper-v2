@@ -113,6 +113,14 @@ export const PROMOTION_PLAN: PromotionPlan[] = [
     key: ['mal_id'],
     where: "name NOT LIKE 'Personaje %'",
   },
+  // Ids reales del personaje (MAL/AniList/AniDB). Igual que el resto de
+  // hijos de `character`: sin el padre promovido, la FK fallaría.
+  {
+    table: 'character_external',
+    strategy: 'upsert',
+    key: ['character_id'],
+    where: `character_id IN (SELECT mal_id FROM character WHERE name NOT LIKE 'Personaje %')`,
+  },
   {
     table: 'character_nickname',
     strategy: 'upsert',
