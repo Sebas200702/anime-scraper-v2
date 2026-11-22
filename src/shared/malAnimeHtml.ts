@@ -13,6 +13,7 @@
  * - Staff: tras `<h2>Staff</h2>`, filas con `/people/{id}/` y `<small>` de rol.
  */
 import * as cheerio from 'cheerio'
+import { normalizeCastRole } from './malCharactersHtml.js'
 
 export interface ParsedCharacter {
   malId: number
@@ -100,7 +101,9 @@ export const parseMalAnimeCharacters = (html: string): ParsedMalCharacters => {
 
     const $cell = $h3.closest('td')
     const name = $h3.find('a').text().trim()
-    const role = $cell.find('small').first().text().trim() || 'Unknown'
+    const role = normalizeCastRole(
+      $cell.find('small').first().text().trim() || 'Unknown'
+    )
     const image = fullImage(
       $cell.prev('td').find('img').attr('data-src') ??
         $cell.prev('td').find('img').attr('src')

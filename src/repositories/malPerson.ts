@@ -7,6 +7,10 @@ import { batchUpsert } from '../shared/batchUpsert.js'
 import { chunk } from '../utils/chunk.js'
 import { unique } from '../utils/deduplicate.js'
 import type { MalPersonProcessorResult } from '../processors/malPerson.js'
+import {
+  characterExternalMalSql,
+  malPersonCharacterUpsertSql,
+} from './mal/characterWrites.js'
 
 /**
  * Guarda la ficha de las personas de MAL (staff y personajes).
@@ -78,28 +82,9 @@ export const malPersonRepository = {
     // 2) Personajes (el id de MAL de un personaje es un id de persona).
     if (characterRows.length > 0) {
       for (const batch of chunk(characterRows, 500)) {
-        await db.execute(sql`
-          INSERT INTO character (mal_id, name, name_kanji, about)
-          SELECT v.id,
-                 CASE WHEN v.name = 'Personaje ' || v.id::text
-                      THEN v.name ELSE v.name END,
-                 v.native_name, v.about
-          FROM (VALUES ${sql.join(
-            batch.map(
-              (r) =>
-                sql`(${r.id}::int, ${r.name}::text, ${r.nativeName}::text, ${r.about}::text)`
-            ),
-            sql`, `
-          )}) AS v(id, name, native_name, about)
-          ON CONFLICT (mal_id) DO UPDATE SET
-            name = CASE
-              WHEN character.name = 'Personaje ' || EXCLUDED.mal_id::text
-                THEN EXCLUDED.name
-              ELSE character.name
-            END,
-            name_kanji = COALESCE(EXCLUDED.name_kanji, character.name_kanji),
-            about = COALESCE(EXCLUDED.about, character.about)
-        `)
+        await db.execute(malPersonCharacterUpsertSql(batch))
+        const external = characterExternalMalSql(batch.map((r) => r.id))
+        if (external) await db.execute(external)
       }
 
       const nicknames = unique(

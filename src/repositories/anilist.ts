@@ -6,6 +6,7 @@ import { batchUpsert } from '../shared/batchUpsert.js'
 import { filterByExistingFk } from '../shared/fkFilter.js'
 import { mediaRepository } from './media.js'
 import { unique } from '../utils/deduplicate.js'
+import { fillOnlySet } from '../utils/fillOnly.js'
 import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 import type {
   AnimeBannersProcessorResult,
@@ -81,13 +82,14 @@ export const anilistRepository = {
     for (const result of results) {
       if (result?.animeMedias) banners.push(...result.animeMedias)
       if (result?.animeRelations) relations.push(...result.animeRelations)
-      // Parche disperso: solo las columnas presentes (nunca nulls).
+      // Parche disperso y solo-relleno: columnas presentes (nunca nulls) y
+      // solo donde el anime aún está vacío (MAL manda sobre AniList).
       if (result?.animePatch) {
         const cols = patchColumns(result.animePatch)
         if (Object.keys(cols).length > 0) {
           await db
             .update(anime)
-            .set(cols)
+            .set(fillOnlySet(anime, cols))
             .where(eq(anime.malId, result.animePatch.malId))
           patched++
         }

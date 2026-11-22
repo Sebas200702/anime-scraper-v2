@@ -10,6 +10,8 @@ import {
   type TaskStatus,
 } from '../schemas/ingest.js'
 import { mapTaskRow, type RawTaskRow } from '../shared/taskMapper.js'
+import { HOT_ANIME_IDS_SQL } from './tasks/animeSets.js'
+import { rearmHotTasks } from './tasks/hotRearm.js'
 import type { NewScrapingTask, ScrapingTask } from '../types/index.js'
 
 /** Trocea sin depender de `utils/chunk` (evita el ciclo repo → utils → schemas). */
@@ -231,6 +233,13 @@ export const taskRepository = {
     return result.rowCount ?? 0
   },
 
+  /**
+   * Re-armado hot (S9): tareas de anime hot o con estado inconsistente que la
+   * cadencia normal no tomaría (`refresh_after` NULL, dead_letter, skipped),
+   * con prioridad 20. Va antes de `rearmDueTasks` en cada drain.
+   */
+  rearmHotTasks,
+
   async getExistingEntityIds(source: string): Promise<Set<string>> {
     const rows = await db
       .select({ entityId: ingestTask.entityId })
@@ -451,18 +460,12 @@ export const taskRepository = {
   /**
    * Hot set del Modo B: anime cuyo estado puede cambiar en las próximas horas.
    *
-   * Incluye una **ventana de cierre** de 7 días tras `aired_to`: es lo que
-   * garantiza la pasada final de detalles/episodios cuando la temporada
-   * termina, sin volver a tocar el catálogo terminado.
+   * Incluye una **ventana de cierre** (`CLOSING_WINDOW_DAYS`) tras `aired_to`
+   * y los anime con estado inconsistente: es el mismo conjunto que usa
+   * `rearmHotTasks` (ver `tasks/animeSets.ts`).
    */
   async hotAnimeIds(): Promise<Set<number>> {
-    const rows = await db.execute(sql`
-      SELECT mal_id FROM anime
-      WHERE status = 'Currently Airing'
-         OR (status = 'Not yet aired'
-             AND (aired_from IS NULL OR aired_from <= now() + interval '30 days'))
-         OR (aired_to IS NOT NULL AND aired_to >= now() - interval '7 days')
-    `)
+    const rows = await db.execute(HOT_ANIME_IDS_SQL)
     return new Set(
       (rows.rows as unknown as { mal_id: number }[]).map((r) => r.mal_id)
     )

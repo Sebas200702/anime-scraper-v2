@@ -11,9 +11,15 @@
  *
  *   1. todo `completed` arranca en `NULL` (nunca),
  *   2. los tipos con cadencia cold la reciben,
- *   3. los anime del hot set reciben su cadencia airing, escalonada.
+ *   3. los anime del hot set reciben su cadencia airing, escalonada. El hot
+ *      set es el compartido (`repositories/tasks/animeSets.ts`, 14 días).
  */
 import { closeDb, pool } from '../libs/db.js'
+import {
+  APPLY_HOT_SQL,
+  HOT_COUNT_SQL,
+  PRIORITIZE_AIRING_SQL,
+} from '../repositories/tasks/normalizeRefreshSql.js'
 
 const dryRun = process.argv.includes('--dry-run')
 
@@ -34,51 +40,6 @@ const APPLY_COLD = `
     AND p.refresh_interval_seconds IS NOT NULL
 `
 
-const APPLY_HOT = `
-  WITH hot AS (
-    SELECT mal_id FROM anime
-    WHERE status = 'Currently Airing'
-       OR (status = 'Not yet aired'
-           AND (aired_from IS NULL OR aired_from <= now() + interval '30 days'))
-       OR (aired_to IS NOT NULL AND aired_to >= now() - interval '7 days')
-  )
-  UPDATE ingest.task t
-  SET refresh_after = now() + (random() * interval '6 hours'),
-      priority = 20,
-      updated_at = now()
-  FROM hot h, ingest.task_policy p
-  WHERE t.status = 'completed'
-    AND t.source = p.source
-    AND t.task_type = p.task_type
-    AND p.refresh_interval_airing_seconds IS NOT NULL
-    AND (
-      ((t.payload->>'animeId') ~ '^[0-9]+$' AND (t.payload->>'animeId')::int = h.mal_id)
-      OR ((t.payload->>'anime_id') ~ '^[0-9]+$' AND (t.payload->>'anime_id')::int = h.mal_id)
-    )
-`
-
-/**
- * Prioridad por urgencia, **sin importar el estado**: una tarea de un anime en
- * emisión que quedó `pending` por un timeout en la corrida anterior sigue
- * siendo urgente y no puede quedar detrás de los 28k huecos de relleno.
- */
-const PRIORITIZE_AIRING = `
-  WITH hot AS (
-    SELECT mal_id FROM anime
-    WHERE status = 'Currently Airing'
-       OR (status = 'Not yet aired'
-           AND (aired_from IS NULL OR aired_from <= now() + interval '30 days'))
-       OR (aired_to IS NOT NULL AND aired_to >= now() - interval '7 days')
-  )
-  UPDATE ingest.task t
-  SET priority = 20
-  FROM hot h
-  WHERE (
-    ((t.payload->>'animeId') ~ '^[0-9]+$' AND (t.payload->>'animeId')::int = h.mal_id)
-    OR ((t.payload->>'anime_id') ~ '^[0-9]+$' AND (t.payload->>'anime_id')::int = h.mal_id)
-  )
-`
-
 /** Los huecos de jikanRelations (catálogo terminado sin datos) van al final. */
 const DEMOTE_FILL_GAPS = `
   UPDATE ingest.task
@@ -93,13 +54,7 @@ const main = async () => {
   try {
     await client.query('BEGIN')
 
-    const hot = await client.query<{ count: string }>(`
-      SELECT count(*)::text AS count FROM anime
-      WHERE status = 'Currently Airing'
-         OR (status = 'Not yet aired'
-             AND (aired_from IS NULL OR aired_from <= now() + interval '30 days'))
-         OR (aired_to IS NOT NULL AND aired_to >= now() - interval '7 days')
-    `)
+    const hot = await client.query<{ count: string }>(HOT_COUNT_SQL)
     console.log(`🔥 Hot set: ${hot.rows[0]?.count ?? 0} anime`)
 
     const cleared = await client.query(NULL_ALL)
@@ -108,10 +63,10 @@ const main = async () => {
     const cold = await client.query(APPLY_COLD)
     console.log(`2/3 cadencia cold aplicada: ${cold.rowCount ?? 0} tareas`)
 
-    const airing = await client.query(APPLY_HOT)
+    const airing = await client.query(APPLY_HOT_SQL)
     console.log(`3/3 cadencia airing aplicada: ${airing.rowCount ?? 0} tareas`)
 
-    const prioritized = await client.query(PRIORITIZE_AIRING)
+    const prioritized = await client.query(PRIORITIZE_AIRING_SQL)
     console.log(
       `🔥 prioridad 20 (airing, cualquier estado): ${prioritized.rowCount ?? 0}`
     )

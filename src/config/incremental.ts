@@ -64,6 +64,19 @@ export const DEFAULT_DEADLINE_SECONDS = Number(
 /**
  * Cuántos días después de `aired_to` un anime sigue siendo "hot". Es la
  * ventana que garantiza la pasada final (estado, último capítulo) cuando la
- * temporada termina.
+ * temporada termina. 14 días: absorbe el antiguo barrido de cierre de
+ * temporada (S9), que ahora es parte del re-armado hot de cada drain.
  */
-export const CLOSING_WINDOW_DAYS = 7
+export const CLOSING_WINDOW_DAYS = 14
+
+/**
+ * Tope de tareas que `rearmHotTasks` devuelve a `pending` por fuente y drain.
+ * El fetch lo sigue acotando `--budget`; esto evita que un renacer masivo
+ * (miles de `refresh_after = NULL`) entierre el resto de la cola en prioridad 20.
+ */
+export const HOT_REARM_LIMIT = Number(
+  process.env.INCREMENTAL_HOT_REARM_LIMIT ?? 300
+)
+
+/** Backoff antes de revivir un `dead_letter`/`skipped` de anime hot. */
+export const HOT_REARM_BACKOFF_HOURS = 6
