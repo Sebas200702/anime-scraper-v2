@@ -62,6 +62,49 @@ export function matchCastCharacter(
 }
 
 /**
+ * Emparejamiento uno a uno de todo el reparto de AniList de un medio:
+ * `anilistId` → id interno o null. Un match por anilist_id siempre gana; un
+ * personaje existente que dos personajes de AniList distintos toman por nombre
+ * no lo toma ninguno (p. ej. dos "Guard"). No depende del orden de entrada.
+ */
+export function matchCastCharacters(
+  candidates: readonly CastCandidate[],
+  cast: readonly CastMember[]
+): Map<number, number | null> {
+  const byAnilistId = new Map<number, CastCandidate>()
+  for (const c of candidates) {
+    if (!byAnilistId.has(c.anilistId)) byAnilistId.set(c.anilistId, c)
+  }
+
+  const result = new Map<number, number | null>()
+  const takenById = new Set<number>()
+  for (const c of byAnilistId.values()) {
+    const hit = single(
+      cast.filter((m) => m.anilistId === c.anilistId).map((m) => m.characterId)
+    )
+    result.set(c.anilistId, hit)
+    if (hit !== null) takenById.add(hit)
+  }
+
+  const free = cast.filter(
+    (m) => m.anilistId === null && !takenById.has(m.characterId)
+  )
+  const byName = new Map<number, number>()
+  const claims = new Map<number, number>()
+  for (const c of byAnilistId.values()) {
+    if (result.get(c.anilistId) !== null) continue
+    const hit = matchCastCharacter(c, free)
+    if (hit === null) continue
+    byName.set(c.anilistId, hit)
+    claims.set(hit, (claims.get(hit) ?? 0) + 1)
+  }
+  for (const [anilistId, hit] of byName) {
+    if (claims.get(hit) === 1) result.set(anilistId, hit)
+  }
+  return result
+}
+
+/**
  * Filas de `character_external` a escribir: una por personaje y cada
  * anilist_id una sola vez por lote (el índice parcial es único; un repetido va
  * con anilist_id null para no romper la sentencia).

@@ -5,6 +5,7 @@ import {
   mapCastRole,
   mapRelationType,
   matchCastCharacter,
+  matchCastCharacters,
   planCharacterExternal,
   resolveCastMediaId,
   type CastMember,
@@ -173,5 +174,49 @@ describe('resolveCastMediaId (S6: guarda de idMal)', () => {
   test('sin id en la tarea → cae al idMal', () => {
     expect(resolveCastMediaId(undefined, 6)).toEqual({ mediaId: 6 })
     expect(resolveCastMediaId(undefined, null)).toEqual({ mediaId: null })
+  })
+})
+
+describe('matchCastCharacters (S1: uno a uno dentro del reparto)', () => {
+  const guards: CastMember[] = [
+    { characterId: 980510, name: 'Guard', anilistId: null },
+    { characterId: 20, name: 'Aqua', anilistId: 700 },
+  ]
+
+  test('dos personajes de AniList con el mismo nombre → ninguno toma el existente', () => {
+    const a = { anilistId: 801, name: 'Guard' }
+    const b = { anilistId: 802, name: 'Guard' }
+    const result = matchCastCharacters([a, b], guards)
+    expect(result.get(801)).toBe(null)
+    expect(result.get(802)).toBe(null)
+    // Determinista: el orden de entrada no cambia el resultado.
+    expect([...matchCastCharacters([b, a], guards)].sort()).toEqual(
+      [...result].sort()
+    )
+  })
+
+  test('anilist_id gana sobre nombre: el del id se queda con el suyo, el otro empareja por nombre', () => {
+    const result = matchCastCharacters(
+      [
+        { anilistId: 901, name: 'Aqua' },
+        { anilistId: 700, name: 'Aqua Goddess' },
+        { anilistId: 902, name: 'Guard' },
+      ],
+      guards
+    )
+    expect(result.get(700)).toBe(20)
+    expect(result.get(901)).toBe(null)
+    expect(result.get(902)).toBe(980510)
+  })
+
+  test('el mismo personaje de AniList repetido (varios roles) no compite consigo mismo', () => {
+    const result = matchCastCharacters(
+      [
+        { anilistId: 801, name: 'Guard' },
+        { anilistId: 801, name: 'Guard' },
+      ],
+      guards
+    )
+    expect(result.get(801)).toBe(980510)
   })
 })

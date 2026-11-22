@@ -109,6 +109,15 @@ describe('rearmHotSql (S9: re-armado de tareas hot)', () => {
     expect(q.sql).toContain('FOR UPDATE OF t SKIP LOCKED')
   })
 
+  test('pasada final de cierre: tipos con intervalo hot > 14 días, scrapeados antes de aired_to', () => {
+    expect(q.sql).toContain(
+      `OR (t.status = 'completed' AND p.hot_seconds > ${14 * 86400} AND EXISTS (SELECT 1 FROM anime a WHERE a.mal_id = `
+    )
+    expect(q.sql).toContain(
+      "AND a.aired_to IS NOT NULL AND a.aired_to <= now() AND a.aired_to >= now() - interval '14 days' AND (t.last_scraped_at IS NULL OR t.last_scraped_at < a.aired_to))"
+    )
+  })
+
   test('filtra por fuente solo cuando se pide', () => {
     expect(q.sql).not.toContain('t.source =')
     const scoped = render(

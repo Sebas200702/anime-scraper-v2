@@ -4,6 +4,7 @@ import { db } from '../src/libs/db.js'
 import { processAnilistMedia } from '../src/processors/anilistMedia.js'
 import { anilistMediaRepository } from '../src/repositories/anilistMedia.js'
 import { anilistRepository } from '../src/repositories/anilist.js'
+import { jikanRepository } from '../src/repositories/jikan.js'
 import { malCharactersRepository } from '../src/repositories/malCharacters.js'
 import { malPersonRepository } from '../src/repositories/malPerson.js'
 import type {
@@ -28,7 +29,9 @@ const AQUA = 990501 // ya tiene anilist_id 995001
 const KAZUMA = 990502 // "Satou, Kazuma" (MAL)
 const NARRATOR = 990503 // homónimo, solo en OTHER_ANIME
 const ANILIST_BASE = 1_000_000_000
-const ANIME_IDS = [ANIME, OTHER_ANIME, RELATED_ANIME, 990701]
+const GUARDS_ANIME = 990004 // dos "Guard" de AniList y uno de MAL
+const GUARD = 990510
+const ANIME_IDS = [ANIME, OTHER_ANIME, RELATED_ANIME, GUARDS_ANIME, 990701]
 const MANGA_IDS = [MANGA, RELATED_MANGA]
 const CHARACTER_FILTER = sql`(mal_id BETWEEN 990000 AND 999999 OR mal_id BETWEEN ${ANILIST_BASE + 990000} AND ${ANILIST_BASE + 999999})`
 
@@ -256,6 +259,57 @@ describe.skipIf(!RUN)('pase profundo de AniList (Postgres local)', () => {
   })
 })
 
+describe.skipIf(!RUN)('S1 uno a uno: homónimos dentro del reparto (Postgres local)', () => {
+  beforeAll(async () => {
+    await cleanup()
+    await db.execute(sql`INSERT INTO anime (mal_id, title) VALUES (${GUARDS_ANIME}, 'Guards Test')`)
+    await db.execute(sql`INSERT INTO character (mal_id, name) VALUES (${GUARD}, 'Guard')`)
+    await db.execute(sql`
+      INSERT INTO anime_character (anime_id, character_id, role)
+      VALUES (${GUARDS_ANIME}, ${GUARD}, 'Supporting')
+    `)
+    const guards = [
+      edge(995010, 'BACKGROUND', 'Guard'),
+      edge(995011, 'BACKGROUND', 'Guard'),
+    ]
+    const run = (edges: AniListCharacterEdge[]) =>
+      anilistMediaRepository.saveAnilistMedia([
+        processAnilistMedia(
+          { mediaType: 'ANIME', media: deep(GUARDS_ANIME, 'ANIME', edges, []) },
+          task(GUARDS_ANIME)
+        ),
+      ])
+    await run(guards)
+    // Otra corrida con el orden invertido: mismo resultado.
+    await run([...guards].reverse())
+  })
+
+  afterAll(cleanup)
+
+  test('ninguno de los dos toma el personaje de MAL; resultado estable entre corridas', async () => {
+    expect(
+      await rows(sql`
+        SELECT character_id, role FROM anime_character
+        WHERE anime_id = ${GUARDS_ANIME} ORDER BY character_id
+      `)
+    ).toEqual([
+      { character_id: GUARD, role: 'Supporting' },
+      { character_id: ANILIST_BASE + 995010, role: 'Background' },
+      { character_id: ANILIST_BASE + 995011, role: 'Background' },
+    ])
+    expect(
+      await rows(sql`
+        SELECT character_id, anilist_id FROM character_external
+        WHERE character_id IN (${GUARD}, ${ANILIST_BASE + 995010}, ${ANILIST_BASE + 995011})
+        ORDER BY character_id
+      `)
+    ).toEqual([
+      { character_id: ANILIST_BASE + 995010, anilist_id: 995010 },
+      { character_id: ANILIST_BASE + 995011, anilist_id: 995011 },
+    ])
+  })
+})
+
 describe.skipIf(!RUN)('escritores de MAL y parche de AniList (Postgres local)', () => {
   beforeAll(async () => {
     await cleanup()
@@ -340,6 +394,27 @@ describe.skipIf(!RUN)('escritores de MAL y parche de AniList (Postgres local)', 
     expect(
       await rows(sql`SELECT mal_id FROM character_external WHERE character_id = 990604`)
     ).toEqual([{ mal_id: 990604 }])
+  })
+
+  test('S4: el escritor heredado de Jikan no guarda romaji como name_kanji', async () => {
+    const jikan = (malId: number, nameKanji: string) => ({
+      character: { malId, name: `Jikan ${malId}`, nameKanji, about: null },
+      nicknames: [],
+      characterMedia: [],
+    })
+    await jikanRepository.saveCharacter([
+      jikan(990605, 'Black, Jet'),
+      jikan(990606, ' 吉田 '),
+    ] as never)
+    expect(
+      await rows(sql`
+        SELECT mal_id, name_kanji FROM character
+        WHERE mal_id IN (990605, 990606) ORDER BY mal_id
+      `)
+    ).toEqual([
+      { mal_id: 990605, name_kanji: null },
+      { mal_id: 990606, name_kanji: '吉田' },
+    ])
   })
 
   test('S7: el parche de AniList solo rellena lo vacío', async () => {

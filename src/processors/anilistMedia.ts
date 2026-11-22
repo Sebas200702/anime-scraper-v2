@@ -79,7 +79,10 @@ export const processAnilistMedia = (
     })),
     relations: media.relations.edges
       .filter((edge) => Boolean(edge.node.idMal))
-      .filter((edge) => !edge.node.type || edge.node.type === mediaType)
+      // Mismo tipo de medio (un tipo nulo no se sabe a qué tabla va) y nunca
+      // una auto-relación, igual que `processors/anilist.ts`.
+      .filter((edge) => edge.node.type === mediaType)
+      .filter((edge) => edge.node.idMal !== (mediaId ?? media.idMal))
       .map((edge) => ({
         relationType: mapRelationType(edge.relationType, mediaType),
         relatedMalId: edge.node.idMal as number,

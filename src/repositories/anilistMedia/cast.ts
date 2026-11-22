@@ -5,7 +5,7 @@ import { batchUpsert } from '../../shared/batchUpsert.js'
 import { unique } from '../../utils/deduplicate.js'
 import {
   ANILIST_ONLY_ID_BASE,
-  matchCastCharacter,
+  matchCastCharacters,
   planCharacterExternal,
 } from '../../utils/anilistCast.js'
 import type { AniListMediaProcessorResult } from '../../processors/anilistMedia.js'
@@ -48,9 +48,14 @@ export const saveCast = async (
     []
 
   for (const r of results) {
-    const cast = casts.get(r.mediaId) ?? []
+    // Uno a uno dentro del reparto (S1): un existente que dos personajes de
+    // AniList toman por nombre no lo toma ninguno.
+    const matches = matchCastCharacters(
+      r.characters,
+      casts.get(r.mediaId) ?? []
+    )
     for (const c of r.characters) {
-      const hit = matchCastCharacter(c, cast)
+      const hit = matches.get(c.anilistId) ?? null
       const characterId = hit ?? ANILIST_ONLY_ID_BASE + c.anilistId
       const attrs = { ...c, characterId }
       if (hit === null) anilistOnly.push(attrs)

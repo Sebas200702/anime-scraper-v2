@@ -3,6 +3,11 @@ import { sql } from 'drizzle-orm'
 import { db } from '../src/libs/db.js'
 import { taskRepository } from '../src/repositories/tasks.js'
 import { HOT_PRIORITY } from '../src/repositories/tasks/hotRearmSql.js'
+import {
+  APPLY_HOT_SQL,
+  HOT_COUNT_SQL,
+  PRIORITIZE_AIRING_SQL,
+} from '../src/repositories/tasks/normalizeRefreshSql.js'
 
 /**
  * Integración del re-armado hot y del reporte de frescura (S9) contra Postgres
@@ -15,7 +20,11 @@ const TYPE = 'anime_mal_details_hydration'
 const HOT = 990801 // Currently Airing
 const COLD = 990802 // terminado en 2010
 const INCONSISTENT = 990803 // "Not yet aired" que ya empezó
-const ANIME_IDS = [HOT, COLD, INCONSISTENT]
+const CLOSED = 990804 // terminó hace 3 días
+const ENDS_SOON = 990805 // en emisión, termina en 5 días
+const ENDED_10_DAYS = 990806 // terminó hace 10 días (fuera de los viejos 7)
+const CLOSE_SOURCE = `${SOURCE}-close`
+const ANIME_IDS = [HOT, COLD, INCONSISTENT, CLOSED, ENDS_SOON, ENDED_10_DAYS]
 const TVDB_ID = 998801
 const EPISODE_ENTITIES = ANIME_IDS.map((id) => `anime_episodes_${id}`)
 
@@ -27,7 +36,7 @@ const inList = (values: (number | string)[]) =>
 
 const cleanup = async () => {
   await db.execute(
-    sql`DELETE FROM ingest.task WHERE source IN (${SOURCE}, ${CAP_SOURCE})`
+    sql`DELETE FROM ingest.task WHERE source IN (${SOURCE}, ${CAP_SOURCE}, ${CLOSE_SOURCE})`
   )
   await db.execute(sql`
     DELETE FROM ingest.task WHERE source = 'animeEpisodes'
@@ -210,6 +219,88 @@ describe.skipIf(!RUN)('rearmHotTasks (Postgres local)', () => {
     expect((await taskRepository.rearmHotTasks(SOURCE)).rearmed).toBe(0)
     const row = (await tasks(SOURCE)).find((t) => t.entity_id === 'h_policy_null')
     expect(row?.status).toBe('completed')
+  })
+})
+
+describe.skipIf(!RUN)('pasada final de cierre de temporada (Postgres local)', () => {
+  const HTML = 'anime_mal_html_hydration' // hot 90 d > ventana de 14 d
+  const DETAILS = 'anime_mal_details_hydration' // hot 24 h
+
+  const insertClosing = (
+    entityId: string,
+    taskType: string,
+    animeId: number,
+    refreshAfter: ReturnType<typeof sql>,
+    lastScrapedAt: ReturnType<typeof sql>
+  ) =>
+    db.execute(sql`
+      INSERT INTO ingest.task (source, task_type, entity_id, payload, priority, status, refresh_after, last_scraped_at)
+      VALUES (${CLOSE_SOURCE}, ${taskType}, ${entityId}, ${JSON.stringify({ animeId })}::jsonb, 5, 'completed', ${refreshAfter}, ${lastScrapedAt})
+    `)
+
+  const statuses = async () =>
+    (await tasks(CLOSE_SOURCE)).map((t) => [t.entity_id, t.status])
+
+  beforeAll(async () => {
+    await cleanup()
+    await db.execute(sql`
+      INSERT INTO anime (mal_id, title, status, aired_from, aired_to) VALUES
+        (${CLOSED}, 'Closed Test', 'Finished Airing', now() - interval '90 days', now() - interval '3 days'),
+        (${ENDS_SOON}, 'Ends Soon Test', 'Currently Airing', now() - interval '80 days', now() + interval '5 days')
+    `)
+    await insertClosing('a_html_before', HTML, CLOSED, sql`now() + interval '80 days'`, sql`now() - interval '10 days'`)
+    await insertClosing('b_html_before', HTML, CLOSED, sql`now() + interval '80 days'`, sql`now() - interval '20 days'`)
+    await insertClosing('c_html_after', HTML, CLOSED, sql`now() + interval '89 days'`, sql`now() - interval '1 day'`)
+    await insertClosing('d_details_before', DETAILS, CLOSED, sql`now() + interval '12 hours'`, sql`now() - interval '10 days'`)
+    await insertClosing('e_html_not_ended', HTML, ENDS_SOON, sql`now() + interval '80 days'`, sql`now() - interval '10 days'`)
+  })
+
+  afterAll(cleanup)
+
+  test('re-arma una vez el reparto scrapeado antes de aired_to, respetando el tope', async () => {
+    expect((await taskRepository.rearmHotTasks(CLOSE_SOURCE, 1)).rearmed).toBe(1)
+    expect((await taskRepository.rearmHotTasks(CLOSE_SOURCE)).rearmed).toBe(1)
+    expect(await statuses()).toEqual([
+      ['a_html_before', 'pending'],
+      ['b_html_before', 'pending'],
+      ['c_html_after', 'completed'],
+      ['d_details_before', 'completed'],
+      ['e_html_not_ended', 'completed'],
+    ])
+  })
+
+  test('una vez scrapeada tras aired_to no se re-arma otra vez (sin bucle)', async () => {
+    const ids = (
+      await db.execute(sql`
+        SELECT id FROM ingest.task WHERE source = ${CLOSE_SOURCE} AND status = 'pending'
+      `)
+    ).rows.map((r) => Number((r as { id: number }).id))
+    await taskRepository.completeTasks(ids, 90 * 86400)
+    expect((await taskRepository.rearmHotTasks(CLOSE_SOURCE)).rearmed).toBe(0)
+    expect((await statuses()).every(([, status]) => status === 'completed')).toBe(true)
+  })
+})
+
+describe.skipIf(!RUN)('incremental:normalize usa el hot set compartido (Postgres local)', () => {
+  beforeAll(cleanup)
+  afterAll(cleanup)
+
+  test('un anime terminado hace 10 días cuenta como hot (ventana de 14 días)', async () => {
+    const count = async () =>
+      Number(((await db.execute(sql.raw(HOT_COUNT_SQL))).rows[0] as { count: string }).count)
+    const before = await count()
+    await db.execute(sql`
+      INSERT INTO anime (mal_id, title, status, aired_from, aired_to) VALUES
+        (${ENDED_10_DAYS}, 'Ended 10 Days', 'Finished Airing', now() - interval '100 days', now() - interval '10 days')
+    `)
+    expect(await count()).toBe(before + 1)
+  })
+
+  test('las sentencias de cadencia y prioridad son SQL válido (EXPLAIN, sin ejecutar)', async () => {
+    for (const query of [APPLY_HOT_SQL, PRIORITIZE_AIRING_SQL]) {
+      const plan = await db.execute(sql.raw(`EXPLAIN ${query}`))
+      expect(plan.rows.length).toBeGreaterThan(0)
+    }
   })
 })
 

@@ -38,6 +38,8 @@ const media = (idMal: number | null): AniListMediaDeep => ({
     edges: [
       { relationType: 'ALTERNATIVE', node: { id: 2, idMal: 9, type: 'ANIME' } },
       { relationType: 'ADAPTATION', node: { id: 3, idMal: 9, type: 'MANGA' } },
+      { relationType: 'SEQUEL', node: { id: 4, idMal: 10, type: null as never } },
+      { relationType: 'SIDE_STORY', node: { id: 1, idMal: 5, type: 'ANIME' } },
     ],
   },
   externalLinks: [],
@@ -54,7 +56,8 @@ describe('processAnilistMedia', () => {
       alternativeNames: ['Ken'],
       image: null,
     })
-    // Solo relaciones del mismo tipo de medio, con vocabulario MAL.
+    // Solo relaciones del mismo tipo de medio, con vocabulario MAL; sin tipo
+    // de nodo nulo ni auto-relación.
     expect(r.relations).toEqual([
       { relationType: 'Alternative setting', relatedMalId: 9 },
     ])

@@ -32,3 +32,19 @@ export const taskAnimeIdText = (alias: string): string =>
   ` WHEN (${alias}.payload->>'anime_id') ~ '^[0-9]+$' THEN (${alias}.payload->>'anime_id')::int END`
 
 export const taskAnimeId = (alias: string) => sql.raw(taskAnimeIdText(alias))
+
+/** Ventana de cierre en segundos: tipos con intervalo hot mayor necesitan la pasada final. */
+export const CLOSING_WINDOW_SECONDS = CLOSING_WINDOW_DAYS * 86400
+
+/**
+ * Pasada final de cierre de temporada (antes `seasonSweep`): el anime de la
+ * tarea terminó (`aired_to` ya pasó, hace ≤ 14 días) y la tarea no se scrapeó
+ * después. Una vez scrapeada tras `aired_to` deja de cumplirse ⇒ sin bucle.
+ */
+export const closingRefreshDue = (alias: string) =>
+  sql.raw(
+    `EXISTS (SELECT 1 FROM anime a WHERE a.mal_id = ${taskAnimeIdText(alias)}` +
+      ` AND a.aired_to IS NOT NULL AND a.aired_to <= now()` +
+      ` AND a.aired_to >= now() - interval '${CLOSING_WINDOW_DAYS} days'` +
+      ` AND (${alias}.last_scraped_at IS NULL OR ${alias}.last_scraped_at < a.aired_to))`
+  )

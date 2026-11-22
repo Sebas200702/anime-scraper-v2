@@ -1,6 +1,11 @@
 import { sql, type SQL } from 'drizzle-orm'
 import { REFRESH_POLICY, type RefreshPolicy } from '../../config/sources.js'
-import { HOT_ANIME_IDS_SQL, taskAnimeId } from './animeSets.js'
+import {
+  CLOSING_WINDOW_SECONDS,
+  HOT_ANIME_IDS_SQL,
+  closingRefreshDue,
+  taskAnimeId,
+} from './animeSets.js'
 
 /**
  * SQL puro del re-armado hot (S9). Sin conexión: `hotRearm.ts` lo ejecuta y
@@ -26,7 +31,9 @@ export const HOT_PRIORITY = 20
 /**
  * Re-arma tareas de anime hot o inconsistente que la cadencia normal no
  * tomaría: `completed` con `refresh_after` NULL (se completó en frío), vencido
- * o más lejos que el intervalo hot, y `dead_letter`/`skipped` tras un backoff.
+ * o más lejos que el intervalo hot, `dead_letter`/`skipped` tras un backoff y,
+ * para tipos con intervalo hot mayor que la ventana de cierre (reparto, 90 d),
+ * una pasada final si el anime terminó y la tarea no se scrapeó después.
  * `pending` e `in_progress` nunca se eligen ⇒ idempotente.
  */
 export const rearmHotSql = (opts: {
@@ -54,6 +61,7 @@ export const rearmHotSql = (opts: {
         AND ${taskAnimeId('t')} IN (${HOT_ANIME_IDS_SQL})
         AND (
           (t.status = 'completed' AND (t.refresh_after IS NULL OR t.refresh_after <= now() OR t.refresh_after > now() + p.hot_seconds * interval '1 second'))
+          OR (t.status = 'completed' AND p.hot_seconds > ${sql.raw(String(CLOSING_WINDOW_SECONDS))} AND ${closingRefreshDue('t')})
           OR (t.status IN ('dead_letter', 'skipped') AND t.updated_at < now() - (${opts.backoffHours} * interval '1 hour'))
         )
       ORDER BY t.updated_at ASC

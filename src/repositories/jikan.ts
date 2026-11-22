@@ -6,6 +6,7 @@ import { producer, producerTitle } from '../schemas/producer.js'
 import { mediaRepository } from './media.js'
 import { unique } from '../utils/deduplicate.js'
 import { normalizeText } from '../utils/normalize.js'
+import { nativeNameOrNull } from '../utils/characterName.js'
 import { batchUpsert } from '../shared/batchUpsert.js'
 import type {
   AnimeProcessorResult,
@@ -81,7 +82,12 @@ export const jikanRepository = {
     const characterMedia: NewMedia[] = []
 
     for (const result of characterResults) {
-      if (result.character) characters.push(result.character)
+      // S4: name_kanji solo recibe un nombre nativo (no-ASCII).
+      if (result.character)
+        characters.push({
+          ...result.character,
+          nameKanji: nativeNameOrNull(result.character.nameKanji),
+        })
       if (result.nicknames?.length) nicknames.push(...result.nicknames)
       if (result.characterMedia?.length)
         characterMedia.push(...result.characterMedia)
