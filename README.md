@@ -311,7 +311,8 @@ está vacío; títulos, background y relaciones no se tocan.* En concreto:
 `title_english`, `title_japanese`, `synopsis`, `year`, `published_from` y
 `published_to` solo se rellenan donde están en NULL; `status`, `chapters`,
 `volumes`, `score`, `scored_by`, `members` y `popularity_rank` se actualizan
-solo con un valor no nulo de MAL; `title`, `type`, `background`, `source`,
+solo con un valor no nulo de MAL (un `0` de capítulos o volúmenes, que MAL usa
+en series en curso, no pisa el valor guardado); `title`, `type`, `background`, `source`,
 `serialization`, `ranking`, `favorites`, relaciones y enlaces externos no se
 tocan. Portada, géneros y sinónimos solo se añaden si el manga no tiene
 ninguno de ese tipo; nunca se borra nada. Es SQL por conjuntos (cinco

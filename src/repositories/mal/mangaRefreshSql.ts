@@ -24,9 +24,11 @@ const VOLATILE = [
   'popularity_rank',
 ] as const
 const COLUMNS = [...FILL_ONLY, ...VOLATILE]
+// MAL manda `""` en títulos alternativos vacíos: no convierte NULL en ''.
+const TEXT_FILL = ['title_english', 'title_japanese']
 const next = (col: string) =>
   (FILL_ONLY as readonly string[]).includes(col)
-    ? `COALESCE(m.${col}, v.${col})`
+    ? `COALESCE(m.${col}, ${TEXT_FILL.includes(col) ? `NULLIF(v.${col}, '')` : `v.${col}`})`
     : `COALESCE(v.${col}, m.${col})`
 
 /**

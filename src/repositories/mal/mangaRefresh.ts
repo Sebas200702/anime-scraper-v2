@@ -41,7 +41,8 @@ export const refreshKnownManga = async (
   sheets: MalMangaProcessorResult[]
 ): Promise<MangaRefreshCounts> => {
   const counts = { rows: 0, covers: 0, genres: 0, synonyms: 0 }
-  // Orden por id: cada lote bloquea sus filas en un orden estable.
+  // Lotes por id (el plan puede bloquear en orden de heap): un deadlock con
+  // `malManga` aborta la página y el reintento la repite idempotente.
   const sorted = [...sheets].sort((a, b) => a.manga.malId - b.manga.malId)
   for (const batch of chunk(sorted, BATCH)) {
     const rows = batch.map((s) => s.manga)

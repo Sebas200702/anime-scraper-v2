@@ -9,7 +9,7 @@ import type { ScrapingTask } from '../src/types/index.js'
 
 /**
  * S6 contra Postgres (RUN_DB_TESTS=1): el ranking de manga inserta los ids
- * desconocidos como fila mínima, no toca los existentes, omite los sin título
+ * desconocidos con la ficha del ranking, refresca los existentes (T10), omite los sin título
  * y los derivados de manga siembran sus tareas para el nuevo.
  */
 const RUN = Boolean(process.env.RUN_DB_TESTS)
@@ -29,6 +29,7 @@ const cleanup = async () => {
         WHERE source IN ('malManga', 'malMangaCharacters')
           AND (payload->>'mangaId')::int IN (${IDS})`
   )
+  await db.execute(sql`DELETE FROM manga_relation WHERE manga_id IN (${IDS})`)
   for (const table of ['manga_genre', 'manga_media', 'manga_title_synonym'])
     await db.execute(
       sql`DELETE FROM ${sql.raw(table)} WHERE manga_id IN (${IDS})`
@@ -57,7 +58,7 @@ const save = (nodes: Parameters<typeof processMalDiscoveryMangaRanking>[0]) =>
 describe.skipIf(!RUN)('malDiscovery · ranking de manga (Postgres)', () => {
   afterAll(cleanup)
 
-  test('inserta el desconocido, no toca el conocido y siembra sus derivados', async () => {
+  test('inserta el desconocido, refresca el conocido y siembra sus derivados', async () => {
     await cleanup()
     await db.execute(
       sql`INSERT INTO manga (mal_id, title, type, status, synopsis)
@@ -372,5 +373,60 @@ describe.skipIf(!RUN)('malDiscovery · ranking de manga (Postgres)', () => {
     expect([await junctions(KNOWN), await junctions(KEPT)]).toEqual(
       junctionsBefore
     )
+  })
+
+  test('L18: MAL 0 no pisa capítulos/volúmenes; "" no pisa NULL; relaciones intactas', async () => {
+    await cleanup()
+    await db.execute(
+      sql`INSERT INTO manga (mal_id, title, type, status, chapters, volumes)
+          VALUES (${KNOWN}, 'Título Local', 'manhwa', 'publishing', 12, 3),
+                 (${KEPT}, 'K', 'manga', NULL, NULL, NULL)`
+    )
+    await db.execute(
+      sql`INSERT INTO manga_relation (manga_id, related_manga_id, relation_type)
+          VALUES (${KNOWN}, ${KEPT}, 'SEQUEL')`
+    )
+    expect(
+      await save({
+        nodes: [
+          {
+            id: KNOWN,
+            title: 'X',
+            status: 'publishing',
+            num_chapters: 0,
+            num_volumes: 0,
+          },
+          {
+            id: KEPT,
+            title: 'Y',
+            num_chapters: 0,
+            num_volumes: 4,
+            alternative_titles: { en: '', ja: '' },
+          },
+        ],
+      })
+    ).toBe(0)
+    expect(await row(KNOWN)).toMatchObject({
+      title: 'Título Local',
+      type: 'manhwa',
+      chapters: 12,
+      volumes: 3,
+    })
+    expect(await row(KEPT)).toMatchObject({
+      title: 'K',
+      chapters: null,
+      volumes: 4,
+    })
+    const titles = await db.execute(
+      sql`SELECT title_english, title_japanese FROM manga WHERE mal_id = ${KEPT}`
+    )
+    expect(titles.rows[0]).toEqual({
+      title_english: null,
+      title_japanese: null,
+    })
+    const relations = await db.execute(
+      sql`SELECT count(*)::int AS c FROM manga_relation WHERE manga_id = ${KNOWN}`
+    )
+    expect(relations.rows[0]).toEqual({ c: 1 })
   })
 })

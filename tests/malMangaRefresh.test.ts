@@ -51,14 +51,11 @@ describe('T10 · refresco de manga existentes (SQL)', () => {
     const text = flat(query)
     expect(text).toContain('UPDATE manga AS m SET')
     expect(text).toContain('FROM (VALUES')
-    for (const col of [
-      'title_english',
-      'title_japanese',
-      'synopsis',
-      'year',
-      'published_from',
-      'published_to',
-    ])
+    for (const col of ['title_english', 'title_japanese'])
+      expect(text).toContain(
+        `${col} = COALESCE(m.${col}, NULLIF(v.${col}, ''))`
+      )
+    for (const col of ['synopsis', 'year', 'published_from', 'published_to'])
       expect(text).toContain(`${col} = COALESCE(m.${col}, v.${col})`)
     for (const col of [
       'status',
