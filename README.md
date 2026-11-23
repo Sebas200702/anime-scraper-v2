@@ -266,8 +266,10 @@ catálogo no tenga (mismo camino de fila mínima), sin pasar por la promoción.
 los campos de la fila mínima (`id,title,media_type,status,num_chapters,num_volumes,start_date`).
 El ranking de manga no tiene `upcoming`/`publishing`, así que se recorre
 entero; `bypopularity` ordena por miembros (no por nota), por eso un título
-nuevo sin score entra igual. Son ~150 requests (~3 min a 1/s), así que se
-refresca **semanal** (7 d − 4 h, para que el discover diario lo encuentre
+nuevo sin score entra igual. Son ~150 requests seguidas (estimado: el bucle de
+páginas no tiene throttle propio; si MAL responde lento puede acercarse al
+deadline del discover y la tarea se reintenta entera), así que se refresca
+**semanal** (7 d − 4 h, para que el discover diario lo encuentre
 vencido al séptimo día).
 
 Cada id desconocido con título entra como fila mínima de `manga` (`mal_id`,
