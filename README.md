@@ -243,6 +243,11 @@ bun run db:seed-policy
 bun src/scripts/incremental.ts --drain --sources=malMangaCharacters --budget=80000 --deadline=86400
 ```
 
+Con un pool de proxies grande, `MAL_MANGA_CHARACTERS_MAX_WORKERS=90` y
+`--max-in-flight=90` (con `SCRAPER_MODE=backfill`) suben las tareas en vuelo; la
+cuota sigue siendo 1 req/s por IP. Medido 2026-11-23 con 100 proxies: ~1.500
+mangas/min, 70k en ~45 min.
+
 Durante la carga, pausá el cron `incremental:slow`: el límite de 1 req/s es por
 proceso, y otro proceso que consulte `myanimelist.net` desde la misma IP lo
 duplicaría. Si una persona ya existe como personaje solo de AniList en ese
