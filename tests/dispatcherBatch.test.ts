@@ -30,6 +30,26 @@ describe('TaskDispatcher · fetchBatchSize', () => {
     })
   })
 
+  test('batchKeyFor parte los grupos (p. ej. por tipo de medio)', async () => {
+    const kind = new Map([
+      [1, 'ANIME'],
+      [2, 'MANGA'],
+      [3, 'ANIME'],
+      [4, 'MANGA'],
+    ])
+    const { acquire, dispatcher } = setup({
+      fetchBatchSize: 10,
+      batchKeyFor: (task) => `${task.taskType}|${kind.get(task.id)}`,
+    })
+    const { log, hooks } = recorder(ok)
+    await dispatcher.drain([t(1), t(2), t(3), t(4)], hooks)
+    expect(log.batches).toEqual([
+      [1, 3],
+      [2, 4],
+    ])
+    expect(acquire).toHaveBeenCalledTimes(2)
+  })
+
   test('una entrada ausente o un Error falla solo su tarea; skipped sigue siendo skipped', async () => {
     const { dispatcher } = setup({ fetchBatchSize: 10 })
     const { log, hooks } = recorder(

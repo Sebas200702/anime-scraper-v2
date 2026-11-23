@@ -361,31 +361,44 @@ código).
 
 ### Pase profundo de AniList por lotes (`anilistMedia`)
 
-`anilistMedia` hidrata **10 medios por request** (`fetchBatchSize: 10` en
-`src/config/sources.ts`): una query con un alias por tarea
-(`m0: Media(id: $i0, type: $t0) { … }`), la misma selección que el camino de un
-medio y la página 1 de reparto y staff (50 por página). El dispatcher agrupa
-hasta 10 tareas reclamadas del mismo `taskType`, paga **un** cupo del gate por
-grupo y luego cada tarea sigue su camino de siempre (lease, reintentos y
-`dead_letter`, `skipped`, refresco por política, processor y guardado).
+`anilistMedia` hidrata **25 medios por request** (`fetchBatchSize: 25` en
+`src/config/sources.ts`) con
+`Page(perPage: N) { media(id_in: $ids, type: $type) { … } }`, la misma selección
+que el camino de un medio y la página 1 de reparto y staff. El dispatcher agrupa
+hasta 25 tareas reclamadas del mismo `taskType` **y el mismo tipo de medio**
+(ANIME o MANGA), paga **un** cupo del gate por grupo y luego cada tarea sigue su
+camino de siempre (lease, reintentos y `dead_letter`, `skipped`, refresco por
+política, processor y guardado). Cada medio vuelve a su tarea por su id de
+AniList.
 
-- Error GraphQL de un alias (`errors[].path[0]`) o alias `null`: solo esa
-  tarea. "Not found" → `skipped` (`anilist:not_found`); lo demás, fallo con
-  reintento. Los otros alias siguen.
-- HTTP 429/5xx o un error GraphQL sin alias (p. ej. complejidad): falla el
-  grupo y cada tarea pasa por su `onError` (un 429 cuenta **un** fallo para el
-  circuit breaker, porque es un request).
-- HTTP 404 (AniList lo devuelve si algún alias no existe): cada tarea del grupo
-  se resuelve por el camino de un medio, pagando su cupo cada una.
-- Páginas extra de reparto/staff (`hasNextPage`): por el helper de un medio,
-  cada request por el gate (antes iban sin gate). El paginador pide una página
-  de más (la vacía que corta), como siempre.
+Medido contra AniList (2026-11-23), por qué `Page` y no alias
+(`m0: Media(id:) …`):
+
+- 10 alias se rechazan: HTTP 400 "Max query complexity should be 500 but got
+  590". `Page` con N = 8, 16 y 25 pasa sin error de complejidad.
+- Cada alias cuenta contra el límite de 30 req/min (`x-ratelimit-remaining`
+  baja 8 con 8 alias): no ahorran cuota. Un `Page` cuenta **1**.
+- Un id inexistente en alias da HTTP 404 con todos los alias en `null`; en
+  `Page` ese id solo falta de `media` y el resto llega.
+- Dentro de `Page` el reparto y el staff anidados vuelven **topados a 25** por
+  medio (no 50).
+
+Reglas:
+
+- Id ausente de `media` → `skipped` (`anilist:not_found`), solo esa tarea.
+- Error GraphQL con ruta `Page.media.<i>`: solo ese medio. Error sin datos o sin
+  ruta, o HTTP 4xx/5xx/429: falla el grupo y cada tarea pasa por su `onError`
+  (un 429 cuenta **un** fallo para el circuit breaker: es un request).
+- Medio con más de 25 personajes o staff (o `hasNextPage`): se re-pide entero
+  por el camino de un medio (50 por página desde la 1, más la página vacía que
+  corta), cada request por el gate. Así sus filas son exactamente las de ese
+  camino, sin saltos ni duplicados.
 
 Rendimiento esperado: el gate de `anilistMedia` es 22 req/min por IP, así que
-~22 × 10 = **~220 medios/min por IP** (antes ~22), menos el cupo que se lleven
-las páginas extra de las series con más de 50 personajes o staff. `--budget`
-sigue contando **tareas** (medios procesados), no requests: un lote de 10
-cuenta 10. Las fuentes sin `fetchBatchSize` no cambian (una tarea por request).
+~22 × 25 ≈ **550 medios/min por IP** (antes ~22), menos los re-pedidos de los
+medios con reparto o staff de más de 25. `--budget` sigue contando **tareas**
+(medios procesados), no requests: un lote de 25 cuenta 25. Las fuentes sin
+`fetchBatchSize` no cambian (una tarea por request).
 
 ### Seed de una DB ya ingerida
 

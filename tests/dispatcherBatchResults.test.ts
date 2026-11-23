@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { processBatchResults } from '../src/core/batchResults.js'
+import { batchKeyOf, processBatchResults } from '../src/core/batchResults.js'
 import { TaskContinuation } from '../src/shared/taskContinuation.js'
 
 /** T11 (S6, L19): el manager procesa cada crudo del lote con su tarea. */
@@ -28,5 +28,14 @@ describe('processBatchResults', () => {
     expect(out.has(3)).toBe(false)
     expect(out.get(4)).toBe(cont)
     expect((out.get(5) as Error).message).toBe('process failed')
+  })
+})
+
+describe('batchKeyOf', () => {
+  test('taskType + mediaType del payload (vacío si no hay)', () => {
+    expect(batchKeyOf({ taskType: A, payload: { mediaType: 'MANGA' } })).toBe(
+      `${A}|MANGA`
+    )
+    expect(batchKeyOf({ taskType: A, payload: null })).toBe(`${A}|`)
   })
 })

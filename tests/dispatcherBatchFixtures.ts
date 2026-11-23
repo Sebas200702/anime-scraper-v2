@@ -26,6 +26,7 @@ export const setup = (
     fetchBatchSize?: number
     maxConsecutiveFailures?: number
     deadline?: number
+    batchKeyFor?: (task: DispatcherTask) => string
   } = {}
 ) => {
   const gate = new RateGate(time())

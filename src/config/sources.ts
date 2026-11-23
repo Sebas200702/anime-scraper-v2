@@ -235,11 +235,15 @@ export const SOURCES: SourceConfig[] = [
     maxWorkers: 400,
     pageBatch: 50,
     taskBatchSize: 400,
-    // T11 (L19): 10 medios por request (alias GraphQL). El gate (22 req/min
-    // por IP) se paga una vez por grupo: ~22 × 10 = ~220 medios/min por IP
-    // en vez de ~22, menos las páginas extra de reparto/staff (cada una paga
-    // su cupo). `--budget` sigue contando tareas (medios), no requests.
-    fetchBatchSize: 10,
+    // T11 (L19, L21): 25 medios por request con `Page { media(id_in:) }`.
+    // Medido en AniList: cuenta 1 contra el límite de 30/min (los alias
+    // contaban 1 cada uno y 10 alias pasaban la complejidad máxima de 500);
+    // N = 8/16/25 pasan sin error de complejidad. Dentro de `Page` el reparto
+    // y el staff vuelven topados a 25: los medios con más se re-piden por el
+    // camino de un medio (50/página, cada request por el gate). Con el gate de
+    // 22 req/min por IP: ~22 × 25 ≈ 550 medios/min por IP, menos esos
+    // re-pedidos. `--budget` sigue contando tareas (medios), no requests.
+    fetchBatchSize: 25,
     rateLimit: { perSecond: 1, perMinute: 20 },
     tasks: {
       media_anilist_details_hydration: {

@@ -15,18 +15,20 @@ export interface BatchOutcome<T> {
 }
 
 /**
- * Saca de la cola la primera tarea y hasta `size - 1` más **del mismo tipo**
- * (en orden de cola). Las de otro tipo se quedan donde estaban.
+ * Saca de la cola la primera tarea y hasta `size - 1` más **con su misma
+ * clave** (por defecto el `taskType`), en orden de cola. Las demás se quedan.
  */
 export const takeGroup = (
   queue: DispatcherTask[],
-  size: number
+  size: number,
+  keyOf: (task: DispatcherTask) => string = (task) => task.taskType
 ): DispatcherTask[] => {
   const head = queue.shift()
   if (!head) return []
+  const key = keyOf(head)
   const group = [head]
   for (let i = 0; i < queue.length && group.length < size; ) {
-    if (queue[i]?.taskType === head.taskType) group.push(...queue.splice(i, 1))
+    if (keyOf(queue[i]!) === key) group.push(...queue.splice(i, 1))
     else i++
   }
   return group

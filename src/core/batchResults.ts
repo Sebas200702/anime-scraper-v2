@@ -61,3 +61,10 @@ export const runBatchFetch = async <Task extends { id: number }>(
     processFn
   )
 }
+
+/**
+ * Clave de grupo del manager: `taskType` + `payload.mediaType` (si existe),
+ * para que un request por lotes lleve un solo tipo de medio (L21).
+ */
+export const batchKeyOf = (task: { taskType: string; payload?: unknown }) =>
+  `${task.taskType}|${(task.payload as { mediaType?: string } | null)?.mediaType ?? ''}`

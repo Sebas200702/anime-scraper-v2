@@ -50,37 +50,52 @@ describe.skipIf(!RUN)('anilistMedia · lotes de AniList (Postgres)', () => {
     stopAnilist()
   })
 
-  test('10 tareas en un request, mismas filas que el camino de un medio, presupuesto por tarea', async () => {
-    // Referencia: el camino de un medio (sin fetchBatchSize) para M(1).
-    await seed([M(1)])
+  // Las re-peticiones pagan el gate real (1/s): ~5 s.
+  test('lote de 10 (con > 25 personajes) = mismas filas y estado que el camino de un medio', async () => {
+    const big = { [M(1) + MAL_OFFSET]: 60, [M(2) + MAL_OFFSET]: 30 }
+    // Referencia: el camino de un medio (sin fetchBatchSize) para M(1) y M(2).
+    script.chars = big
+    await seed([M(1), M(2)])
     await drain(undefined)
-    expect(requests.map((r) => r.variables.id)).toEqual([M(1) + MAL_OFFSET])
-    const single = await castRows(M(1))
-    expect(single.cast).toHaveLength(1)
-    expect(single.links).toHaveLength(1)
+    const ids = requests.map((r) => r.variables.id).sort()
+    expect(ids).toEqual([M(1), M(1), M(1), M(2)].map((id) => id + MAL_OFFSET))
+    const single = [await castRows(M(1)), await castRows(M(2))]
+    const singleStatus = (await tasks()).map((t) => [t.entity_id, t.status])
+    expect(single.map((rows) => rows.cast.length)).toEqual([60, 30])
 
     await cleanup()
     resetScript()
+    script.chars = big
     await seed(ALL)
-    const summary = await drain(10, 10)
-    // Un request con 10 alias; el presupuesto (10) cuenta tareas, no requests.
-    expect(requests).toHaveLength(1)
-    expect(Object.keys(requests[0]!.variables)).toHaveLength(20)
+    const summary = await drain(25, 10)
+    // Un Page con 10 ids; M(1) y M(2) (> 25) se re-piden por el camino de un
+    // medio. El presupuesto (10) cuenta tareas, no requests.
+    expect(requests[0]?.variables.ids).toHaveLength(10)
+    expect(
+      requests
+        .slice(1)
+        .map((r) => r.variables.id)
+        .sort()
+    ).toEqual(ids)
     expect(summary).toMatchObject({ processed: 10, failed: 0 })
-    expect(await castRows(M(1))).toEqual(single)
-    for (const id of ALL.slice(0, 10))
+    expect([await castRows(M(1)), await castRows(M(2))]).toEqual(single)
+    const status = await tasks()
+    expect(status.slice(0, 2).map((t) => [t.entity_id, t.status])).toEqual(
+      singleStatus
+    )
+    for (const id of ALL.slice(2, 10))
       expect((await castRows(id)).cast).toHaveLength(1)
-    expect((await tasks()).map((t) => t.status)).toEqual([
+    expect(status.map((t) => t.status)).toEqual([
       ...Array(10).fill('completed'),
       'pending',
       'pending',
     ])
-  })
+  }, 30_000)
 
   test('un 429 falla el grupo y cada tarea se reintenta según sus intentos', async () => {
     resetScript()
     script.batchStatus = 429
-    const summary = await drain(10)
+    const summary = await drain(25)
     expect(summary).toMatchObject({ processed: 0, failed: 2, retried: 2 })
     expect(summary.byKind).toEqual({ rate_limit: 2 })
     const failed = (await tasks()).slice(10)
@@ -91,11 +106,11 @@ describe.skipIf(!RUN)('anilistMedia · lotes de AniList (Postgres)', () => {
     expect(failed.every((t) => Boolean(t.last_error))).toBe(true)
   })
 
-  test('un alias null es skip (not_found) y no afecta a su vecino', async () => {
+  test('un id ausente de Page es skip (not_found) y no afecta a su vecino', async () => {
     resetScript()
-    script.nulls = [M(12) + MAL_OFFSET]
+    script.missing = [M(12) + MAL_OFFSET]
     await reschedule()
-    await drain(10)
+    await drain(25)
     expect(requests).toHaveLength(1)
     const [eleven, twelve] = (await tasks()).slice(10)
     expect(eleven).toMatchObject({ status: 'completed', attempts: 2 })

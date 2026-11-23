@@ -1,87 +1,58 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { CONFIG } from '../src/config/config.js'
+import { deepMedia } from './anilistMediaBatchMedia.js'
+
+export { deepMedia } from './anilistMediaBatchMedia.js'
 import type { ScrapingTask } from '../src/types/index.js'
-import type {
-  AniListCharacterEdge,
-  AniListMediaDeep,
-} from '../src/services/anilistMedia.js'
 
 /**
- * AniList simulado para T11 (S6, L19): responde la query por alias (`m0`…) y
- * la de un solo medio (`Media`). Nunca toca el AniList real.
+ * AniList simulado para T11 (S6, L19, L21): `Page { media(id_in:) }` (sin 404
+ * por id ausente; conexiones anidadas topadas a 25 por medio) y `Media(id:)`
+ * (50 por página). Nunca toca el AniList real.
  */
 export const MAL_OFFSET = 100_000
+const PAGE_CAP = 25
 
 export interface Script {
-  /** HTTP de error para la query por alias (429, 404, 503…). */
+  /** HTTP de error para la query `Page` (429, 503…). */
   batchStatus?: number
-  /** Errores GraphQL extra de la query por alias. */
+  /** Errores GraphQL de la query `Page`. */
   errors?: { message: string; path?: (string | number)[] }[]
-  /** anilistId que vuelven `null` en su alias (o `Media`). */
-  nulls?: number[]
-  /** anilistId con una segunda página de personajes. */
-  more?: number[]
+  /** La query `Page` vuelve `data: null`. */
+  noData?: boolean
+  /** anilistId que AniList no conoce (ausentes de `media`, `Media` null). */
+  missing?: number[]
+  /** Personajes por anilistId (1 por defecto) y staff (0 por defecto). */
+  chars?: Record<number, number>
+  staff?: Record<number, number>
 }
 
 export const script: Script = {}
 export const requests: { query: string; variables: Record<string, any> }[] = []
 
-const edge = (id: number): AniListCharacterEdge => ({
-  role: 'MAIN',
-  node: {
-    id,
-    name: { full: `Batch Char ${id}`, native: null, alternative: [] },
-    image: null,
-    description: null,
-    gender: null,
-    dateOfBirth: null,
-    bloodType: null,
-    age: null,
-    favourites: null,
-  },
-  voiceActors: [],
-})
-
-/** Ficha de `anilistId`: idMal = anilistId − MAL_OFFSET, un personaje por página. */
-export const deepMedia = (anilistId: number, page = 1): AniListMediaDeep => ({
-  id: anilistId,
-  idMal: anilistId - MAL_OFFSET,
-  type: 'ANIME',
-  characters: {
-    pageInfo: {
-      total: 2,
-      hasNextPage: page === 1 && Boolean(script.more?.includes(anilistId)),
-    },
-    // Dos páginas: la tercera vuelve vacía (así corta el paginador).
-    edges: page <= 2 ? [edge(anilistId * 10 + page)] : [],
-  },
-  staff: { pageInfo: { total: 0, hasNextPage: false }, edges: [] },
-  relations: { edges: [] },
-  externalLinks: [
-    {
-      id: anilistId,
-      site: 'Official Site',
-      url: `https://batch.test/${anilistId}`,
-      type: 'INFO',
-    },
-  ],
-})
-
-const media = (id: number, page = 1) =>
-  script.nulls?.includes(id) ? null : deepMedia(id, page)
+const known = (id: number) => !script.missing?.includes(id)
 
 const reply = (variables: Record<string, any>) => {
-  if (!('i0' in variables)) {
-    const { id, charPage } = variables
-    return { status: 200, body: { data: { Media: media(id, charPage) } } }
+  if (!('ids' in variables)) {
+    const { id, charPage, staffPage } = variables
+    return {
+      status: 200,
+      body: {
+        data: { Media: known(id) ? deepMedia(id, charPage, staffPage) : null },
+      },
+    }
   }
-  const data: Record<string, unknown> = {}
-  for (const [name, id] of Object.entries(variables))
-    if (name.startsWith('i')) data[`m${name.slice(1)}`] = media(id)
-  if (script.batchStatus && script.batchStatus !== 200)
-    return { status: script.batchStatus, body: { data, errors: script.errors } }
-  return { status: 200, body: { data, errors: script.errors } }
+  // Orden inverso a propósito: el servicio debe mapear por id, no por posición.
+  const media = (variables.ids as number[])
+    .filter(known)
+    .reverse()
+    .map((id) => deepMedia(id, 1, 1, PAGE_CAP))
+  const data = script.noData ? null : { Page: { media } }
+  return {
+    status: script.batchStatus ?? 200,
+    body: { data, errors: script.errors },
+  }
 }
 
 let server: Server | undefined
@@ -124,13 +95,9 @@ export const resetScript = () => {
 }
 
 /** Tarea `anilistMedia` (sin anilistId si no se pasa). */
-export const task = (id: number, anilistId?: number) =>
+export const task = (id: number, anilistId?: number, mediaType = 'ANIME') =>
   ({
     id,
     taskType: 'media_anilist_details_hydration',
-    payload: {
-      anilistId,
-      mediaId: (anilistId ?? 0) - MAL_OFFSET,
-      mediaType: 'ANIME',
-    },
+    payload: { anilistId, mediaId: (anilistId ?? 0) - MAL_OFFSET, mediaType },
   }) as unknown as ScrapingTask

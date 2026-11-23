@@ -102,6 +102,8 @@ export interface TaskDispatcherOptions {
    * grupo y cada tarea sigue con su propio onDone/onError.
    */
   fetchBatchSize?: number
+  /** Clave de grupo (por defecto `taskType`): solo se agrupan iguales. */
+  batchKeyFor?: (task: DispatcherTask) => string
   onProgress?: (summary: DispatchSummary) => void
 }
 
@@ -138,7 +140,7 @@ export class TaskDispatcher {
             return
           }
           if (batchSize > 0) {
-            const group = takeGroup(queue, batchSize)
+            const group = takeGroup(queue, batchSize, this.options.batchKeyFor)
             if (group.length === 0) return
             await this.dispatchGroup(group, hooks, summary, usedProxies)
             continue

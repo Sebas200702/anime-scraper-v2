@@ -16,8 +16,8 @@ const entities = (ids: number[]) =>
     ids.map((id) => sql`${`media_ANIME_${id}`}`),
     sql`, `
   )
-/** Personajes del simulador: 1e9 + (anilistId × 10 + página). */
-const CHARS = sql`BETWEEN ${1e9 + (M(1) + MAL_OFFSET) * 10} AND ${1e9 + (M(12) + MAL_OFFSET) * 10 + 9}`
+/** Personajes del simulador: 1e9 + (anilistId × 100 + i). */
+const CHARS = sql`BETWEEN ${1e9 + (M(1) + MAL_OFFSET) * 100} AND ${1e9 + (M(12) + MAL_OFFSET) * 100 + 99}`
 
 export const cleanup = async () => {
   await db.execute(

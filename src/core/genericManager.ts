@@ -4,7 +4,7 @@ import { proxyManager } from './proxyManager.js'
 import { RateGate } from './rateGate.js'
 import { proxyKey } from './rateGate.js'
 import { TaskDispatcher, type DispatcherTask } from './taskDispatcher.js'
-import { runBatchFetch } from './batchResults.js'
+import { batchKeyOf, runBatchFetch } from './batchResults.js'
 import { SINGLE_IP_SOURCES, SOURCE_HOSTS } from '../config/sources.js'
 import { KEY_SCOPED_HOSTS } from '../config/sources.js'
 import type { RefreshPolicy } from '../config/sources.js'
@@ -295,6 +295,8 @@ export class GenericManager {
       maxConsecutiveFailures: 10,
       // T11: N tareas por request; el gate y el breaker cuentan el request.
       fetchBatchSize: this.sourceConfig?.fetchBatchSize,
+      // Un tipo de medio por request (L21): ANIME y MANGA no se mezclan.
+      batchKeyFor: (task) => batchKeyOf(task as ScrapingTask),
       acquireProxy: () =>
         singleIp
           ? undefined
