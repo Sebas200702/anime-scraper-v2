@@ -1,3 +1,4 @@
+import { INCREMENTAL_GROUPS } from '../src/config/incremental.js'
 import { describe, expect, test } from 'bun:test'
 import { isRetiredSource } from '../src/config/incremental.js'
 import {
@@ -24,7 +25,7 @@ describe('S2/S3 · malDiscovery como fuente de listado', () => {
     expect(typeof INITIALIZERS.malDiscovery).toBe('function')
   })
 
-  test('mismo host, cuota y ruteo de IP que mal; refresco 20 h (el discover diario las encuentra vencidas)', () => {
+  test('mismo host, cuota y ruteo de IP que mal; estados de anime cada 3 h (corre en el grupo hot)', () => {
     expect(SOURCE_HOSTS.malDiscovery).toEqual(SOURCE_HOSTS.mal!)
     expect(SINGLE_IP_SOURCES.has('malDiscovery')).toBe(
       SINGLE_IP_SOURCES.has('mal')
@@ -38,9 +39,11 @@ describe('S2/S3 · malDiscovery como fuente de listado', () => {
     ])
     for (const type of types.filter((t) => t.startsWith('anime_')))
       expect(REFRESH_POLICY[type]).toEqual({
-        cold: 20 * 3600,
-        hot: 20 * 3600,
+        cold: 3 * 3600,
+        hot: 3 * 3600,
       })
+    expect(INCREMENTAL_GROUPS.hot).toContain('malDiscovery')
+    expect(INCREMENTAL_GROUPS.slow).not.toContain('malDiscovery')
   })
 })
 

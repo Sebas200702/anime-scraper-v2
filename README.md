@@ -208,8 +208,11 @@ relleno de personas puede correr en paralelo al hot). Cada corrida queda en
 
 Jikan está retirado (`RETIRED_SOURCES`): sus tareas quedan como historial. Los
 anime nuevos los descubre `malDiscovery` (MAL API v2, `api.myanimelist.net`,
-misma cuota y ruteo de IP que `mal`), con 4 tareas que se refrescan cada 20 h
-(menos de un día, así el discover diario siempre las encuentra vencidas):
+misma cuota y ruteo de IP que `mal`), con 4 tareas de anime que se refrescan
+cada 3 h desde el grupo hot. Son ~15 requests que traen estado, episodios y
+fechas de todo lo que está en emisión o por estrenarse, así que los estados se
+actualizan en bloque varias veces al día (el discover diario siembra además las
+tareas derivadas de los títulos nuevos):
 
 | Tarea | Endpoint |
 |---|---|
