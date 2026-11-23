@@ -1,0 +1,97 @@
+[
+  {
+    "malId": 3,
+    "name": "Black, Jet",
+    "nativeName": null,
+    "role": "Main",
+    "favourites": 2325,
+    "image": "https://cdn.myanimelist.net/images/characters/11/253723.jpg",
+    "voiceActors": [
+      {
+        "malId": 357,
+        "name": "Ishizuka, Unshou",
+        "language": "Japanese",
+        "image": "https://cdn.myanimelist.net/images/voiceactors/2/17135.jpg"
+      },
+      {
+        "malId": 358,
+        "name": "Billingslea, Beau",
+        "language": "English",
+        "image": "https://cdn.myanimelist.net/images/voiceactors/3/43568.jpg"
+      },
+      {
+        "malId": 9256,
+        "name": "Roullier, Philippe",
+        "language": "French",
+        "image": "https://cdn.myanimelist.net/images/voiceactors/1/71722.jpg"
+      },
+      {
+        "malId": 10030,
+        "name": "Ramirez, Alfonso",
+        "language": "Spanish",
+        "image": "https://cdn.myanimelist.net/images/voiceactors/2/22063.jpg"
+      },
+      {
+        "malId": 14779,
+        "name": "Kim, Gi-hyeon",
+        "language": "Korean",
+        "image": "https://cdn.myanimelist.net/images/voiceactors/3/15347.jpg"
+      },
+      {
+        "malId": 45265,
+        "name": "Schulz, Karl",
+        "language": "German",
+        "image": "https://cdn.myanimelist.net/images/voiceactors/3/48547.jpg"
+      },
+      {
+        "malId": 37669,
+        "name": "Ramos, Mauro",
+        "language": "Portuguese (BR)",
+        "image": "https://cdn.myanimelist.net/images/voiceactors/3/67282.jpg"
+      },
+      {
+        "malId": 54173,
+        "name": "Prester, Nino",
+        "language": "Italian",
+        "image": "https://cdn.myanimelist.net/images/voiceactors/1/63573.jpg"
+      },
+      {
+        "malId": 60378,
+        "name": "Tejedo, Ricardo",
+        "language": "Spanish",
+        "image": "https://cdn.myanimelist.net/images/voiceactors/1/73476.jpg"
+      },
+      {
+        "malId": 85223,
+        "name": "Belda, Francesc",
+        "language": "Spanish",
+        "image": "https://cdn.myanimelist.net/images/voiceactors/2/85139.jpg"
+      }
+    ]
+  },
+  {
+    "malId": 137294,
+    "name": "Bartender B",
+    "nativeName": null,
+    "role": "Supporting",
+    "favourites": 1,
+    "image": "https://cdn.myanimelist.net/images/characters/7/297961.jpg",
+    "voiceActors": [
+      {
+        "malId": 899,
+        "name": "Chiba, Isshin",
+        "language": "Japanese",
+        "image": "https://cdn.myanimelist.net/images/voiceactors/2/93221.jpg"
+      }
+    ]
+  },
+  {
+    "malId": 137297,
+    "name": "Reporter",
+    "nativeName": null,
+    "role": "Supporting",
+    "favourites": 0,
+    "image": "https://cdn.myanimelist.net/images/characters/10/297964.jpg",
+    "voiceActors": []
+  }
+]

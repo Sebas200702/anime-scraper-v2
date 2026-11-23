@@ -30,6 +30,7 @@ export const INCREMENTAL_GROUPS: Record<'hot' | 'slow', string[]> = {
     'malManga',
     'malMangaPage',
     'malCharacters',
+    'malMangaCharacters', // reparto de manga (MAL HTML, 180 d)
     'malPerson',
     'anilistMedia',
     'musicMeta',

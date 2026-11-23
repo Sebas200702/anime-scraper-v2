@@ -228,6 +228,21 @@ El copy inicial de la cola entre dos Postgres es un `pg_dump --data-only -t
 ingest.task -t ingest.task_policy` + `psql` (incluye el `setval` de la
 secuencia): conserva los ~594k estados de tarea y evita re-ingestar.
 
+
+### Reparto de manga (MAL)
+
+`malMangaCharacters` (`manga_mal_characters_hydration`) trae el reparto de cada
+manga desde `/manga/{id}/_/characters` (ids reales de MAL; solo inserta, no toca
+los vínculos de AniList). Va en el grupo slow (150/6 h); refresco cada 180 d.
+Carga inicial one-off (~20 h a 1 req/s con una IP; con proxies y
+`SCRAPER_MODE=backfill`, la cuota se reparte por IP de salida):
+
+```bash
+bun run malMangaCharacters:seed-tasks
+bun run db:seed-policy
+bun src/scripts/incremental.ts --drain --sources=malMangaCharacters --budget=80000 --deadline=86400
+```
+
 ## Despliegue (Dokploy)
 
 - `Dockerfile`: Bun 1.4.2, build (`tsc` + `tsc-alias`) y runtime de producción.

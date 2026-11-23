@@ -9,8 +9,10 @@ import { batchUpsert } from '../shared/batchUpsert.js'
 import { chunk } from '../utils/chunk.js'
 import { unique } from '../utils/deduplicate.js'
 import type { MalCharactersProcessorResult } from '../processors/malCharacters.js'
+import { isRealMalImage } from '../shared/malCharactersHtml.js'
 import {
   characterExternalMalSql,
+  malCharacterPortraitSql,
   malCharacterUpsertSql,
 } from './mal/characterWrites.js'
 
@@ -22,10 +24,6 @@ import {
  * vínculos y la media. Todo idempotente: la identidad natural de cada junction
  * es su clave primaria compuesta.
  */
-/** MAL usa un GIF de interrogante para los personajes sin ficha: no es un retrato. */
-const isRealImage = (src: string | null | undefined): src is string =>
-  Boolean(src) && !/questionmark/i.test(src as string)
-
 export const malCharactersRepository = {
   async saveMalCharacters(
     results: MalCharactersProcessorResult[]
@@ -97,20 +95,13 @@ export const malCharactersRepository = {
       (c) => `${c.id}:${c.src}`
     )
     for (const batch of chunk(characterPortraits, 500)) {
-      await db.execute(sql`
-        INSERT INTO character_media (character_id, media_type, src, size, source, priority)
-        SELECT v.id, 'poster', v.src, NULL, 'mal', 20
-        FROM (VALUES ${sql.join(
-          batch.map((c) => sql`(${c.id}::int, ${c.src}::text)`),
-          sql`, `
-        )}) AS v(id, src)
-        ON CONFLICT (character_id, media_type, src) DO NOTHING
-      `)
+      const query = malCharacterPortraitSql(batch)
+      if (query) await db.execute(query)
     }
 
     const staffPortraits = unique(
       voiceActors
-        .filter((v) => isRealImage(v.image))
+        .filter((v) => isRealMalImage(v.image))
         .map((v) => ({ id: v.staffId, src: v.image as string })),
       (v) => `${v.id}:${v.src}`
     )

@@ -8,8 +8,8 @@ const sqlOf = (index: number) =>
   dialect.sqlToQuery(STALENESS_VIEWS[index]!.query).sql.replace(/\s+/g, ' ')
 
 describe('staleness report (S9: vistas de diagnóstico)', () => {
-  test('cuatro vistas, todas de solo lectura', () => {
-    expect(STALENESS_VIEWS).toHaveLength(4)
+  test('cinco vistas, todas de solo lectura', () => {
+    expect(STALENESS_VIEWS).toHaveLength(5)
     for (const [i] of STALENESS_VIEWS.entries()) {
       const text = sqlOf(i).trim()
       expect(text.startsWith('SELECT') || text.startsWith('WITH')).toBe(true)
