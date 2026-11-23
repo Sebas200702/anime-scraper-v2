@@ -436,9 +436,11 @@ export const REFRESH_POLICY: Record<string, RefreshPolicy> = {
   // Bulks: una tarea por ranking/año, baratas de repetir.
   anime_mal_ranking_hydration: { cold: 7 * 86400, hot: 7 * 86400 },
   anilist_year_hydration: { cold: 30 * 86400, hot: 30 * 86400 },
-  // Descubrimiento (malDiscovery): diario aunque no haya anime hot.
-  anime_mal_discovery_season_hydration: { cold: 86400, hot: 86400 },
-  anime_mal_discovery_ranking_hydration: { cold: 86400, hot: 86400 },
+  // Descubrimiento (malDiscovery): diario aunque no haya anime hot. 20 h (no
+  // 24 h) para que el discover diario (cron 03:00) siempre las encuentre
+  // vencidas aunque la corrida anterior terminara un poco más tarde.
+  anime_mal_discovery_season_hydration: { cold: 20 * 3600, hot: 20 * 3600 },
+  anime_mal_discovery_ranking_hydration: { cold: 20 * 3600, hot: 20 * 3600 },
 
   // Reparto profundo, música, manga y personas: no sensibles a emisión.
   media_anilist_details_hydration: { cold: 365 * 86400, hot: null },

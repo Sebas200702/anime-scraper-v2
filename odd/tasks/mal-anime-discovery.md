@@ -17,7 +17,8 @@ Rollout: Mode A locally first, then `promote` (L2).
   `mal`, same IP routing as `mal`) with tasks for the current and next MAL
   season (`anime/season/{year}/{season}`, `fields` = RANKING_FIELDS,
   `limit=500`, paging until a short page, `nsfw=true`) and the `upcoming` and
-  `airing` rankings, refreshed daily (hot 24 h; cold 24 h). Its saves go
+  `airing` rankings, refreshed daily (hot 20 h; cold 20 h — under a day so the daily discover
+  always finds them due). Its saves go
   through the S1 insert-unknown path. Season math correct at year boundaries
   (winter = Jan–Mar, spring, summer, fall; next of fall Y = winter Y+1).
 - **S3** `LISTING_SOURCES = ['malDiscovery']`: `--discover` seeds and drains it
@@ -28,7 +29,10 @@ Rollout: Mode A locally first, then `promote` (L2).
   `skipped` semantics stay.
 - **S5** README section: discovery without Jikan, first-load note (Mode A
   locally, then `bun run promote --only=…` with the tables a minimal anime row
-  touches) and the first-run burst.
+  touches, with `--insert-only` so an older local source never overwrites
+  newer target values), the first-run burst, and that the weekly `mal`
+  rankings (`all`/`bypopularity`/`favorite`) also insert unknown ids directly
+  in production after deploy.
 
 ## Tasks
 
@@ -58,3 +62,13 @@ Rollout: Mode A locally first, then `promote` (L2).
   ("values() must be called with at least one value"); guarded. Results:
   `bun test` 269 pass / 66 skip / 0 fail; tsc OK; build OK; integration 46 pass.
   Live check skipped: `MAL_CLIENT_ID` is not set in the scraper's local env.
+- **L5** — Verifier blocker fixed: `insertMissingBatch` ended in `RETURNING id`,
+  so `--insert-only` failed on tables without `id` (`column "id" does not
+  exist`). Now `ON CONFLICT DO NOTHING` + `rowCount` (any key; a concurrent
+  insert in the target is skipped, only real inserts counted). RED/GREEN in
+  `tests/promoteInsertOnly.integration.test.ts` (added to `test:integration`).
+  Advisories: README first-load promote uses `--insert-only` + note on weekly
+  `mal` rankings inserting in prod; malDiscovery refresh 24 h → 20 h;
+  `saveMalRanking` counts each node once; incremental `notes.warnings` comment
+  corrected. Results: `bun test` 271 pass / 70 skip / 0 fail; tsc OK; build OK;
+  integration 50 pass (scratch `scraper_io_scratch`, dropped afterwards).

@@ -24,7 +24,7 @@ describe('S2/S3 · malDiscovery como fuente de listado', () => {
     expect(typeof INITIALIZERS.malDiscovery).toBe('function')
   })
 
-  test('mismo host, cuota y ruteo de IP que mal; refresco diario', () => {
+  test('mismo host, cuota y ruteo de IP que mal; refresco 20 h (el discover diario las encuentra vencidas)', () => {
     expect(SOURCE_HOSTS.malDiscovery).toEqual(SOURCE_HOSTS.mal!)
     expect(SINGLE_IP_SOURCES.has('malDiscovery')).toBe(
       SINGLE_IP_SOURCES.has('mal')
@@ -36,7 +36,10 @@ describe('S2/S3 · malDiscovery como fuente de listado', () => {
       'anime_mal_discovery_ranking_hydration',
     ])
     for (const type of types)
-      expect(REFRESH_POLICY[type]).toEqual({ cold: 86400, hot: 86400 })
+      expect(REFRESH_POLICY[type]).toEqual({
+        cold: 20 * 3600,
+        hot: 20 * 3600,
+      })
   })
 })
 

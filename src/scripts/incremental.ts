@@ -209,7 +209,8 @@ const main = async () => {
         budget: args.budget,
         failed: total.failed,
         byKind: total.byKind,
-        // S4: queda en `ingest.run` (visible en /stats e incremental:report).
+        // S4: registro histórico en `ingest.run`. Nadie lo lee: el aviso de
+        // incremental:report y /stats se calcula del env (MAL_CLIENT_ID).
         ...(warnings.length > 0 ? { warnings } : {}),
       },
     })

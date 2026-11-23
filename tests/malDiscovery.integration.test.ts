@@ -58,7 +58,12 @@ describe.skipIf(!RUN)('malDiscovery (Postgres)', () => {
       { entityId: 'mal_discovery_season_current' } as ScrapingTask
     )
 
-    await malDiscoveryRepository.saveMalDiscoverySeason([processed])
+    // Cada nodo cuenta una vez: el desconocido se inserta y se parchea, pero
+    // suma 1 (EXISTING + UNKNOWN; UNTITLED se omite).
+    const saved = await malDiscoveryRepository.saveMalDiscoverySeason([
+      processed,
+    ])
+    expect(saved).toBe(2)
 
     expect(await row(EXISTING)).toMatchObject({
       title: 'Título Local',

@@ -168,8 +168,9 @@ export const malRepository = {
   ): Promise<number> {
     const flat = results.flatMap((r) => r.results ?? [])
     // S1: los ids que MAL lista y el catálogo no tiene entran como fila mínima
-    // (sin pisar nada existente) y luego reciben el parche como el resto.
-    const inserted = await insertUnknownAnime(minimalAnimeRows(flat))
+    // (sin pisar nada existente) y luego reciben el parche como el resto. El
+    // conteo sale solo del parche: cada nodo suma una vez, insertado o no.
+    await insertUnknownAnime(minimalAnimeRows(flat))
     const ids = flat.map((r) => r.animeStats?.malId).filter((id) => !!id)
     const known = new Set<number>()
     for (const batch of chunk(
@@ -185,7 +186,7 @@ export const malRepository = {
     const filtered = flat.filter(
       (r) => !r.animeStats?.malId || known.has(r.animeStats.malId)
     )
-    return inserted + (await this.saveAnimeMalDetails(filtered))
+    return this.saveAnimeMalDetails(filtered)
   },
 }
 
