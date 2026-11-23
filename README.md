@@ -180,9 +180,10 @@ con `refresh_after = NULL` (nunca); solo se refresca lo que puede cambiar:
 - **La ficha `/full` actualiza la fila `anime`** (`status`, `episodes`, `score`,
   `aired_*`, `broadcast_*`, stats, tráiler). Antes solo escribía junctions y el
   `status` solo cambiaba re-barriendo el listado.
-- **Descubrimiento delta**: `initializeTasks` usa `MAX(mal_id)` como cursor y
-  solo siembra las últimas páginas del listado. Los anime nuevos pasan por el
-  generador idempotente y reciben sus tareas derivadas.
+- **Descubrimiento sin Jikan**: `malDiscovery` (MAL API v2) lista la temporada
+  actual y la siguiente y los rankings `upcoming`/`airing`; los ids nuevos entran
+  como fila mínima de `anime` y reciben sus tareas derivadas en la misma corrida
+  (ver [Descubrimiento de anime nuevos](#descubrimiento-de-anime-nuevos-sin-jikan)).
 - **Resiliencia**: el dispatcher corta una fuente tras 10 fallos transitorios
   seguidos (circuit breaker) y devuelve a `pending` lo claimado sin ejecutar; el
   discovery diario re-encola las `dead_letter` por timeout/red/bloqueo.
@@ -194,7 +195,7 @@ con `refresh_after = NULL` (nunca); solo se refresca lo que puede cambiar:
 ```bash
 bun run incremental:hot        # cada 15 min en prod (presupuesto 150/fuente)
 bun run incremental:slow       # cada 6 h (manga, personas, temas…)
-bun run incremental:discover   # diario: páginas nuevas + derivados + cierre de temporada
+bun run incremental:discover   # diario: malDiscovery (anime nuevos) + derivados
 bun run incremental:normalize  # one-off tras cambiar la política (o en el seed)
 ```
 
@@ -202,6 +203,59 @@ Todas respetan `--budget=N` (por fuente), `--deadline=SEGUNDOS` y un
 advisory lock **por fuente** (dos ticks de la misma fuente no compiten; un
 relleno de personas puede correr en paralelo al hot). Cada corrida queda en
 `ingest.run`.
+
+### Descubrimiento de anime nuevos (sin Jikan)
+
+Jikan está retirado (`RETIRED_SOURCES`): sus tareas quedan como historial. Los
+anime nuevos los descubre `malDiscovery` (MAL API v2, `api.myanimelist.net`,
+misma cuota y ruteo de IP que `mal`), con 4 tareas que se refrescan cada 20 h
+(menos de un día, así el discover diario siempre las encuentra vencidas):
+
+| Tarea | Endpoint |
+|---|---|
+| `mal_discovery_season_current` | `anime/season/{año}/{temporada}` actual |
+| `mal_discovery_season_next` | la siguiente (fall Y → winter Y+1) |
+| `mal_discovery_ranking_upcoming` | `anime/ranking?ranking_type=upcoming` |
+| `mal_discovery_ranking_airing` | `anime/ranking?ranking_type=airing` |
+
+Todas piden `limit=500`, los campos del ranking y `nsfw=true`, y paginan hasta
+una página corta. La temporada se calcula al hacer el fetch (winter = ene–mar),
+así las viejas no se siguen refrescando.
+
+`bun run incremental:discover` siembra y drena `malDiscovery` **antes** de los
+derivados: cada id desconocido con título entra como fila mínima de `anime`
+(`mal_id`, `title`, `type`, `status`, `episodes`, `year`, `season`, con
+`ON CONFLICT DO NOTHING`: un título existente nunca se pisa) y recibe el parche
+de MAL y sus tareas derivadas en la misma corrida. Los rankings de `mal` (bulk
+semanal) usan el mismo camino.
+
+Sin `MAL_CLIENT_ID` el discover imprime un aviso explícito y deja constancia en
+`ingest.run` (`notes.warnings`, solo historial); `incremental:report` lo muestra
+arriba (vista F: cola de `malDiscovery`) y `/stats` lo expone en `warnings`,
+ambos calculados del env (`MAL_CLIENT_ID`). Las tareas siguen
+quedando `skipped` (`missing:MAL_CLIENT_ID`) y se re-arman solas.
+
+**Primera carga (Modo A, local)**: corré el discover contra la base local y
+después promové. La primera corrida es una **ráfaga**: todos los ids que faltan
+entran juntos y siembran sus derivados (ficha MAL, episodios, AniList,
+personajes…), así que el primer drenado tarda más que los diarios.
+
+```bash
+bun run db:seed-policy           # política de los nuevos task types
+bun run incremental:discover     # contra la base local
+bun run promote --only=anime,genre,theme,demographic,producer,anime_genre,anime_theme,anime_demographic,anime_producer,anime_media --insert-only --dry-run
+bun run promote --only=anime,genre,theme,demographic,producer,anime_genre,anime_theme,anime_demographic,anime_producer,anime_media --insert-only
+```
+
+Esas son las tablas que toca una fila mínima con su parche de MAL (fila
+`anime`, taxonomía y studios con sus junctions, póster). Va con `--insert-only`:
+la base local es más vieja que prod y el upsert por defecto pisaría valores más
+nuevos del destino; así solo entran las filas que faltan. El resto de tablas
+las llenan los derivados en las corridas siguientes y se promueven como siempre.
+
+Ojo: tras el deploy, los rankings semanales de `mal` (`all`, `bypopularity`,
+`favorite`, además de `airing`/`upcoming`) también insertan directamente en producción los ids que el
+catálogo no tenga (mismo camino de fila mínima), sin pasar por la promoción.
 
 ### Seed de una DB ya ingerida
 
@@ -222,6 +276,15 @@ la promoción se puede acotar:
 
 ```bash
 bun run promote --only=manga,manga_staff,music_stream   # diff-upsert de un subconjunto
+```
+
+Si el origen es más viejo que el destino (p. ej. una carga en Modo A sobre un
+clon de hace días), `--insert-only` inserta solo las filas que faltan y nunca
+actualiza las existentes (funciona con cualquier clave, tenga o no columna `id`,
+y una fila que el destino reciba en paralelo se omite en vez de chocar):
+
+```bash
+bun run promote --only=anime,anime_character,character --insert-only --dry-run
 ```
 
 El copy inicial de la cola entre dos Postgres es un `pg_dump --data-only -t

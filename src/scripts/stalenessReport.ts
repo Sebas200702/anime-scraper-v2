@@ -3,19 +3,25 @@
  *
  *   bun run incremental:report
  *
- * Imprime cinco vistas: (A) anime con estado inconsistente con sus fechas,
+ * Imprime seis vistas: (A) anime con estado inconsistente con sus fechas,
  * (B) estado en cola de la ficha MAL y los episodios de esos anime, (C) salud
- * de la cola por fuente hot, (D) corridas recientes por modo/grupo y (E) cola
- * por tipo de tarea de las fuentes slow (p. ej. reparto de manga). Corre en
+ * de la cola por fuente hot, (D) corridas recientes por modo/grupo, (E) cola
+ * por tipo de tarea de las fuentes slow (p. ej. reparto de manga) y (F) las
+ * tareas de descubrimiento (malDiscovery). Avisa si falta `MAL_CLIENT_ID`. Corre en
  * una transacción `READ ONLY` que termina en ROLLBACK: no escribe nada.
  */
 import { PgDialect } from 'drizzle-orm/pg-core'
 import { closeDb, pool } from '../libs/db.js'
 import { STALENESS_VIEWS } from '../repositories/tasks/stalenessSql.js'
+import { CONFIG } from '../config/config.js'
+import { discoveryWarnings } from '../shared/discoveryWarnings.js'
 
 const dialect = new PgDialect()
 
 const main = async () => {
+  // S4: la falta de credencial de MAL se ve arriba del reporte.
+  for (const warning of discoveryWarnings(CONFIG.MAL_CLIENT_ID))
+    console.warn(`⚠️  ${warning.message}`)
   const client = await pool.connect()
   try {
     await client.query('BEGIN READ ONLY')

@@ -8,12 +8,14 @@ const sqlOf = (index: number) =>
   dialect.sqlToQuery(STALENESS_VIEWS[index]!.query).sql.replace(/\s+/g, ' ')
 
 describe('staleness report (S9: vistas de diagnóstico)', () => {
-  test('cinco vistas, todas de solo lectura', () => {
-    expect(STALENESS_VIEWS).toHaveLength(5)
+  test('seis vistas, todas de solo lectura', () => {
+    expect(STALENESS_VIEWS).toHaveLength(6)
     for (const [i] of STALENESS_VIEWS.entries()) {
       const text = sqlOf(i).trim()
       expect(text.startsWith('SELECT') || text.startsWith('WITH')).toBe(true)
-      expect(text).not.toMatch(/\b(UPDATE|INSERT|DELETE|ALTER|DROP|TRUNCATE)\b/i)
+      expect(text).not.toMatch(
+        /\b(UPDATE|INSERT|DELETE|ALTER|DROP|TRUNCATE)\b/i
+      )
     }
   })
 
@@ -30,13 +32,20 @@ describe('staleness report (S9: vistas de diagnóstico)', () => {
       'tvdb_episodes_hydration',
     ])
       expect(b).toContain(`'${type}'`)
-    for (const column of ['refresh_after IS NULL', 'priority', 'skip_reason', 'last_error'])
+    for (const column of [
+      'refresh_after IS NULL',
+      'priority',
+      'skip_reason',
+      'last_error',
+    ])
       expect(b).toContain(column)
   })
 
   test('C: salud por fuente hot con pendiente más viejo y último éxito', () => {
     const c = dialect.sqlToQuery(STALENESS_VIEWS[2]!.query)
-    expect(c.sql).toContain("min(scheduled_at) FILTER (WHERE status = 'pending')")
+    expect(c.sql).toContain(
+      "min(scheduled_at) FILTER (WHERE status = 'pending')"
+    )
     expect(c.sql).toContain('max(last_scraped_at)')
     expect(c.params).toEqual(expect.arrayContaining(INCREMENTAL_GROUPS.hot))
   })
@@ -44,5 +53,13 @@ describe('staleness report (S9: vistas de diagnóstico)', () => {
   test('D: corridas recientes por modo y grupo', () => {
     expect(sqlOf(3)).toContain('FROM ingest.run')
     expect(sqlOf(3)).toContain('GROUP BY 1, 2')
+  })
+
+  test('F (S4): cola de malDiscovery con motivo de skip (MAL_CLIENT_ID)', () => {
+    const f = dialect.sqlToQuery(STALENESS_VIEWS[5]!.query)
+    expect(STALENESS_VIEWS[5]!.title).toContain('malDiscovery')
+    expect(f.sql).toContain('skip_reason')
+    expect(f.sql).toContain('last_scraped_at')
+    expect(f.params).toEqual(['malDiscovery'])
   })
 })

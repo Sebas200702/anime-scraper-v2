@@ -246,6 +246,8 @@ export interface AnimeMalDetailsProcessorResult {
   /** Fila `anime` con stats/descriptivos (MAL es la fuente canónica). */
   animeStats?: {
     malId: number
+    /** Título de MAL: solo para insertar ids desconocidos; el parche no lo toca. */
+    title?: string
     titleEnglish?: string
     titleJapanese?: string
     type?: string

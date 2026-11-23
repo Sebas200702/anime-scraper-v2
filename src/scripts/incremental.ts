@@ -5,6 +5,7 @@ import {
   DEFAULT_MAX_IN_FLIGHT,
   INCREMENTAL_GROUPS,
 } from '../config/incremental.js'
+import { CONFIG } from '../config/config.js'
 import { getSourceConfig } from '../config/sources.js'
 import { GenericManager, type RunSummary } from '../core/genericManager.js'
 import { closeDb, pool } from '../libs/db.js'
@@ -14,6 +15,8 @@ import {
   INITIALIZERS,
   LISTING_SOURCES,
 } from './initializers.js'
+import { runDiscovery } from './discovery.js'
+import { addSummary, emptySummary } from './runSummary.js'
 
 /**
  * Modo B — actualización incremental sin ingesta completa.
@@ -30,10 +33,10 @@ import {
  * `--sources=` drena solo esas fuentes (con su lock propio); la cuota la sigue
  * poniendo el `RateGate` por (host, IP).
  *
- * `--discover` siembra el generador idempotente (solo lo que falta), drena las
- * páginas nuevas del listado y vuelve a sembrar los derivados para que los
- * anime recién descubiertos tengan sus tareas. `--drain` rearma lo vencido y
- * drena un presupuesto acotado. Nunca se re-barre el catálogo: el listado y el
+ * `--discover` siembra y drena `malDiscovery` (temporadas + rankings de MAL;
+ * los ids nuevos entran como filas mínimas de `anime`) y luego siembra los
+ * derivados para que los anime recién descubiertos tengan sus tareas.
+ * `--drain` rearma lo vencido y drena un presupuesto acotado. Nunca se re-barre el catálogo: el listado y el
  * catálogo terminado tienen `refresh_after = NULL`.
  */
 
@@ -75,26 +78,6 @@ const parseArgs = (argv: string[]): Args => {
     sources: sourcesArg ? sourcesArg.split(',').filter(Boolean) : undefined,
   }
 }
-
-const addSummary = (total: RunSummary, partial: RunSummary): void => {
-  total.processed += partial.processed
-  total.failed += partial.failed
-  total.retried += partial.retried
-  total.deadLettered += partial.deadLettered
-  total.blocked += partial.blocked
-  for (const [kind, count] of Object.entries(partial.byKind)) {
-    total.byKind[kind] = (total.byKind[kind] ?? 0) + count
-  }
-}
-
-const emptySummary = (): RunSummary => ({
-  processed: 0,
-  failed: 0,
-  retried: 0,
-  deadLettered: 0,
-  blocked: 0,
-  byKind: {},
-})
 
 const sourcesForGroup = (args: Args): string[] => {
   if (args.sources?.length) return args.sources
@@ -178,50 +161,16 @@ const drainSources = async (
   return total
 }
 
-const discover = async (args: Args, deadline: number): Promise<RunSummary> => {
-  const total = emptySummary()
-
-  // 1) Listado: solo páginas nuevas (delta por cursor). Sin re-barrido.
-  // Fuentes de listado retiradas (Jikan caído) no se listan ni se drenan.
-  console.log('\n── discovery: listado (páginas nuevas) ──')
-  for (const source of LISTING_SOURCES) await INITIALIZERS[source]?.()
-  if (LISTING_SOURCES.length === 0)
-    console.log('   (sin fuentes de listado activas: Jikan retirado)')
-
-  // 2) Drenar esas páginas para que existan las filas `anime` nuevas.
-  if (LISTING_SOURCES.length > 0)
-    addSummary(total, await drainSources(LISTING_SOURCES, args, deadline))
-
-  // 3) Sembrar derivados: los anime recién creados reciben sus tareas.
-  console.log('\n── discovery: tareas derivadas ──')
-  for (const source of DERIVED_SOURCES) {
-    const initializer = INITIALIZERS[source]
-    if (!initializer) continue
-    try {
-      await initializer()
-    } catch (error) {
-      console.error(
-        `❌ sembrando ${source}: ${(error as Error)?.message ?? error}`
-      )
-      total.failed += 1
-    }
-  }
-
-  // 4) Re-armado hot de todas las fuentes (absorbe el antiguo barrido de
-  // cierre de temporada; cada drain hot lo corre también para su fuente).
-  const hot = await taskRepository.rearmHotTasks()
-  console.log(
-    `🔥 hot: ${hot.rearmed} re-armadas · ${hot.payloads} payloads · ${hot.seeded} sembradas`
-  )
-
-  // 5) Lo que murió por causas transitorias (timeout/bloqueo durante una caída
-  // de la fuente) vuelve a la cola; no son huecos reales.
-  const requeued = await taskRepository.requeueTransientDeadLetters()
-  if (requeued > 0)
-    console.log(`♻️  ${requeued} dead_letter transitorias re-encoladas`)
-
-  return total
-}
+const discover = (args: Args, deadline: number) =>
+  runDiscovery({
+    listing: LISTING_SOURCES,
+    derived: DERIVED_SOURCES,
+    initializers: INITIALIZERS,
+    drain: (sources) => drainSources(sources, args, deadline),
+    rearmHot: () => taskRepository.rearmHotTasks(),
+    requeue: () => taskRepository.requeueTransientDeadLetters(),
+    malClientId: CONFIG.MAL_CLIENT_ID,
+  })
 
 const main = async () => {
   const args = parseArgs(process.argv.slice(2))
@@ -236,9 +185,12 @@ const main = async () => {
   })
 
   let total = emptySummary()
+  let warnings: string[] = []
   try {
     if (args.mode === 'discover') {
-      total = await discover(args, deadline)
+      const result = await discover(args, deadline)
+      total = result.summary
+      warnings = result.warnings
     } else {
       addSummary(
         total,
@@ -257,6 +209,9 @@ const main = async () => {
         budget: args.budget,
         failed: total.failed,
         byKind: total.byKind,
+        // S4: registro histórico en `ingest.run`. Nadie lo lee: el aviso de
+        // incremental:report y /stats se calcula del env (MAL_CLIENT_ID).
+        ...(warnings.length > 0 ? { warnings } : {}),
       },
     })
   }

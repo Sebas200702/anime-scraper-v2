@@ -24,7 +24,7 @@
     "db:seed-producer-pages": "bun src/scripts/seedProducerPages.ts",
     "test": "bun test",
     "proxies:probe": "bun src/scripts/probeProxies.ts",
-    "test:integration": "RUN_DB_TESTS=1 bun test tests/queue.integration.test.ts tests/promotion.integration.test.ts tests/fkFilter.integration.test.ts tests/incremental.integration.test.ts tests/castHydration.integration.test.ts tests/hotRearm.integration.test.ts tests/mangaMalCharacters.integration.test.ts",
+    "test:integration": "RUN_DB_TESTS=1 bun test tests/queue.integration.test.ts tests/promotion.integration.test.ts tests/fkFilter.integration.test.ts tests/incremental.integration.test.ts tests/castHydration.integration.test.ts tests/hotRearm.integration.test.ts tests/mangaMalCharacters.integration.test.ts tests/malDiscovery.integration.test.ts tests/promoteInsertOnly.integration.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed-policy": "bun src/scripts/seedTaskPolicy.ts",

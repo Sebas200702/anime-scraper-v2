@@ -546,13 +546,17 @@ const insertMissingBatch = async (
     return `(${placeholders.join(', ')})`
   })
 
-  const { rows: inserted } = await client.query(
+  // Se cuenta con `rowCount` (no exige columna `id`). Sin `ON CONFLICT`: un
+  // choque inesperado (p. ej. secuencia atrasada en el destino) aborta la
+  // transacción en vez de perder la fila en silencio.
+  const result = await client.query(
     `INSERT INTO ${quote(table)} (${columns.map(quote).join(', ')})
-     VALUES ${tuples.join(', ')} RETURNING id`,
+     VALUES ${tuples.join(', ')}`,
     values
   )
+  const inserted = result.rowCount ?? 0
 
-  return { inserted: inserted.length, skipped: rows.length - inserted.length }
+  return { inserted, skipped: rows.length - inserted }
 }
 
 /**
@@ -584,6 +588,16 @@ export const resyncSequences = async (
   }
   return resynced
 }
+
+/**
+ * Plan "solo insertar": cada tabla pasa a `insert-missing`, así una DB de
+ * origen más vieja que el destino nunca pisa filas que el destino actualizó
+ * (p. ej. promover solo lo que descubrió una carga en Modo A).
+ */
+export const toInsertOnlyPlan = (
+  plan: readonly PromotionPlan[]
+): PromotionPlan[] =>
+  plan.map((step) => ({ ...step, strategy: 'insert-missing' as const }))
 
 export const promote = async ({
   source,

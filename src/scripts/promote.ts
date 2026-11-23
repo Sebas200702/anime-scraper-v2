@@ -9,7 +9,7 @@
  */
 import { Pool } from 'pg'
 import { CONFIG } from '../config/config.js'
-import { PROMOTION_PLAN, promote } from '../libs/promotion.js'
+import { PROMOTION_PLAN, toInsertOnlyPlan, promote } from '../libs/promotion.js'
 
 const args = process.argv.slice(2)
 const dryRun = args.includes('--dry-run')
@@ -24,9 +24,15 @@ const only = args
   ?.split(',')
   .map((table) => table.trim())
   .filter(Boolean)
-const plan = only?.length
+/**
+ * `--insert-only` inserta solo las filas que faltan en el destino y nunca
+ * actualiza las existentes (origen más viejo que el destino).
+ */
+const insertOnly = args.includes('--insert-only')
+const selected = only?.length
   ? PROMOTION_PLAN.filter((entry) => only.includes(entry.table))
   : PROMOTION_PLAN
+const plan = insertOnly ? toInsertOnlyPlan(selected) : selected
 
 const toUrl = process.env.PROMOTE_TO_URL
 const fromUrl = process.env.PROMOTE_FROM_URL ?? CONFIG.DATABASE_URL

@@ -11,6 +11,8 @@
 import { sql } from 'drizzle-orm'
 import { db, closeDb, pool } from './libs/db.js'
 import { taskRepository } from './repositories/tasks.js'
+import { CONFIG } from './config/config.js'
+import { discoveryWarnings } from './shared/discoveryWarnings.js'
 
 const PORT = Number(process.env.PORT ?? 3000)
 /** Una corrida hot cada 15 min; 8 h cubre el slow de 6 h con margen. */
@@ -117,6 +119,8 @@ const stats = async (source?: string) => {
 
   return json({
     ok: true,
+    // S4: p. ej. falta MAL_CLIENT_ID → el descubrimiento no corre.
+    warnings: discoveryWarnings(CONFIG.MAL_CLIENT_ID),
     hotAnime: hot.size,
     pending: byStatus,
     due,
