@@ -21,15 +21,28 @@ import { runMangaSweep, sweepCursor } from './malDiscoveryMangaSweep.js'
  */
 const LIMIT = 500
 
-/** Campos de la fila mínima de `manga` (S6). */
+/**
+ * Campos del ranking de manga (S6, L12): la ficha que MAL acepta en listas,
+ * así un manga nuevo entra completo sin esperar a `malManga`. `background`,
+ * `related_manga` y `serialization` no vienen en listas: los trae la ficha.
+ */
 export const MANGA_DISCOVERY_FIELDS = [
   'id',
   'title',
+  'main_picture',
+  'alternative_titles',
+  'start_date',
+  'end_date',
+  'synopsis',
   'media_type',
   'status',
+  'genres',
   'num_chapters',
   'num_volumes',
-  'start_date',
+  'popularity',
+  'num_list_users',
+  'mean',
+  'num_scoring_users',
 ].join(',')
 
 export type MalDiscoveryTarget =

@@ -43,6 +43,16 @@ const cleanup = async () => {
   await db.execute(
     sql`DELETE FROM ingest.task WHERE source = ${MAL_DISCOVERY_SOURCE} AND entity_id = ${ENTITY}`
   )
+  // L12: los recién descubiertos reciben la ficha del ranking (junctions).
+  for (const table of [
+    'manga_external_ids',
+    'manga_media',
+    'manga_genre',
+    'manga_title_synonym',
+  ])
+    await db.execute(
+      sql`DELETE FROM ${sql.raw(table)} WHERE manga_id > ${BASE_ID} AND manga_id <= ${BASE_ID + TOTAL}`
+    )
   await db.execute(
     sql`DELETE FROM manga WHERE mal_id > ${BASE_ID} AND mal_id <= ${BASE_ID + TOTAL}`
   )

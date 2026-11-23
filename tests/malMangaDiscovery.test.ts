@@ -8,7 +8,11 @@ import { REFRESH_POLICY, SOURCES } from '../src/config/sources.js'
 import { processMalDiscoveryMangaRanking } from '../src/processors/malDiscovery.js'
 import { insertUnknownMangaSql } from '../src/repositories/mal/mangaDiscoverySql.js'
 import { DERIVED_SOURCES } from '../src/scripts/initializers.js'
-import { malDiscoveryListUrl } from '../src/services/malDiscovery.js'
+import { processMalManga } from '../src/processors/malManga.js'
+import {
+  MANGA_DISCOVERY_FIELDS,
+  malDiscoveryListUrl,
+} from '../src/services/malDiscovery.js'
 import type { ScrapingTask } from '../src/types/index.js'
 
 const dialect = new PgDialect()
@@ -105,7 +109,7 @@ describe('S6 · tarea, URL y política del ranking de manga', () => {
     ])
   })
 
-  test('URL: manga/ranking, limit 500, offset, campos mínimos y nsfw', () => {
+  test('URL: manga/ranking, limit 500, offset, campos del ranking (L12) y nsfw', () => {
     const url = malDiscoveryListUrl(
       'https://api.myanimelist.net/v2',
       { kind: 'mangaRanking', rankingType: 'bypopularity' },
@@ -117,15 +121,7 @@ describe('S6 · tarea, URL y política del ranking de manga', () => {
     expect(parsed.searchParams.get('limit')).toBe('500')
     expect(parsed.searchParams.get('offset')).toBe('1000')
     expect(parsed.searchParams.get('nsfw')).toBe('true')
-    expect(parsed.searchParams.get('fields')?.split(',')).toEqual([
-      'id',
-      'title',
-      'media_type',
-      'status',
-      'num_chapters',
-      'num_volumes',
-      'start_date',
-    ])
+    expect(parsed.searchParams.get('fields')).toBe(MANGA_DISCOVERY_FIELDS)
   })
 
   test('declarado en malDiscovery con refresco semanal (7 d menos 4 h)', () => {
@@ -143,5 +139,54 @@ describe('S6 · tarea, URL y política del ranking de manga', () => {
   test('los manga nuevos reciben sus tareas: malManga y su reparto son derivados', () => {
     for (const source of ['malManga', 'malMangaCharacters', 'malMangaPage'])
       expect(DERIVED_SOURCES).toContain(source)
+  })
+})
+
+describe('L12 · el ranking de manga trae la ficha que MAL acepta en listas', () => {
+  test('pide los campos de la ficha disponibles en el endpoint de ranking', () => {
+    expect(MANGA_DISCOVERY_FIELDS.split(',')).toEqual([
+      'id',
+      'title',
+      'main_picture',
+      'alternative_titles',
+      'start_date',
+      'end_date',
+      'synopsis',
+      'media_type',
+      'status',
+      'genres',
+      'num_chapters',
+      'num_volumes',
+      'popularity',
+      'num_list_users',
+      'mean',
+      'num_scoring_users',
+    ])
+  })
+
+  test('arrastra la ficha completa de cada nodo con título', () => {
+    const { details } = processMalDiscoveryMangaRanking(
+      {
+        nodes: [
+          { id: 171101, title: 'Con Ficha', synopsis: 'S', mean: 8 },
+          { id: 171102 }, // sin título: sin ficha
+        ],
+      },
+      task
+    )
+    expect(details.map((d) => [d.manga.malId, d.manga.synopsis])).toEqual([
+      [171101, 'S'],
+    ])
+  })
+
+  test('miembros y votos salen de num_list_users / num_scoring_users (API v2)', () => {
+    const { manga } = processMalManga(
+      {
+        mangaId: 171103,
+        node: { id: 171103, num_list_users: 42, num_scoring_users: 7 },
+      },
+      task
+    )
+    expect([manga.members, manga.scoredBy]).toEqual([42, 7])
   })
 })

@@ -71,10 +71,11 @@ export const processMalManga = (raw: MalMangaPayload, _task: ScrapingTask) => {
       chapters: node.num_chapters ?? null,
       volumes: node.num_volumes ?? null,
       score: node.mean ?? null,
-      scoredBy: null,
+      scoredBy: node.num_scoring_users ?? null,
       popularityRank: node.popularity ?? null,
       ranking: null,
-      members: node.members ?? null,
+      // La API v2 publica los miembros como `num_list_users`.
+      members: node.members ?? node.num_list_users ?? null,
       favorites: null,
       year: node.start_date ? Number(node.start_date.slice(0, 4)) : null,
       synopsis: node.synopsis ?? null,

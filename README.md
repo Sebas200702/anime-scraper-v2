@@ -276,8 +276,10 @@ catálogo no tenga (mismo camino de fila mínima), sin pasar por la promoción.
 `malDiscovery` también descubre manga con una quinta tarea,
 `mal_discovery_manga_ranking_bypopularity`
 (`manga_mal_discovery_ranking_hydration`):
-`manga/ranking?ranking_type=bypopularity` con `limit=500`, `nsfw=true` y solo
-los campos de la fila mínima (`id,title,media_type,status,num_chapters,num_volumes,start_date`).
+`manga/ranking?ranking_type=bypopularity` con `limit=500`, `nsfw=true` y la
+ficha que MAL acepta en listas (portada, títulos alternativos, fechas,
+sinopsis, géneros, score, popularidad y miembros; `MANGA_DISCOVERY_FIELDS` en
+`src/services/malDiscovery.ts`).
 El ranking de manga no tiene `upcoming`/`publishing`, así que se recorre
 entero; `bypopularity` ordena por miembros (no por nota), por eso un título
 nuevo sin score entra igual. Son ~150 requests (estimado), así que se refresca
@@ -298,7 +300,13 @@ tarea se completa con el refresco semanal, sin re-armarse antes.
 Cada id desconocido con título entra como fila mínima de `manga` (`mal_id`,
 `title`, `type` = `media_type` o `manga`, `status`, `chapters`, `volumes`,
 `year`) con `ON CONFLICT (mal_id) DO NOTHING`: los manga existentes no se
-tocan (su ficha la mantiene `malManga`). En la misma corrida los derivados
+tocan (su ficha la mantiene `malManga`). A los recién insertados (los que
+devuelve el `RETURNING`) se les aplica la ficha del ranking con `saveMalManga`,
+así llegan completos; `malManga` sigue añadiendo después `background`,
+relaciones y serialización, que el endpoint de listas no publica. La API v2
+no tiene `members`: `members`/`scored_by` salen de
+`num_list_users`/`num_scoring_users` (también en la ficha de `malManga`).
+En la misma corrida los derivados
 `malManga`, `malMangaCharacters` y `malMangaPage` siembran sus tareas para los
 nuevos. Primera carga en Modo A: discover local y después
 `bun run promote --only=manga --insert-only` (el resto de tablas de manga lo
