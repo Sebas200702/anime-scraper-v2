@@ -299,11 +299,27 @@ tarea se completa con el refresco semanal, sin re-armarse antes.
 
 Cada id desconocido con título entra como fila mínima de `manga` (`mal_id`,
 `title`, `type` = `media_type` o `manga`, `status`, `chapters`, `volumes`,
-`year`) con `ON CONFLICT (mal_id) DO NOTHING`: los manga existentes no se
-tocan (su ficha la mantiene `malManga`). A los recién insertados (los que
+`year`) con `ON CONFLICT (mal_id) DO NOTHING`. A los recién insertados (los que
 devuelve el `RETURNING`) se les aplica la ficha del ranking con `saveMalManga`,
-así llegan completos; `malManga` sigue añadiendo después `background`,
-relaciones y serialización, que el endpoint de listas no publica. La API v2
+así llegan completos.
+
+El mismo barrido **refresca el catálogo existente**: el catálogo entero de MAL
+son ~150 páginas de 500, así que en ~150 requests semanales cada manga que ya
+existía recibe la ficha del ranking con este límite: *los campos que cambian
+solo se pisan con un valor de MAL no vacío; el resto solo se completa donde
+está vacío; títulos, background y relaciones no se tocan.* En concreto:
+`title_english`, `title_japanese`, `synopsis`, `year`, `published_from` y
+`published_to` solo se rellenan donde están en NULL; `status`, `chapters`,
+`volumes`, `score`, `scored_by`, `members` y `popularity_rank` se actualizan
+solo con un valor no nulo de MAL (un `0` de capítulos o volúmenes, que MAL usa
+en series en curso, no pisa el valor guardado); `title`, `type`, `background`, `source`,
+`serialization`, `ranking`, `favorites`, relaciones y enlaces externos no se
+tocan. Portada, géneros y sinónimos solo se añaden si el manga no tiene
+ninguno de ese tipo; nunca se borra nada. Es SQL por conjuntos (cinco
+sentencias por página, `src/repositories/mal/mangaRefreshSql.ts`) e
+idempotente: una página sin cambios no reescribe filas. El conteo del barrido
+sigue siendo solo de manga nuevos. `malManga` sigue añadiendo después
+`background`, relaciones y serialización, que el endpoint de listas no publica. La API v2
 no tiene `members`: `members`/`scored_by` salen de
 `num_list_users`/`num_scoring_users` (también en la ficha de `malManga`).
 En la misma corrida los derivados

@@ -6,6 +6,7 @@ import { chunk } from '../utils/chunk.js'
 import { malRepository } from './mal.js'
 import { malMangaRepository } from './malManga.js'
 import { insertUnknownMangaSql } from './mal/mangaDiscoverySql.js'
+import { refreshKnownManga } from './mal/mangaRefresh.js'
 
 type RankingBatch = { results?: AnimeMalDetailsProcessorResult[] }[]
 
@@ -20,11 +21,12 @@ export const malDiscoveryRepository = {
     malRepository.saveMalRanking(results),
 
   /**
-   * Ranking de manga (S6): solo inserta los ids desconocidos; los existentes
-   * no se tocan (su ficha la mantiene `malManga`). A los recién insertados se
-   * les aplica la ficha del ranking (L12: sinopsis, portada, géneros…).
-   * Devuelve los insertados, más los que el barrido ya guardó página a página
-   * (`inserted`, L9).
+   * Ranking de manga (S6): inserta los ids desconocidos y a los recién
+   * insertados les aplica la ficha del ranking (L12: sinopsis, portada,
+   * géneros…). Los que ya existían se refrescan con `refreshKnownManga`
+   * (T10, L16: relleno de NULL, stats volátiles no nulas, junctions solo si
+   * no hay). Devuelve solo los insertados, más los que el barrido ya guardó
+   * página a página (`inserted`, L9); el refresco no cuenta.
    */
   async saveMalDiscoveryMangaRanking(
     results: {
@@ -44,11 +46,18 @@ export const malDiscoveryRepository = {
     for (const batch of chunk([...rows.values()], 1_000)) {
       const result = await db.execute(insertUnknownMangaSql(batch))
       inserted += result.rowCount ?? 0
-      const fresh = result.rows.flatMap((r) => {
-        const detail = details.get(Number(r.mal_id))
-        return detail ? [detail] : []
+      const freshIds = new Set(result.rows.map((r) => Number(r.mal_id)))
+      const fresh = batch.flatMap((r) => {
+        const detail = details.get(r.malId)
+        return detail && freshIds.has(r.malId) ? [detail] : []
       })
       if (fresh.length > 0) await malMangaRepository.saveMalManga(fresh)
+      await refreshKnownManga(
+        batch.flatMap((r) => {
+          const detail = details.get(r.malId)
+          return detail && !freshIds.has(r.malId) ? [detail] : []
+        })
+      )
     }
     return inserted
   },
