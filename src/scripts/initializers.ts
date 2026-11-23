@@ -13,6 +13,7 @@ import { initializeAnimeMappingTasks } from './initializeAnimeMappingTasks.js'
 import { initializeAnimeEpisodesTasks } from './initializeAnimeEpisodesTasks.js'
 import { initializeTvdbSeriesArtworksTasks } from './initializeTvdbSeriesArtworksTasks.js'
 import { initializeAnilistTasks } from './initializeAnilistTasks.js'
+import { initializeAnilistMangaLinkTasks } from './initializeAnilistMangaLinkTasks.js'
 import { initializeMalDetailsTasks } from './initializeMalDetailsTasks.js'
 import { initializeMalHtmlTasks } from './initializeMalHtmlTasks.js'
 import { initializeMalPeopleTasks } from './initializeMalPeopleTasks.js'
@@ -31,6 +32,15 @@ import { initializeMalDiscoveryTasks } from './initializeMalDiscoveryTasks.js'
 
 export type Initializer = () => Promise<void>
 
+/**
+ * `anilist` también siembra el enlace de manga (S6, L14): va antes que
+ * `anilistMedia` en el orden de derivados, y el pase corre en el grupo hot.
+ */
+const initializeAnilistAll: Initializer = async () => {
+  await initializeAnilistTasks()
+  await initializeAnilistMangaLinkTasks()
+}
+
 export const INITIALIZERS: Record<string, Initializer> = {
   jikan: initializeTasks,
   jikanRelations: initializeJikanRelationsTasks,
@@ -38,7 +48,7 @@ export const INITIALIZERS: Record<string, Initializer> = {
   animeMapping: initializeAnimeMappingTasks,
   animeEpisodes: initializeAnimeEpisodesTasks,
   tvdbSeriesArtworks: initializeTvdbSeriesArtworksTasks,
-  anilist: initializeAnilistTasks,
+  anilist: initializeAnilistAll,
   mal: initializeMalDetailsTasks,
   malHtml: initializeMalHtmlTasks,
   malPeople: initializeMalPeopleTasks,

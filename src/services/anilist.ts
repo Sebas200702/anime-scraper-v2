@@ -144,3 +144,6 @@ interface AniListCatalogResponse {
   }
   errors?: { message: string }[]
 }
+
+/** Enlace AniList de manga (S6, L14): vive en su módulo, el manager lo busca aquí. */
+export { fetchAnilistMangaLink } from './anilistMangaLink.js'

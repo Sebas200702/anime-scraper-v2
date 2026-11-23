@@ -43,3 +43,19 @@ export interface FuzzyDate {
   month?: number | null
   day?: number | null
 }
+
+/** Media del pase de enlace de manga (S6, L14): solo lo que MAL no da. */
+export interface AniListMangaLinkMedia {
+  id: number
+  idMal?: number | null
+  countryOfOrigin?: string | null
+  bannerImage?: string | null
+}
+
+/** Enlace listo para escribir (solo-relleno) en un manga sin `anilist_id`. */
+export interface MangaLink {
+  malId: number
+  anilistId: number
+  country: string | null
+  banner: string | null
+}
