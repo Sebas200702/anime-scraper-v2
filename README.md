@@ -208,8 +208,11 @@ relleno de personas puede correr en paralelo al hot). Cada corrida queda en
 
 Jikan está retirado (`RETIRED_SOURCES`): sus tareas quedan como historial. Los
 anime nuevos los descubre `malDiscovery` (MAL API v2, `api.myanimelist.net`,
-misma cuota y ruteo de IP que `mal`), con 4 tareas que se refrescan cada 20 h
-(menos de un día, así el discover diario siempre las encuentra vencidas):
+misma cuota y ruteo de IP que `mal`), con 4 tareas de anime que se refrescan
+cada 3 h desde el grupo hot. Son ~15 requests que traen estado, episodios y
+fechas de todo lo que está en emisión o por estrenarse, así que los estados se
+actualizan en bloque varias veces al día (el discover diario siembra además las
+tareas derivadas de los títulos nuevos):
 
 | Tarea | Endpoint |
 |---|---|
@@ -234,6 +237,17 @@ Sin `MAL_CLIENT_ID` el discover imprime un aviso explícito y deja constancia en
 arriba (vista F: cola de `malDiscovery`) y `/stats` lo expone en `warnings`,
 ambos calculados del env (`MAL_CLIENT_ID`). Las tareas siguen
 quedando `skipped` (`missing:MAL_CLIENT_ID`) y se re-arman solas.
+
+**Al pasar de 20 h a 3 h** (cambio de política): `db:seed-policy` no pisa filas
+existentes de `ingest.task_policy`, y la política de la DB manda sobre la del
+código. En una DB que ya tenía las filas de 20 h, actualizalas una vez:
+
+```sql
+UPDATE ingest.task_policy
+SET refresh_interval_seconds = 10800, refresh_interval_airing_seconds = 10800
+WHERE task_type IN ('anime_mal_discovery_season_hydration',
+                    'anime_mal_discovery_ranking_hydration');
+```
 
 **Primera carga (Modo A, local)**: corré el discover contra la base local y
 después promové. La primera corrida es una **ráfaga**: todos los ids que faltan
@@ -266,11 +280,20 @@ catálogo no tenga (mismo camino de fila mínima), sin pasar por la promoción.
 los campos de la fila mínima (`id,title,media_type,status,num_chapters,num_volumes,start_date`).
 El ranking de manga no tiene `upcoming`/`publishing`, así que se recorre
 entero; `bypopularity` ordena por miembros (no por nota), por eso un título
-nuevo sin score entra igual. Son ~150 requests seguidas (estimado: el bucle de
-páginas no tiene throttle propio; si MAL responde lento puede acercarse al
-deadline del discover y la tarea se reintenta entera), así que se refresca
+nuevo sin score entra igual. Son ~150 requests (estimado), así que se refresca
 **semanal** (7 d − 4 h, para que el discover diario lo encuentre
 vencido al séptimo día).
+
+El barrido es **reanudable**: cada página se guarda al llegar y el cursor
+(siguiente offset) queda en el payload de la tarea (`offset`). Un
+timeout/5xx/error de red reintenta esa página (3 intentos, backoff 2 s y 4 s);
+si aun así falla, la tarea falla con lo ya guardado y el cursor intactos y el
+reintento sigue desde ahí. Cada intento procesa como mucho 40 páginas o 180 s
+(lo primero que llegue; `MANGA_SWEEP_LIMITS` en `src/config/malDiscovery.ts`),
+muy por debajo del deadline del discover (600 s) y del lease (900 s); si no
+terminó, la tarea vuelve a `pending` sin gastar intento y la misma corrida (o
+la siguiente) continúa. Al llegar a la página corta el cursor vuelve a 0 y la
+tarea se completa con el refresco semanal, sin re-armarse antes.
 
 Cada id desconocido con título entra como fila mínima de `manga` (`mal_id`,
 `title`, `type` = `media_type` o `manga`, `status`, `chapters`, `volumes`,

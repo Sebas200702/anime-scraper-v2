@@ -23,6 +23,7 @@ export const INCREMENTAL_GROUPS: Record<'hot' | 'slow', string[]> = {
     'anilist', // banners/relaciones
     'mal', // canónica de la ficha: status, episodios, score, fechas, stats
     'malHtml', // personajes/seiyuus (90d)
+    'malDiscovery', // temporadas + airing/upcoming de MAL cada 3 h (estados en bloque)
   ],
   slow: [
     'animeThemes',

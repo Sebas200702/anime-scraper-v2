@@ -45,6 +45,18 @@ Rollout: Mode A locally first, then `promote` (L2).
   existing rows are never touched; nodes without title are skipped. The
   DERIVED `malManga`/`malMangaCharacters`/`malMangaPage` initializers seed the
   new ids in the same `--discover` run. README documents it.
+  **Amendment (L9, branch `fix/manga-sweep-resumable`):** the sweep is
+  resumable and failure-tolerant. Each fetched page's unknown manga are saved
+  immediately and the cursor (next offset) is persisted in the task payload
+  (`offset`); a retry resumes from it. A timeout/5xx/network error on a page
+  retries that page (3 attempts, backoff 2 s, 4 s) before the task fails;
+  failure keeps the cursor and the pages already saved. Each attempt is
+  bounded (40 pages or 180 s, whichever first) and, when it ends without
+  finishing, the task returns to `pending` without consuming an attempt (same
+  run or the next one continues). A short page completes the sweep: the cursor
+  resets to 0 and the task completes with the weekly refresh (7 d − 4 h), so
+  there is no re-arm loop after completion. The anime season/ranking tasks'
+  requests and behavior are unchanged (byte-identical URLs, test).
 
 ## Tasks
 
@@ -55,6 +67,7 @@ Rollout: Mode A locally first, then `promote` (L2).
 | T3 | S3, S4 | Listing/derived split, discovery ordering, missing-client-id warning (run, report, /stats) | worker | pending (uncommitted) |
 | T4 | S5 | README | worker | pending (uncommitted) |
 | T5 | — | Verify (`bun test`, tsc, build, integration on a throwaway DB, live check) | worker | pending (uncommitted) |
+| T7 | S6 | Resumable manga sweep: per-page save, payload cursor, per-page retry, per-attempt budget + re-arm, README, unit + integration tests | worker | pending (uncommitted) |
 | T6 | S6 | Manga ranking discovery: task/config/policy, service, processor, insert-unknown SQL, repository, README, unit + integration tests | worker | pending (uncommitted) |
 
 ## Log
@@ -88,3 +101,6 @@ Rollout: Mode A locally first, then `promote` (L2).
 - **L6** — Re-verify FAIL: the untargeted `ON CONFLICT DO NOTHING` in `insertMissingBatch` changed DEFAULT promote — with a target sequence behind `max(id)` a media row was silently dropped and reported as identical (baseline aborted on `anime_media_pkey`). Fixed: plain INSERT counted with `rowCount` (no `RETURNING id`), so `--insert-only` works on tables without `id` and default promote fails loudly as before. Regression test added (RED at 24a8d15, GREEN now). Integration 51/51.
 - **L7** — S6 (PR 2, manga) implemented test-first. RED observed: `tests/malMangaDiscovery.test.ts` failed on the missing `repositories/mal/mangaDiscoverySql.js` module. Choice: only `bypopularity` — the manga ranking has no `upcoming`/`publishing`, so a full sweep is unavoidable; `bypopularity` orders by members, not score, so an unscored new title is still listed (assumption, not verified end-to-end). Weekly (7 d − 4 h). Minimal rows reuse `processMalManga` for the type/status/year vocabulary; insert is `ON CONFLICT (mal_id) DO NOTHING` (targeted, L6). The DERIVED `malManga`/`malMangaCharacters`/`malMangaPage` already run after listing in `runDiscovery`. Integration on `scraper_mdisc_scratch` (dropped afterwards): 52/52 pass. Live check: 2 MAL requests used; page offset 0 returned 500 nodes; the offset-80000 probe result and the unknown-to-local count were lost because the script crashed on the local DB (`scraper_local` does not exist under the default URL), so the total request count (~150) is still an estimate.
 - **L8** — Independent verify of S6 (8450478): PASS (minimal rows, targeted ON CONFLICT, existing rows untouched, real insert count, anime requests identical after the page/loop split, weekly policy without re-arm loop, derived seeding after listing). Advisories: README request-time claim corrected (no per-page throttle); single-task sweep can approach the 600 s discover deadline if MAL is slow (retries whole).
+- **L9** — Defect (parent, local DB, no proxies, `FETCH_TIMEOUT_MS=8000`): the single-task manga sweep hit `Timeout after 20000ms` at offset 44,500, failed whole, discarded ~90 fetched pages and restarted at 0; in production it (and the 4 anime discovery tasks) ended stuck `in_progress`. User, while this was found: "podemos usar los proxies en prod para hidratar ?" (not addressed here). Fix (S6 amendment): pure `runMangaSweep` (per-page save, cursor in payload via `taskRepository.mergeTaskPayload`, per-page retry with backoff, 40 pages/180 s per attempt); unfinished attempt returns a `TaskContinuation` that the GenericManager releases to `pending` (`releaseTasks`, no attempt consumed, not a failure). RED observed: `tests/malMangaSweep.test.ts` missing module; integration fetched all pages in one attempt (`[0, 500]` expected, 6 received). Anime URL test passed before and after the change.
+- **L10** — User: "no podemos cambiar la estrategia siento que es muy lento incluso sin proxies ya que las proxies son un free tier de 7 dias asi que para un futuro no nos sirve tener los animes desactualizados por mucho tiempo" → chose "Las 3 partes, en orden". Part 2: `malDiscovery` joins the hot group and the anime discovery task types refresh every 3 h (season + airing/upcoming rankings patch status/episodes/dates of every airing or upcoming anime in ~15 requests); the manga sweep stays weekly. New titles found by a hot drain get their derived tasks at the next daily discover. Part 1 (schedule budgets/cadence) is applied by the maintainer in Dokploy.
+- **L11** — Verify of 9ae168e + 8328333: PASS points 1–4 (continuation isolated, cursor resume/reset/merge, anime URLs unchanged, no re-arm loop). FAIL point 5 (B1): DB `task_policy` rows win over code and `db:seed-policy` does not overwrite, so existing 20 h rows keep the old cadence — README now documents the one-time UPDATE to 10800 s. Advisories noted: an attempt that starts before the deadline may overrun it by ~180 s + one page; final Saved line counts the last attempt only.

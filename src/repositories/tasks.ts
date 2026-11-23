@@ -289,6 +289,23 @@ export const taskRepository = {
   },
 
   /**
+   * Fusiona `patch` en el payload de una tarea (jsonb `||`): el resto de
+   * claves se conserva. Lo usa el barrido de manga para su cursor (S6, L9).
+   * El initializer (`createManyTasks`, DO NOTHING) nunca lo pisa.
+   */
+  async mergeTaskPayload(
+    taskId: number,
+    patch: Record<string, unknown>
+  ): Promise<void> {
+    await db.execute(sql`
+      UPDATE ingest.task
+      SET payload = coalesce(payload, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb,
+          updated_at = now()
+      WHERE id = ${taskId}
+    `)
+  },
+
+  /**
    * Re-encola `dead_letter` por causas **transitorias** (timeout, conexión,
    * bloqueo, rate limit, lease): no son huecos reales y no deben quedarse
    * muertas tras una caída de la fuente.

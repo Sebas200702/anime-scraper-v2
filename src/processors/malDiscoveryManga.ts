@@ -18,11 +18,13 @@ export interface MinimalMangaRow {
  * `processMalManga` de la ficha (tipo `media_type` o `'manga'`, estado y año
  * de MAL), así el vocabulario no diverge. Los nodos sin título se omiten:
  * `title` es NOT NULL y no se inventa. Un id repetido cuenta una vez.
+ * `inserted` (barrido por tramos, L9) son las filas que el servicio ya guardó
+ * página a página; se arrastra para que el guardado final las cuente.
  */
 export const processMalDiscoveryMangaRanking = (
-  raw: { nodes?: MalMangaNode[] },
+  raw: { nodes?: MalMangaNode[]; inserted?: number },
   task: ScrapingTask
-): { rows: MinimalMangaRow[] } => {
+): { rows: MinimalMangaRow[]; inserted?: number } => {
   const rows = new Map<number, MinimalMangaRow>()
   for (const node of raw.nodes ?? []) {
     const title = node?.title?.trim()
@@ -38,5 +40,7 @@ export const processMalDiscoveryMangaRanking = (
       year: manga.year,
     })
   }
-  return { rows: [...rows.values()] }
+  return raw.inserted === undefined
+    ? { rows: [...rows.values()] }
+    : { rows: [...rows.values()], inserted: raw.inserted }
 }

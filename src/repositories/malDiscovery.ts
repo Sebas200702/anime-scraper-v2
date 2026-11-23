@@ -19,15 +19,16 @@ export const malDiscoveryRepository = {
 
   /**
    * Ranking de manga (S6): solo inserta los ids desconocidos; los existentes
-   * no se tocan (su ficha la mantiene `malManga`). Devuelve los insertados.
+   * no se tocan (su ficha la mantiene `malManga`). Devuelve los insertados,
+   * más los que el barrido ya guardó página a página (`inserted`, L9).
    */
   async saveMalDiscoveryMangaRanking(
-    results: { rows?: MinimalMangaRow[] }[]
+    results: { rows?: MinimalMangaRow[]; inserted?: number }[]
   ): Promise<number> {
     const rows = new Map<number, MinimalMangaRow>()
     for (const row of results.flatMap((r) => r.rows ?? []))
       if (!rows.has(row.malId)) rows.set(row.malId, row)
-    let inserted = 0
+    let inserted = results.reduce((sum, r) => sum + (r.inserted ?? 0), 0)
     // 7 parámetros por fila: lotes muy por debajo del límite de Postgres.
     for (const batch of chunk([...rows.values()], 1_000)) {
       const result = await db.execute(insertUnknownMangaSql(batch))

@@ -442,11 +442,12 @@ export const REFRESH_POLICY: Record<string, RefreshPolicy> = {
   // Bulks: una tarea por ranking/año, baratas de repetir.
   anime_mal_ranking_hydration: { cold: 7 * 86400, hot: 7 * 86400 },
   anilist_year_hydration: { cold: 30 * 86400, hot: 30 * 86400 },
-  // Descubrimiento (malDiscovery): diario aunque no haya anime hot. 20 h (no
-  // 24 h) para que el discover diario (cron 03:00) siempre las encuentre
-  // vencidas aunque la corrida anterior terminara un poco más tarde.
-  anime_mal_discovery_season_hydration: { cold: 20 * 3600, hot: 20 * 3600 },
-  anime_mal_discovery_ranking_hydration: { cold: 20 * 3600, hot: 20 * 3600 },
+  // Descubrimiento (malDiscovery): también corre en el grupo hot, así que las
+  // tareas de anime vencen cada 3 h; el discover diario las sigue drenando.
+  // Cada 3 h desde el grupo hot: ~15 requests traen estado/episodios/fechas de
+  // todo lo que está en emisión o por estrenarse (refresco masivo, no por ficha).
+  anime_mal_discovery_season_hydration: { cold: 3 * 3600, hot: 3 * 3600 },
+  anime_mal_discovery_ranking_hydration: { cold: 3 * 3600, hot: 3 * 3600 },
   // Manga nuevos (S6): aparecen despacio y el barrido es completo (~150
   // requests), así que semanal. 7 d − 4 h por la misma razón que las 20 h:
   // con 7 d justos el discover diario lo encontraría vencido al octavo día.

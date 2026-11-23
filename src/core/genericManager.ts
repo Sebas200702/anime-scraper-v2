@@ -13,6 +13,7 @@ import { sanitizeError } from '../utils/sanitizeError.js'
 import { FetchError } from '../libs/httpError.js'
 import { SkippedTaskError } from '../libs/skippedTaskError.js'
 import { takeDeferredDependencies } from '../shared/dependencyTracker.js'
+import { TaskContinuation } from '../shared/taskContinuation.js'
 import type {
   ScrapingTask,
   SourceConfig,
@@ -207,6 +208,8 @@ export class GenericManager {
     }
 
     const rawData = await fetchFn(task, proxyUrl)
+    // Tramo de un barrido sin terminar: no hay nada que mapear ni guardar.
+    if (rawData instanceof TaskContinuation) return rawData
     return await processFn(rawData, task)
   }
 
@@ -413,6 +416,13 @@ export class GenericManager {
   // --- Buffering & Saving ---
 
   async processWorkerData(task: ScrapingTask, data: any) {
+    // Avanzó sin terminar (el servicio ya guardó su tramo y su cursor): vuelve
+    // a `pending` sin consumir intento en vez de completarse con su política.
+    if (data instanceof TaskContinuation) {
+      await taskRepository.releaseTasks([task.id])
+      console.log(`↪️  ${task.entityId}: ${data.note}; sigue pendiente`)
+      return
+    }
     const refreshSeconds = await this.refreshSecondsForTask(task)
     // Un processor sin resultados no es un fallo: la tarea se completa con 0
     // items y se programa su refresh por política (airing vs. nunca).
