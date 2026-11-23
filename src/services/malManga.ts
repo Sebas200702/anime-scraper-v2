@@ -40,6 +40,8 @@ const MANGA_FIELDS = [
   'theme',
   'popularity',
   'members',
+  'num_list_users',
+  'num_scoring_users',
   'mean',
   'scoring_type',
 ].join(',')
@@ -85,6 +87,9 @@ export interface MalMangaNode {
   theme?: { id: number; name: string; category?: string }[]
   popularity?: number
   members?: number
+  /** Miembros en la API v2 (`members` no existe ahí). */
+  num_list_users?: number
+  num_scoring_users?: number
   mean?: number
 }
 

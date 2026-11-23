@@ -4,8 +4,8 @@ import type { MinimalMangaRow } from '../../processors/malDiscoveryManga.js'
 /**
  * INSERT de manga desconocidos (S6). `ON CONFLICT (mal_id) DO NOTHING`
  * dirigido a la clave: una fila existente nunca se pisa y cualquier otro
- * error (otra restricción) sigue fallando fuerte. La ficha completa la trae
- * después `malManga`.
+ * error (otra restricción) sigue fallando fuerte. `RETURNING` dice qué ids
+ * se insertaron de verdad, para aplicarles la ficha del ranking (L12).
  */
 export const insertUnknownMangaSql = (rows: MinimalMangaRow[]): SQL => {
   const values = sql.join(
@@ -19,5 +19,6 @@ export const insertUnknownMangaSql = (rows: MinimalMangaRow[]): SQL => {
     INSERT INTO manga (mal_id, title, type, status, chapters, volumes, year)
     VALUES ${values}
     ON CONFLICT (mal_id) DO NOTHING
+    RETURNING mal_id
   `
 }
