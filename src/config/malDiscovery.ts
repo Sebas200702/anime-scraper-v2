@@ -10,6 +10,9 @@ export const MAL_DISCOVERY_SOURCE = 'malDiscovery'
 export const MAL_DISCOVERY_SEASON_TASK = 'anime_mal_discovery_season_hydration'
 export const MAL_DISCOVERY_RANKING_TASK =
   'anime_mal_discovery_ranking_hydration'
+/** Manga nuevos (S6): ranking de manga de la MAL API v2, semanal. */
+export const MAL_DISCOVERY_MANGA_RANKING_TASK =
+  'manga_mal_discovery_ranking_hydration'
 
 export interface MalDiscoveryTask {
   source: string
@@ -46,4 +49,12 @@ export const MAL_DISCOVERY_TASKS: readonly MalDiscoveryTask[] = [
   task('mal_discovery_ranking_airing', MAL_DISCOVERY_RANKING_TASK, {
     rankingType: 'airing',
   }),
+  // `bypopularity` ordena por miembros, no por nota: un título nuevo (sin
+  // score todavía) entra igual, al final. El ranking de manga no tiene
+  // `upcoming`/`publishing`, así que el barrido completo es la única forma.
+  task(
+    'mal_discovery_manga_ranking_bypopularity',
+    MAL_DISCOVERY_MANGA_RANKING_TASK,
+    { rankingType: 'bypopularity' }
+  ),
 ]

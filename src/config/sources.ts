@@ -124,7 +124,8 @@ export const SOURCES: SourceConfig[] = [
     name: 'malDiscovery',
     // Descubrimiento sin Jikan: temporada actual/siguiente y rankings
     // `upcoming`/`airing` de la MAL API v2 (500 por request). 4 tareas al día;
-    // los ids desconocidos entran como filas mínimas de `anime` (S1).
+    // los ids desconocidos entran como filas mínimas de `anime` (S1). Más el
+    // ranking de manga semanal, que inserta filas mínimas de `manga` (S6).
     maxWorkers: 4,
     pageBatch: 50,
     taskBatchSize: 50,
@@ -136,6 +137,11 @@ export const SOURCES: SourceConfig[] = [
       },
       anime_mal_discovery_ranking_hydration: {
         entity: 'malDiscoveryRanking',
+        needsPayload: true,
+      },
+      // Manga nuevos (S6): ranking `bypopularity` de manga, semanal.
+      manga_mal_discovery_ranking_hydration: {
+        entity: 'malDiscoveryMangaRanking',
         needsPayload: true,
       },
     },
@@ -441,6 +447,13 @@ export const REFRESH_POLICY: Record<string, RefreshPolicy> = {
   // vencidas aunque la corrida anterior terminara un poco más tarde.
   anime_mal_discovery_season_hydration: { cold: 20 * 3600, hot: 20 * 3600 },
   anime_mal_discovery_ranking_hydration: { cold: 20 * 3600, hot: 20 * 3600 },
+  // Manga nuevos (S6): aparecen despacio y el barrido es completo (~150
+  // requests), así que semanal. 7 d − 4 h por la misma razón que las 20 h:
+  // con 7 d justos el discover diario lo encontraría vencido al octavo día.
+  manga_mal_discovery_ranking_hydration: {
+    cold: (7 * 24 - 4) * 3600,
+    hot: (7 * 24 - 4) * 3600,
+  },
 
   // Reparto profundo, música, manga y personas: no sensibles a emisión.
   media_anilist_details_hydration: { cold: 365 * 86400, hot: null },

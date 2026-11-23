@@ -6,3 +6,5 @@ import { processMalRanking } from './mal.js'
  */
 export const processMalDiscoverySeason = processMalRanking
 export const processMalDiscoveryRanking = processMalRanking
+/** Ranking de manga (S6): filas mínimas de `manga`. */
+export { processMalDiscoveryMangaRanking } from './malDiscoveryManga.js'

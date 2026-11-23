@@ -97,12 +97,16 @@ describe('S2 · temporadas de MAL (límites de año)', () => {
 })
 
 describe('S2 · tareas y URLs de malDiscovery', () => {
-  test('siembra temporada actual/siguiente y rankings upcoming/airing', () => {
+  test('siembra temporada actual/siguiente, rankings upcoming/airing y manga (S6)', () => {
     expect(MAL_DISCOVERY_TASKS.map((t) => [t.entityId, t.payload])).toEqual([
       ['mal_discovery_season_current', { seasonOffset: 0 }],
       ['mal_discovery_season_next', { seasonOffset: 1 }],
       ['mal_discovery_ranking_upcoming', { rankingType: 'upcoming' }],
       ['mal_discovery_ranking_airing', { rankingType: 'airing' }],
+      [
+        'mal_discovery_manga_ranking_bypopularity',
+        { rankingType: 'bypopularity' },
+      ],
     ])
     for (const t of MAL_DISCOVERY_TASKS) expect(t.source).toBe('malDiscovery')
   })

@@ -33,6 +33,18 @@ Rollout: Mode A locally first, then `promote` (L2).
   newer target values), the first-run burst, and that the weekly `mal`
   rankings (`all`/`bypopularity`/`favorite`) also insert unknown ids directly
   in production after deploy.
+- **S6** (PR 2, branch `feat/mal-manga-discovery`) New manga without Jikan:
+  `malDiscovery` gets task type `manga_mal_discovery_ranking_hydration` (one
+  task, `mal_discovery_manga_ranking_bypopularity`) fetching
+  `manga/ranking?ranking_type=bypopularity&limit=500&offset=…&fields=id,title,media_type,status,num_chapters,num_volumes,start_date&nsfw=true`,
+  paging until a short page, refreshed weekly (7 d − 4 h, same margin
+  reasoning as the 20 h). Unknown ids are inserted as minimal `manga` rows
+  (`mal_id`, `title`, `type` = `media_type` or `'manga'`, `status`,
+  `chapters`, `volumes`, `year`, mapped through `processMalManga`) with
+  `ON CONFLICT (mal_id) DO NOTHING` (targeted: other errors stay loud, L6);
+  existing rows are never touched; nodes without title are skipped. The
+  DERIVED `malManga`/`malMangaCharacters`/`malMangaPage` initializers seed the
+  new ids in the same `--discover` run. README documents it.
 
 ## Tasks
 
@@ -43,6 +55,7 @@ Rollout: Mode A locally first, then `promote` (L2).
 | T3 | S3, S4 | Listing/derived split, discovery ordering, missing-client-id warning (run, report, /stats) | worker | pending (uncommitted) |
 | T4 | S5 | README | worker | pending (uncommitted) |
 | T5 | — | Verify (`bun test`, tsc, build, integration on a throwaway DB, live check) | worker | pending (uncommitted) |
+| T6 | S6 | Manga ranking discovery: task/config/policy, service, processor, insert-unknown SQL, repository, README, unit + integration tests | worker | pending (uncommitted) |
 
 ## Log
 
@@ -73,3 +86,4 @@ Rollout: Mode A locally first, then `promote` (L2).
   corrected. Results: `bun test` 271 pass / 70 skip / 0 fail; tsc OK; build OK;
   integration 50 pass (scratch `scraper_io_scratch`, dropped afterwards).
 - **L6** — Re-verify FAIL: the untargeted `ON CONFLICT DO NOTHING` in `insertMissingBatch` changed DEFAULT promote — with a target sequence behind `max(id)` a media row was silently dropped and reported as identical (baseline aborted on `anime_media_pkey`). Fixed: plain INSERT counted with `rowCount` (no `RETURNING id`), so `--insert-only` works on tables without `id` and default promote fails loudly as before. Regression test added (RED at 24a8d15, GREEN now). Integration 51/51.
+- **L7** — S6 (PR 2, manga) implemented test-first. RED observed: `tests/malMangaDiscovery.test.ts` failed on the missing `repositories/mal/mangaDiscoverySql.js` module. Choice: only `bypopularity` — the manga ranking has no `upcoming`/`publishing`, so a full sweep is unavoidable; `bypopularity` orders by members, not score, so an unscored new title is still listed (assumption, not verified end-to-end). Weekly (7 d − 4 h). Minimal rows reuse `processMalManga` for the type/status/year vocabulary; insert is `ON CONFLICT (mal_id) DO NOTHING` (targeted, L6). The DERIVED `malManga`/`malMangaCharacters`/`malMangaPage` already run after listing in `runDiscovery`. Integration on `scraper_mdisc_scratch` (dropped afterwards): 52/52 pass. Live check: 2 MAL requests used; page offset 0 returned 500 nodes; the offset-80000 probe result and the unknown-to-local count were lost because the script crashed on the local DB (`scraper_local` does not exist under the default URL), so the total request count (~150) is still an estimate.

@@ -34,8 +34,9 @@ describe('S2/S3 · malDiscovery como fuente de listado', () => {
     expect(types).toEqual([
       'anime_mal_discovery_season_hydration',
       'anime_mal_discovery_ranking_hydration',
+      'manga_mal_discovery_ranking_hydration', // S6: semanal, ver su test
     ])
-    for (const type of types)
+    for (const type of types.filter((t) => t.startsWith('anime_')))
       expect(REFRESH_POLICY[type]).toEqual({
         cold: 20 * 3600,
         hot: 20 * 3600,
