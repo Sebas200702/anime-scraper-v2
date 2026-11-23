@@ -196,4 +196,44 @@ describe.skipIf(!RUN)('promote --insert-only (dos DBs)', () => {
       expect(table.updated).toBe(0)
     }
   })
+
+  test('el promote por defecto no pierde en silencio una fila de media ante un choque de PK', async () => {
+    const LAG = 991003
+    for (const pool of [source, target]) {
+      await pool.query(
+        `INSERT INTO anime (mal_id, title) VALUES ($1, 'Lag') ON CONFLICT DO NOTHING`,
+        [LAG]
+      )
+    }
+    // Destino con la secuencia atrasada: la próxima id ya está ocupada.
+    const { rows: next } = await target.query(
+      `SELECT nextval(pg_get_serial_sequence('anime_media', 'id'))::int AS id`
+    )
+    await target.query(
+      `SELECT setval(pg_get_serial_sequence('anime_media', 'id'), $1, false)`,
+      [next[0].id]
+    )
+    await target.query(
+      `INSERT INTO anime_media (id, anime_id, media_type, src)
+       VALUES ($1, $2, 'poster', 'http://x/lag.jpg')`,
+      [next[0].id, LAG]
+    )
+    await source.query(
+      `INSERT INTO anime_media (anime_id, media_type, src)
+       VALUES ($1, 'banner', 'http://x/lag2.jpg')`,
+      [LAG]
+    )
+    const plan = PROMOTION_PLAN.filter((step) => step.table === 'anime_media')
+    let failed = ''
+    try {
+      await promote({ source, target, plan, log: () => {} })
+    } catch (error) {
+      failed = (error as Error).message
+    }
+    const { rows } = await target.query(
+      `SELECT count(*)::int AS n FROM anime_media WHERE src = 'http://x/lag2.jpg'`
+    )
+    // O falla de forma visible, o la fila quedó escrita: nunca "idéntica" y perdida.
+    expect(failed.includes('anime_media_pkey') || rows[0].n === 1).toBe(true)
+  })
 })

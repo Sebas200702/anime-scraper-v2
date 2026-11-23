@@ -72,3 +72,4 @@ Rollout: Mode A locally first, then `promote` (L2).
   `saveMalRanking` counts each node once; incremental `notes.warnings` comment
   corrected. Results: `bun test` 271 pass / 70 skip / 0 fail; tsc OK; build OK;
   integration 50 pass (scratch `scraper_io_scratch`, dropped afterwards).
+- **L6** — Re-verify FAIL: the untargeted `ON CONFLICT DO NOTHING` in `insertMissingBatch` changed DEFAULT promote — with a target sequence behind `max(id)` a media row was silently dropped and reported as identical (baseline aborted on `anime_media_pkey`). Fixed: plain INSERT counted with `rowCount` (no `RETURNING id`), so `--insert-only` works on tables without `id` and default promote fails loudly as before. Regression test added (RED at 24a8d15, GREEN now). Integration 51/51.

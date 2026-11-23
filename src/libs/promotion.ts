@@ -546,14 +546,12 @@ const insertMissingBatch = async (
     return `(${placeholders.join(', ')})`
   })
 
-  // `ON CONFLICT DO NOTHING` sin target: si otra escritura del destino metió
-  // la misma clave entre el SELECT y este INSERT, la fila se omite en vez de
-  // romper la transacción (cualquier índice único, no solo la clave del paso).
-  // Se cuenta con `rowCount`: no exige columna `id` y solo suma lo insertado.
+  // Se cuenta con `rowCount` (no exige columna `id`). Sin `ON CONFLICT`: un
+  // choque inesperado (p. ej. secuencia atrasada en el destino) aborta la
+  // transacción en vez de perder la fila en silencio.
   const result = await client.query(
     `INSERT INTO ${quote(table)} (${columns.map(quote).join(', ')})
-     VALUES ${tuples.join(', ')}
-     ON CONFLICT DO NOTHING`,
+     VALUES ${tuples.join(', ')}`,
     values
   )
   const inserted = result.rowCount ?? 0
