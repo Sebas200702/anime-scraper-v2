@@ -123,6 +123,11 @@ export interface SourceConfig {
   /** Max tasks to load per batch iteration (default: 2000) */
   taskBatchSize?: number
   pageBatch: number
+  /**
+   * Tareas del mismo taskType por request (T11). Requiere
+   * `fetch{Entity}Batch` en el servicio. Sin valor: una tarea por request.
+   */
+  fetchBatchSize?: number
   rateLimit: { perSecond?: number; perMinute: number }
   deduplicateBy?: string | null
   tasks: {

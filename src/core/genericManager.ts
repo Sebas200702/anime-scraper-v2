@@ -4,6 +4,7 @@ import { proxyManager } from './proxyManager.js'
 import { RateGate } from './rateGate.js'
 import { proxyKey } from './rateGate.js'
 import { TaskDispatcher, type DispatcherTask } from './taskDispatcher.js'
+import { runBatchFetch } from './batchResults.js'
 import { SINGLE_IP_SOURCES, SOURCE_HOSTS } from '../config/sources.js'
 import { KEY_SCOPED_HOSTS } from '../config/sources.js'
 import type { RefreshPolicy } from '../config/sources.js'
@@ -215,6 +216,22 @@ export class GenericManager {
     return await processFn(rawData, task)
   }
 
+  /**
+   * Fetch por lotes (T11, `fetchBatchSize`): un request para el grupo (mismo
+   * taskType) y el mapeo de cada crudo con su tarea.
+   */
+  private async runTaskBatch(tasks: ScrapingTask[], proxyUrl?: string) {
+    const taskType = tasks[0]?.taskType ?? ''
+    const entity = this.sourceConfig?.tasks[taskType]?.entity
+    if (!entity) throw new Error(`Unknown taskType: ${taskType}`)
+    return runBatchFetch(
+      await this.getModules(),
+      { entity, source: this.source },
+      tasks,
+      proxyUrl
+    )
+  }
+
   async init(): Promise<RunSummary> {
     this.reporter.reset()
     await this.getRepository()
@@ -276,6 +293,8 @@ export class GenericManager {
       gate: rateGate,
       // Una fuente caída no quema el presupuesto de las demás.
       maxConsecutiveFailures: 10,
+      // T11: N tareas por request; el gate y el breaker cuentan el request.
+      fetchBatchSize: this.sourceConfig?.fetchBatchSize,
       acquireProxy: () =>
         singleIp
           ? undefined
@@ -347,6 +366,10 @@ export class GenericManager {
               // Ya está claimada con lease: se ejecuta y nada más.
               return await this.runTask(task as ScrapingTask, proxyUrl)
             },
+            runBatch: this.sourceConfig?.fetchBatchSize
+              ? (tasks, proxyUrl) =>
+                  this.runTaskBatch(tasks as ScrapingTask[], proxyUrl)
+              : undefined,
             onDone: (task, data) =>
               this.processWorkerData(task as ScrapingTask, data),
             onError: async (task, error) => {
