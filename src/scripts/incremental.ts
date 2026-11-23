@@ -9,7 +9,11 @@ import { getSourceConfig } from '../config/sources.js'
 import { GenericManager, type RunSummary } from '../core/genericManager.js'
 import { closeDb, pool } from '../libs/db.js'
 import { taskRepository } from '../repositories/tasks.js'
-import { DERIVED_SOURCES, INITIALIZERS } from './initializers.js'
+import {
+  DERIVED_SOURCES,
+  INITIALIZERS,
+  LISTING_SOURCES,
+} from './initializers.js'
 
 /**
  * Modo B — actualización incremental sin ingesta completa.
@@ -178,11 +182,15 @@ const discover = async (args: Args, deadline: number): Promise<RunSummary> => {
   const total = emptySummary()
 
   // 1) Listado: solo páginas nuevas (delta por cursor). Sin re-barrido.
+  // Fuentes de listado retiradas (Jikan caído) no se listan ni se drenan.
   console.log('\n── discovery: listado (páginas nuevas) ──')
-  await INITIALIZERS.jikan?.()
+  for (const source of LISTING_SOURCES) await INITIALIZERS[source]?.()
+  if (LISTING_SOURCES.length === 0)
+    console.log('   (sin fuentes de listado activas: Jikan retirado)')
 
   // 2) Drenar esas páginas para que existan las filas `anime` nuevas.
-  addSummary(total, await drainSources(['jikan'], args, deadline))
+  if (LISTING_SOURCES.length > 0)
+    addSummary(total, await drainSources(LISTING_SOURCES, args, deadline))
 
   // 3) Sembrar derivados: los anime recién creados reciben sus tareas.
   console.log('\n── discovery: tareas derivadas ──')
@@ -232,7 +240,10 @@ const main = async () => {
     if (args.mode === 'discover') {
       total = await discover(args, deadline)
     } else {
-      addSummary(total, await drainSources(sourcesForGroup(args), args, deadline))
+      addSummary(
+        total,
+        await drainSources(sourcesForGroup(args), args, deadline)
+      )
     }
   } finally {
     await taskRepository.finishRun(runId, {

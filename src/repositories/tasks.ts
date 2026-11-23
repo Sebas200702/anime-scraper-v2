@@ -1,3 +1,4 @@
+import { requeueTransientSql } from './tasks/requeueSql.js'
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { CONFIG } from '../config/config.js'
 import { REFRESH_POLICY, type RefreshPolicy } from '../config/sources.js'
@@ -293,18 +294,7 @@ export const taskRepository = {
    * muertas tras una caída de la fuente.
    */
   async requeueTransientDeadLetters(limit = 5000): Promise<number> {
-    const result = await db.execute(sql`
-      UPDATE ingest.task
-      SET status = 'pending', scheduled_at = now(), attempts = 0,
-          leased_until = NULL, updated_at = now()
-      WHERE id IN (
-        SELECT id FROM ingest.task
-        WHERE status = 'dead_letter'
-          AND last_error ~* '(timeout|timed out|ECONN|socket|blocked|rate.?limit|lease|fetch failed|network)'
-        ORDER BY updated_at ASC
-        LIMIT ${limit}
-      )
-    `)
+    const result = await db.execute(requeueTransientSql(limit))
     return result.rowCount ?? 0
   },
 
