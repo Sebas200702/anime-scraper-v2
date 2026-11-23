@@ -17,8 +17,9 @@ const KNOWN = 997101
 const UNKNOWN = 997102
 const UNTITLED = 997103
 const RICH = 997104
+const KEPT = 997105
 const IDS = sql.join(
-  [KNOWN, UNKNOWN, UNTITLED, RICH].map((id) => sql`${id}`),
+  [KNOWN, UNKNOWN, UNTITLED, RICH, KEPT].map((id) => sql`${id}`),
   sql`, `
 )
 
@@ -79,10 +80,12 @@ describe.skipIf(!RUN)('malDiscovery · ranking de manga (Postgres)', () => {
     })
     expect(inserted).toBe(1)
 
+    // T10 (L16): el conocido conserva título y tipo; solo su estado sigue al
+    // valor no nulo de MAL (antes de T10 quedaba 'finished').
     expect(await row(KNOWN)).toEqual({
       title: 'Título Local',
       type: 'manhwa',
-      status: 'finished',
+      status: 'x',
       chapters: null,
       volumes: null,
       year: null,
@@ -117,7 +120,7 @@ describe.skipIf(!RUN)('malDiscovery · ranking de manga (Postgres)', () => {
     ])
   })
 
-  test('L12: el nuevo entra con la ficha del ranking; el conocido no recibe nada', async () => {
+  test('L12: el nuevo entra con la ficha del ranking; el conocido solo se refresca (T10)', async () => {
     await cleanup()
     await db.execute(
       sql`INSERT INTO manga (mal_id, title, type, status, synopsis)
@@ -183,17 +186,191 @@ describe.skipIf(!RUN)('malDiscovery · ranking de manga (Postgres)', () => {
     expect(await count('manga_genre', RICH)).toBe(1)
     expect(await count('manga_title_synonym', RICH)).toBe(3)
 
-    // El conocido queda exactamente como estaba: ni fila ni junctions.
+    // T10 (L16) cambia lo que antes era "no recibe nada": título, tipo y
+    // sinopsis existentes se conservan; capítulos/volúmenes (stats no nulas de
+    // MAL) y el año (NULL) se completan, y como no tenía portada, géneros ni
+    // sinónimos, los recibe.
     expect(await row(KNOWN)).toEqual({
       title: 'Título Local',
       type: 'manhwa',
       status: 'finished',
-      chapters: null,
-      volumes: null,
-      year: null,
+      chapters: 40,
+      volumes: 5,
+      year: 2020,
       synopsis: 'Sinopsis',
     })
-    for (const table of ['manga_media', 'manga_genre', 'manga_title_synonym'])
-      expect(await count(table, KNOWN)).toBe(0)
+    expect(await count('manga_media', KNOWN)).toBe(2)
+    expect(await count('manga_genre', KNOWN)).toBe(1)
+    expect(await count('manga_title_synonym', KNOWN)).toBe(3)
+  })
+
+  test('T10: refresca los existentes sin pisar lo protegido y es idempotente', async () => {
+    await cleanup()
+    await db.execute(
+      sql`INSERT INTO genre (mal_id, name) VALUES (2, 'Adventure')
+          ON CONFLICT (mal_id) DO NOTHING`
+    )
+    await db.execute(
+      sql`INSERT INTO manga (mal_id, title, type, title_english, status,
+                             chapters, score, scored_by, members,
+                             popularity_rank, ranking, favorites, background,
+                             source, serialization)
+          VALUES (${KNOWN}, 'Título Local', 'manhwa', 'Local EN', 'publishing',
+                  5, 6.5, 3, 10, 99, 77, 8, 'BG', 'Fuente', 'Revista'),
+                 (${KEPT}, 'Conservado', 'manga', NULL, 'publishing',
+                  12, 8.25, 20, 30, 40, NULL, NULL, NULL, NULL, NULL)`
+    )
+    await db.execute(
+      sql`UPDATE manga SET synopsis = 'Existente' WHERE mal_id = ${KEPT}`
+    )
+    await db.execute(
+      sql`INSERT INTO manga_media (manga_id, media_type, src, size, source, priority)
+          VALUES (${KEPT}, 'cover', 'https://local/kept.jpg', 'large', 'anilist', 10)`
+    )
+    await db.execute(
+      sql`INSERT INTO manga_genre (manga_id, genre_id) VALUES (${KEPT}, 2)`
+    )
+    await db.execute(
+      sql`INSERT INTO manga_title_synonym (manga_id, title)
+          VALUES (${KEPT}, 'Sinónimo Local')`
+    )
+    const page = {
+      nodes: [
+        {
+          id: KNOWN,
+          title: 'Título MAL',
+          main_picture: { large: `https://cdn.test/${KNOWN}l.jpg` },
+          alternative_titles: { en: 'MAL EN', ja: 'ジャ', synonyms: ['S1'] },
+          start_date: '2019-06-07',
+          synopsis: 'Del ranking',
+          media_type: 'manga',
+          status: 'finished',
+          genres: [{ id: 1, name: 'Action' }],
+          num_chapters: 50,
+          num_volumes: 6,
+          popularity: 12,
+          num_list_users: 9000,
+          mean: 7.75,
+          num_scoring_users: 800,
+        },
+        {
+          id: KEPT,
+          title: 'Otro Título',
+          main_picture: { large: `https://cdn.test/${KEPT}l.jpg` },
+          alternative_titles: { synonyms: ['Nuevo Sinónimo'] },
+          synopsis: 'No debe entrar',
+          status: 'finished',
+          genres: [{ id: 1, name: 'Action' }],
+          num_list_users: 31,
+        },
+        { id: UNKNOWN, title: 'Manga Nuevo', media_type: 'manga' },
+      ],
+    }
+
+    // Solo cuenta el nuevo: el refresco no altera `inserted`.
+    expect(await save(page)).toBe(1)
+
+    const sheet = async (id: number) =>
+      (
+        await db.execute(
+          sql`SELECT title, type, title_english, title_japanese, synopsis,
+                     status, chapters, volumes, score, scored_by, members,
+                     popularity_rank, ranking, favorites, year, background,
+                     source, serialization,
+                     published_from::date::text AS published_from,
+                     published_to::date::text AS published_to
+              FROM manga WHERE mal_id = ${id}`
+        )
+      ).rows[0]
+    expect(await sheet(KNOWN)).toEqual({
+      title: 'Título Local',
+      type: 'manhwa',
+      title_english: 'Local EN',
+      title_japanese: 'ジャ',
+      synopsis: 'Del ranking',
+      status: 'finished',
+      chapters: 50,
+      volumes: 6,
+      score: 7.75,
+      scored_by: 800,
+      members: 9000,
+      popularity_rank: 12,
+      ranking: 77,
+      favorites: 8,
+      year: 2019,
+      background: 'BG',
+      source: 'Fuente',
+      serialization: 'Revista',
+      published_from: '2019-06-07',
+      published_to: null,
+    })
+    // Score de MAL nulo: se conserva el de la DB; sinopsis existente intacta.
+    expect(await sheet(KEPT)).toEqual({
+      title: 'Conservado',
+      type: 'manga',
+      title_english: null,
+      title_japanese: null,
+      synopsis: 'Existente',
+      status: 'finished',
+      chapters: 12,
+      volumes: null,
+      score: 8.25,
+      scored_by: 20,
+      members: 31,
+      popularity_rank: 40,
+      ranking: null,
+      favorites: null,
+      year: null,
+      background: null,
+      source: null,
+      serialization: null,
+      published_from: null,
+      published_to: null,
+    })
+
+    const junctions = async (id: number) => ({
+      media: (
+        await db.execute(
+          sql`SELECT src, source FROM manga_media WHERE manga_id = ${id} ORDER BY src`
+        )
+      ).rows,
+      genres: (
+        await db.execute(
+          sql`SELECT genre_id FROM manga_genre WHERE manga_id = ${id} ORDER BY genre_id`
+        )
+      ).rows,
+      synonyms: (
+        await db.execute(
+          sql`SELECT title FROM manga_title_synonym WHERE manga_id = ${id} ORDER BY title`
+        )
+      ).rows,
+    })
+    expect(await junctions(KNOWN)).toEqual({
+      media: [{ src: `https://cdn.test/${KNOWN}l.jpg`, source: 'mal' }],
+      genres: [{ genre_id: 1 }],
+      synonyms: [{ title: 'MAL EN' }, { title: 'S1' }, { title: 'ジャ' }],
+    })
+    expect(await junctions(KEPT)).toEqual({
+      media: [{ src: 'https://local/kept.jpg', source: 'anilist' }],
+      genres: [{ genre_id: 2 }],
+      synonyms: [{ title: 'Sinónimo Local' }],
+    })
+    expect((await row(UNKNOWN))?.title).toBe('Manga Nuevo')
+
+    // Segunda pasada idéntica: nada cambia ni se reescribe (hash y xmin).
+    const snapshot = async () =>
+      (
+        await db.execute(
+          sql`SELECT mal_id, md5(m::text) AS hash, xmin::text AS xmin
+              FROM manga m WHERE mal_id IN (${IDS}) ORDER BY mal_id`
+        )
+      ).rows
+    const before = await snapshot()
+    const junctionsBefore = [await junctions(KNOWN), await junctions(KEPT)]
+    expect(await save(page)).toBe(0)
+    expect(await snapshot()).toEqual(before)
+    expect([await junctions(KNOWN), await junctions(KEPT)]).toEqual(
+      junctionsBefore
+    )
   })
 })
