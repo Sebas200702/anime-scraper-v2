@@ -266,11 +266,20 @@ catálogo no tenga (mismo camino de fila mínima), sin pasar por la promoción.
 los campos de la fila mínima (`id,title,media_type,status,num_chapters,num_volumes,start_date`).
 El ranking de manga no tiene `upcoming`/`publishing`, así que se recorre
 entero; `bypopularity` ordena por miembros (no por nota), por eso un título
-nuevo sin score entra igual. Son ~150 requests seguidas (estimado: el bucle de
-páginas no tiene throttle propio; si MAL responde lento puede acercarse al
-deadline del discover y la tarea se reintenta entera), así que se refresca
+nuevo sin score entra igual. Son ~150 requests (estimado), así que se refresca
 **semanal** (7 d − 4 h, para que el discover diario lo encuentre
 vencido al séptimo día).
+
+El barrido es **reanudable**: cada página se guarda al llegar y el cursor
+(siguiente offset) queda en el payload de la tarea (`offset`). Un
+timeout/5xx/error de red reintenta esa página (3 intentos, backoff 2 s y 4 s);
+si aun así falla, la tarea falla con lo ya guardado y el cursor intactos y el
+reintento sigue desde ahí. Cada intento procesa como mucho 40 páginas o 180 s
+(lo primero que llegue; `MANGA_SWEEP_LIMITS` en `src/config/malDiscovery.ts`),
+muy por debajo del deadline del discover (600 s) y del lease (900 s); si no
+terminó, la tarea vuelve a `pending` sin gastar intento y la misma corrida (o
+la siguiente) continúa. Al llegar a la página corta el cursor vuelve a 0 y la
+tarea se completa con el refresco semanal, sin re-armarse antes.
 
 Cada id desconocido con título entra como fila mínima de `manga` (`mal_id`,
 `title`, `type` = `media_type` o `manga`, `status`, `chapters`, `volumes`,

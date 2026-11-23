@@ -14,6 +14,22 @@ export const MAL_DISCOVERY_RANKING_TASK =
 export const MAL_DISCOVERY_MANGA_RANKING_TASK =
   'manga_mal_discovery_ranking_hydration'
 
+/**
+ * Barrido reanudable del ranking de manga (S6, L9). Cada intento procesa como
+ * mucho `pageBudget` páginas o `timeBudgetMs` (lo que llegue antes) y deja el
+ * cursor en el payload; así ningún intento se acerca al deadline del discover
+ * (600 s) ni al lease (900 s): peor caso ≈ 180 s + una página con sus
+ * reintentos (3 × 20 s + 6 s de backoff). Mutable solo para los tests.
+ */
+export const MANGA_SWEEP_LIMITS = {
+  pageBudget: 40,
+  timeBudgetMs: 180_000,
+  /** Intentos por página ante timeout/5xx/red (el fetcher no reintenta). */
+  pageAttempts: 3,
+  /** Backoff exponencial entre intentos de la misma página: 2 s, 4 s… */
+  backoffMs: 2_000,
+}
+
 export interface MalDiscoveryTask {
   source: string
   entityId: string
