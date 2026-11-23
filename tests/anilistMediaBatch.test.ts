@@ -106,16 +106,16 @@ describe('fetchAnilistMediaBatch', () => {
     await expect(fetchBatch()).rejects.toThrow('AniList: Something odd')
   })
 
-  test('HTTP 429 o 400 falla el grupo entero con el FetchError', async () => {
+  test('HTTP 429 o 503 falla el grupo entero con el FetchError (400/404 caen a un medio)', async () => {
     for (const [status, kind] of [
       [429, 'rate_limit'],
-      [400, 'invalid_body'],
+      [503, 'transient'],
     ] as const) {
       resetScript()
       script.batchStatus = status
       const error = await fetchBatch().catch((e) => e)
       expect(error).toBeInstanceOf(FetchError)
-      if (status === 429) expect((error as FetchError).kind).toBe(kind)
+      expect((error as FetchError).kind).toBe(kind)
     }
   })
 })

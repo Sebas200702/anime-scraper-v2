@@ -1,6 +1,7 @@
 import { SOURCE_HOSTS } from '../config/sources.js'
 import { rateGate } from '../core/genericManager.js'
 import { proxyKey } from '../core/rateGate.js'
+import { FetchError } from '../libs/httpError.js'
 import { SkippedTaskError } from '../libs/skippedTaskError.js'
 import type { ProxyTarget } from '../libs/transport.js'
 import type { ScrapingTask } from '../types/index.js'
@@ -47,6 +48,15 @@ const gateFor = (proxy?: ProxyTarget) => async () => {
 const asError = (error: unknown) =>
   error instanceof Error ? error : new Error(String(error))
 
+/**
+ * Un 404/400 del `Page` entero no dice qué medio lo causó (L21 mide que un id
+ * ausente no da 404): en vez de mandar las N tareas a dead_letter, cada una
+ * vuelve al camino de un medio, con su cupo, y conserva su semántica.
+ */
+const isGroupRejection = (error: unknown) =>
+  error instanceof FetchError &&
+  (error.kind === 'not_found' || error.kind === 'invalid_body')
+
 export const fetchAnilistMediaBatch = async (
   tasks: ScrapingTask[],
   proxy?: ProxyTarget
@@ -77,6 +87,15 @@ export const fetchAnilistMediaBatch = async (
         proxy
       )
     } catch (error) {
+      if (isGroupRejection(error)) {
+        for (const { task } of wanted) {
+          out.set(
+            task.id,
+            await fetchMediaDeep(task, proxy, gate).catch(asError)
+          )
+        }
+        continue
+      }
       if (first) throw error
       for (const { task } of wanted) out.set(task.id, asError(error))
       continue

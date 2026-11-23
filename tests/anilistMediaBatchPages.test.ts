@@ -83,4 +83,21 @@ describe('fetchAnilistMediaBatch · páginas y tipos', () => {
       media: deepMedia(200_002),
     })
   })
+
+  for (const status of [404, 400])
+    test(`HTTP ${status} del Page: cada tarea cae al camino de un medio (gateado), no a dead_letter`, async () => {
+      script.batchStatus = status
+      const out = await fetchBatch()
+      const single = requests.filter((r) => !('ids' in r.variables))
+      expect(single.map((r) => r.variables.id)).toEqual([
+        200_001, 200_002, 200_003,
+      ])
+      expect(gate).toHaveBeenCalledTimes(3)
+      for (const [taskId, anilistId] of [
+        [1, 200_001],
+        [2, 200_002],
+        [3, 200_003],
+      ] as const)
+        expect(media(out.get(taskId))).toEqual(deepMedia(anilistId))
+    })
 })
