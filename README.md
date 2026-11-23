@@ -238,6 +238,17 @@ arriba (vista F: cola de `malDiscovery`) y `/stats` lo expone en `warnings`,
 ambos calculados del env (`MAL_CLIENT_ID`). Las tareas siguen
 quedando `skipped` (`missing:MAL_CLIENT_ID`) y se re-arman solas.
 
+**Al pasar de 20 h a 3 h** (cambio de política): `db:seed-policy` no pisa filas
+existentes de `ingest.task_policy`, y la política de la DB manda sobre la del
+código. En una DB que ya tenía las filas de 20 h, actualizalas una vez:
+
+```sql
+UPDATE ingest.task_policy
+SET refresh_interval_seconds = 10800, refresh_interval_airing_seconds = 10800
+WHERE task_type IN ('anime_mal_discovery_season_hydration',
+                    'anime_mal_discovery_ranking_hydration');
+```
+
 **Primera carga (Modo A, local)**: corré el discover contra la base local y
 después promové. La primera corrida es una **ráfaga**: todos los ids que faltan
 entran juntos y siembran sus derivados (ficha MAL, episodios, AniList,
