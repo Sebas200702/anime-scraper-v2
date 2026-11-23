@@ -167,7 +167,9 @@ export const SOURCES: SourceConfig[] = [
     // (`/manga/{id}/_/characters`): mismo camino HTML, cuota y lotes que
     // `malCharacters`. Fuente propia para poder drenarla sola
     // (`--sources=malMangaCharacters`) en la carga inicial.
-    maxWorkers: 30,
+    // Carga inicial con muchos proxies: `MAL_MANGA_CHARACTERS_MAX_WORKERS` sube
+    // las tareas en vuelo; la cuota sigue siendo 1 req/s por IP (RateGate).
+    maxWorkers: Number(process.env.MAL_MANGA_CHARACTERS_MAX_WORKERS) || 30,
     pageBatch: 50,
     taskBatchSize: 200,
     rateLimit: { perSecond: 1, perMinute: 60 },
