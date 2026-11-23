@@ -87,3 +87,46 @@ export const characterExternalMalSql = (ids: number[]): SQL | null => {
       updated_at = EXCLUDED.updated_at
   `
 }
+
+/**
+ * Retratos de MAL de personajes (`character_media`): poster, fuente `mal`,
+ * prioridad 20. Nunca reemplaza una fila existente.
+ */
+export const malCharacterPortraitSql = (
+  rows: { id: number; src: string }[]
+): SQL | null => {
+  if (rows.length === 0) return null
+  return sql`
+        INSERT INTO character_media (character_id, media_type, src, size, source, priority)
+        SELECT v.id, 'poster', v.src, NULL, 'mal', 20
+        FROM (VALUES ${sql.join(
+          rows.map((c) => sql`(${c.id}::int, ${c.src}::text)`),
+          sql`, `
+        )}) AS v(id, src)
+        ON CONFLICT (character_id, media_type, src) DO NOTHING
+      `
+}
+
+/**
+ * Reparto de un manga desde MAL (`manga_character`). Solo inserta: nunca borra
+ * ni pisa los vínculos de AniList. Ids reales de MAL, sin cruce por nombre;
+ * solo filas cuyo manga y personaje existen (FK).
+ */
+export const mangaCharacterLinkSql = (
+  rows: { mangaId: number; characterId: number; role: string }[]
+): SQL | null => {
+  if (rows.length === 0) return null
+  return sql`
+    INSERT INTO manga_character (manga_id, character_id, role)
+    SELECT v.manga_id, v.character_id, v.role
+    FROM (VALUES ${sql.join(
+      rows.map(
+        (r) => sql`(${r.mangaId}::int, ${r.characterId}::int, ${r.role}::text)`
+      ),
+      sql`, `
+    )}) AS v(manga_id, character_id, role)
+    JOIN manga m ON m.mal_id = v.manga_id
+    JOIN character c ON c.mal_id = v.character_id
+    ON CONFLICT DO NOTHING
+  `
+}

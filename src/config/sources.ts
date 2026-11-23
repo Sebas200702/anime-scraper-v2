@@ -162,6 +162,25 @@ export const SOURCES: SourceConfig[] = [
     },
   },
   {
+    name: 'malMangaCharacters',
+    // Reparto por manga desde la página de personajes de MAL
+    // (`/manga/{id}/_/characters`): mismo camino HTML, cuota y lotes que
+    // `malCharacters`. Fuente propia para poder drenarla sola
+    // (`--sources=malMangaCharacters`) en la carga inicial.
+    // Carga inicial con muchos proxies: `MAL_MANGA_CHARACTERS_MAX_WORKERS` sube
+    // las tareas en vuelo; la cuota sigue siendo 1 req/s por IP (RateGate).
+    maxWorkers: Number(process.env.MAL_MANGA_CHARACTERS_MAX_WORKERS) || 30,
+    pageBatch: 50,
+    taskBatchSize: 200,
+    rateLimit: { perSecond: 1, perMinute: 60 },
+    tasks: {
+      manga_mal_characters_hydration: {
+        entity: 'malMangaCharacters',
+        needsPayload: true,
+      },
+    },
+  },
+  {
     name: 'malPerson',
     // Ficha de persona de la API v2 (`/v2/people/{id}`): sirve para el staff
     // **y** para los personajes (en MAL ambos son personas) y trae nombre,
@@ -328,6 +347,10 @@ const BACKFILL_PROFILES: Record<
     maxWorkers: 30,
     rateLimit: { perSecond: 2, perMinute: 120 },
   },
+  malMangaCharacters: {
+    maxWorkers: 30,
+    rateLimit: { perSecond: 2, perMinute: 120 },
+  },
   malPerson: { maxWorkers: 200, rateLimit: { perSecond: 2, perMinute: 120 } },
   anilistMedia: {
     maxWorkers: 200,
@@ -399,6 +422,9 @@ export const REFRESH_POLICY: Record<string, RefreshPolicy> = {
   music_meta_hydration: { cold: null, hot: 180 * 86400 },
   artist_hydration: { cold: null, hot: 180 * 86400 },
   anime_mal_characters_hydration: { cold: null, hot: 180 * 86400 },
+  // Reparto de manga (MAL): el manga no "emite", así que el hot de anime no
+  // aplica; cold 180 d para que el reparto de los manga en curso crezca.
+  manga_mal_characters_hydration: { cold: 180 * 86400, hot: null },
   manga_mal_details_hydration: { cold: null, hot: null },
   manga_page_hydration: { cold: null, hot: null },
   person_mal_details_hydration: { cold: null, hot: null },
@@ -489,6 +515,12 @@ export const SOURCE_HOSTS: Record<
   },
   malCharacters: {
     host: 'api.myanimelist.net',
+    limits: { perSecond: 1, perMinute: 60 },
+  },
+  malMangaCharacters: {
+    // Web de MAL (la de anime declara la API pero también baja HTML): mismo
+    // techo de 1 req/s por IP que `malCharacters`.
+    host: 'myanimelist.net',
     limits: { perSecond: 1, perMinute: 60 },
   },
   malMangaPage: {

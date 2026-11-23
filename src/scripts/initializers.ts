@@ -20,6 +20,7 @@ import { initializeTvdbEpisodesTasks } from './initializeTvdbEpisodesTasks.js'
 import { initializeTmdbTasks } from './initializeTmdbTasks.js'
 import { initializeMalMangaTasks } from './initializeMalMangaTasks.js'
 import { initializeMalCharactersTasks } from './initializeMalCharactersTasks.js'
+import { initializeMalMangaCharactersTasks } from './initializeMalMangaCharactersTasks.js'
 import { initializeMalPersonTasks } from './initializeMalPersonTasks.js'
 import { initializeAnilistMediaTasks } from './initializeAnilistMediaTasks.js'
 import { initializeMusicMetaTasks } from './initializeMusicMetaTasks.js'
@@ -44,6 +45,7 @@ export const INITIALIZERS: Record<string, Initializer> = {
   tmdb: initializeTmdbTasks,
   malManga: initializeMalMangaTasks,
   malCharacters: initializeMalCharactersTasks,
+  malMangaCharacters: initializeMalMangaCharactersTasks,
   malPerson: initializeMalPersonTasks,
   anilistMedia: initializeAnilistMediaTasks,
   musicMeta: initializeMusicMetaTasks,

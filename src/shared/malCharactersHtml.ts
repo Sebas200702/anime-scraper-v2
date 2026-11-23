@@ -1,5 +1,10 @@
 /**
- * Parser de la página de personajes de MAL (`/anime/{id}/characters`).
+ * Parser de la página de personajes de MAL (`/anime/{id}/characters` y
+ * `/manga/{id}/characters`).
+ *
+ * La página del manga tiene el mismo marcado salvo el prefijo de las clases
+ * (`js-manga-character-table`, `js-manga-character-favorites`) y no tiene
+ * voces.
  *
  * La ficha principal del anime solo lista los **diez primeros** personajes;
  * esta página trae la lista **entera** con el nombre, el rol, los favoritos,
@@ -51,6 +56,9 @@ export interface ParsedCharacterRow {
   }[]
 }
 
+/** Medio de la página de personajes: decide el prefijo de las clases. */
+export type MalCharactersMedia = 'anime' | 'manga'
+
 const CAST_ROLES = ['Main', 'Supporting', 'Background'] as const
 
 /**
@@ -78,16 +86,21 @@ const fullImage = (src: string | undefined): string | undefined => {
 }
 
 /**
- * Extrae el reparto completo de la página de personajes de un anime.
+ * Extrae el reparto completo de la página de personajes de un anime o manga.
  *
- * @param html - HTML de `/anime/{id}/characters`
+ * @param html - HTML de `/{media}/{id}/characters`
+ * @param media - `anime` (por defecto) o `manga`
  * @returns Una fila por personaje, con su rol, favoritos, retrato y voces
  */
-export const parseMalCharactersPage = (html: string): ParsedCharacterRow[] => {
+export const parseMalCharactersPage = (
+  html: string,
+  media: MalCharactersMedia = 'anime'
+): ParsedCharacterRow[] => {
   const $ = cheerio.load(html)
   const characters: ParsedCharacterRow[] = []
+  const favouritesSelector = `div.js-${media}-character-favorites`
 
-  $('table.js-anime-character-table tr').each((_, row) => {
+  $(`table.js-${media}-character-table tr`).each((_, row) => {
     const $row = $(row)
     const $cells = $row.children('td')
     if ($cells.length < 2) return
@@ -111,7 +124,7 @@ export const parseMalCharactersPage = (html: string): ParsedCharacterRow[] => {
           const $el = $(el)
           return (
             $el.find('h3.h3_character_name').length === 0 &&
-            $el.find('div.js-anime-character-favorites').length === 0 &&
+            $el.find(favouritesSelector).length === 0 &&
             !/Favorites/.test($el.text())
           )
         })
@@ -122,7 +135,7 @@ export const parseMalCharactersPage = (html: string): ParsedCharacterRow[] => {
     const role = normalizeCastRole(roleText)
 
     const favouritesRaw = $info
-      .find('div.js-anime-character-favorites')
+      .find(favouritesSelector)
       .first()
       .text()
       .replace(/[^\d]/g, '')
@@ -177,3 +190,8 @@ export const parseMalCharactersPage = (html: string): ParsedCharacterRow[] => {
 
   return characters
 }
+
+/** MAL usa un GIF de interrogante para los personajes sin ficha: no es un retrato. */
+export const isRealMalImage = (
+  src: string | null | undefined
+): src is string => Boolean(src) && !/questionmark/i.test(src as string)

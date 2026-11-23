@@ -20,6 +20,11 @@ const hotSources = sql.join(
   sql`, `
 )
 
+const slowSources = sql.join(
+  INCREMENTAL_GROUPS.slow.map((source) => sql`${source}`),
+  sql`, `
+)
+
 export const STALENESS_VIEWS: StalenessView[] = [
   {
     title: 'A · estado inconsistente con las fechas',
@@ -81,6 +86,25 @@ export const STALENESS_VIEWS: StalenessView[] = [
       WHERE started_at > now() - interval '7 days'
       GROUP BY 1, 2
       ORDER BY last_started DESC
+    `,
+  },
+  {
+    // Las fuentes slow mezclan tipos (p. ej. reparto de anime y de manga):
+    // el estado de la cola va por tipo de tarea.
+    title: 'E · cola por tipo de tarea (fuentes slow)',
+    query: sql`
+      SELECT source, task_type,
+             count(*) FILTER (WHERE status = 'pending')::int AS pending,
+             count(*) FILTER (WHERE status = 'in_progress')::int AS in_progress,
+             count(*) FILTER (WHERE status = 'completed')::int AS completed,
+             count(*) FILTER (WHERE status = 'dead_letter')::int AS dead_letter,
+             count(*) FILTER (WHERE status = 'skipped')::int AS skipped,
+             count(*) FILTER (WHERE status = 'completed' AND refresh_after <= now())::int AS due,
+             max(last_scraped_at) AS last_success
+      FROM ingest.task
+      WHERE source IN (${slowSources})
+      GROUP BY source, task_type
+      ORDER BY source, task_type
     `,
   },
 ]

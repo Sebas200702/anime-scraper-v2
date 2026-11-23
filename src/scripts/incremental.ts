@@ -18,6 +18,14 @@ import { DERIVED_SOURCES, INITIALIZERS } from './initializers.js'
  *   bun run incremental --drain --group=slow --budget=300
  *   bun run incremental --discover
  *
+ * Relleno one-off de una sola fuente (p. ej. la carga inicial del reparto de
+ * manga, ~70.9k tareas a 1 req/s por IP ≈ 20 h con una IP):
+ *
+ *   bun src/scripts/incremental.ts --drain --sources=malMangaCharacters --budget=80000 --deadline=86400
+ *
+ * `--sources=` drena solo esas fuentes (con su lock propio); la cuota la sigue
+ * poniendo el `RateGate` por (host, IP).
+ *
  * `--discover` siembra el generador idempotente (solo lo que falta), drena las
  * páginas nuevas del listado y vuelve a sembrar los derivados para que los
  * anime recién descubiertos tengan sus tareas. `--drain` rearma lo vencido y

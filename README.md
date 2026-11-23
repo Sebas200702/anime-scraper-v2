@@ -228,6 +228,32 @@ El copy inicial de la cola entre dos Postgres es un `pg_dump --data-only -t
 ingest.task -t ingest.task_policy` + `psql` (incluye el `setval` de la
 secuencia): conserva los ~594k estados de tarea y evita re-ingestar.
 
+
+### Reparto de manga (MAL)
+
+`malMangaCharacters` (`manga_mal_characters_hydration`) trae el reparto de cada
+manga desde `/manga/{id}/_/characters` (ids reales de MAL; solo inserta, no toca
+los vínculos de AniList). Va en el grupo slow (150/6 h); refresco cada 180 d.
+Carga inicial one-off (~20 h a 1 req/s con una IP; con proxies y
+`SCRAPER_MODE=backfill`, la cuota se reparte por IP de salida):
+
+```bash
+bun run malMangaCharacters:seed-tasks
+bun run db:seed-policy
+bun src/scripts/incremental.ts --drain --sources=malMangaCharacters --budget=80000 --deadline=86400
+```
+
+Con un pool de proxies grande, `MAL_MANGA_CHARACTERS_MAX_WORKERS=90` y
+`--max-in-flight=90` (con `SCRAPER_MODE=backfill`) suben las tareas en vuelo; la
+cuota sigue siendo 1 req/s por IP. Medido 2026-11-23 con 100 proxies: ~1.500
+mangas/min, 70k en ~45 min.
+
+Durante la carga, pausá el cron `incremental:slow`: el límite de 1 req/s es por
+proceso, y otro proceso que consulte `myanimelist.net` desde la misma IP lo
+duplicaría. Si una persona ya existe como personaje solo de AniList en ese
+manga, la carga agrega también al personaje de MAL (no se busca por nombre):
+antes de promover, unificá esos duplicados en la base local.
+
 ## Despliegue (Dokploy)
 
 - `Dockerfile`: Bun 1.4.2, build (`tsc` + `tsc-alias`) y runtime de producción.

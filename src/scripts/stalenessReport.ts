@@ -3,9 +3,10 @@
  *
  *   bun run incremental:report
  *
- * Imprime cuatro vistas: (A) anime con estado inconsistente con sus fechas,
+ * Imprime cinco vistas: (A) anime con estado inconsistente con sus fechas,
  * (B) estado en cola de la ficha MAL y los episodios de esos anime, (C) salud
- * de la cola por fuente hot y (D) corridas recientes por modo/grupo. Corre en
+ * de la cola por fuente hot, (D) corridas recientes por modo/grupo y (E) cola
+ * por tipo de tarea de las fuentes slow (p. ej. reparto de manga). Corre en
  * una transacción `READ ONLY` que termina en ROLLBACK: no escribe nada.
  */
 import { PgDialect } from 'drizzle-orm/pg-core'
