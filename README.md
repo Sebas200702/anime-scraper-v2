@@ -257,6 +257,30 @@ Ojo: tras el deploy, los rankings semanales de `mal` (`all`, `bypopularity`,
 `favorite`, además de `airing`/`upcoming`) también insertan directamente en producción los ids que el
 catálogo no tenga (mismo camino de fila mínima), sin pasar por la promoción.
 
+### Descubrimiento de manga nuevos (sin Jikan)
+
+`malDiscovery` también descubre manga con una quinta tarea,
+`mal_discovery_manga_ranking_bypopularity`
+(`manga_mal_discovery_ranking_hydration`):
+`manga/ranking?ranking_type=bypopularity` con `limit=500`, `nsfw=true` y solo
+los campos de la fila mínima (`id,title,media_type,status,num_chapters,num_volumes,start_date`).
+El ranking de manga no tiene `upcoming`/`publishing`, así que se recorre
+entero; `bypopularity` ordena por miembros (no por nota), por eso un título
+nuevo sin score entra igual. Son ~150 requests seguidas (estimado: el bucle de
+páginas no tiene throttle propio; si MAL responde lento puede acercarse al
+deadline del discover y la tarea se reintenta entera), así que se refresca
+**semanal** (7 d − 4 h, para que el discover diario lo encuentre
+vencido al séptimo día).
+
+Cada id desconocido con título entra como fila mínima de `manga` (`mal_id`,
+`title`, `type` = `media_type` o `manga`, `status`, `chapters`, `volumes`,
+`year`) con `ON CONFLICT (mal_id) DO NOTHING`: los manga existentes no se
+tocan (su ficha la mantiene `malManga`). En la misma corrida los derivados
+`malManga`, `malMangaCharacters` y `malMangaPage` siembran sus tareas para los
+nuevos. Primera carga en Modo A: discover local y después
+`bun run promote --only=manga --insert-only` (el resto de tablas de manga lo
+llenan los derivados y se promueven como siempre).
+
 ### Seed de una DB ya ingerida
 
 ```bash
