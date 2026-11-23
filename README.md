@@ -313,6 +313,36 @@ nuevos. Primera carga en Modo A: discover local y después
 (la ficha del ranking ya escribe esas tablas; el resto lo llenan los derivados y
 se promueven como siempre).
 
+### Enlace AniList de manga
+
+Los manga que entran por MAL no traen `manga_external_ids.anilist_id`, y sin él
+`anilistMedia` (reparto y staff de AniList) nunca los alcanza. La fuente
+`anilist` tiene una tarea única, `anilist_manga_link`
+(`manga_anilist_link_hydration`), que recorre por `mal_id` los manga sin id de
+AniList (NULL o sin fila externa) y pide 50 por request:
+`Page(perPage: 50) { media(idMal_in: […], type: MANGA) { id idMal countryOfOrigin bannerImage } }`.
+Comparte el gate de `graphql.anilist.co`: cada página extra del tramo paga su
+cupo en la misma clave (host + IP) que `anilist` y `anilistMedia`.
+
+Solo rellena: `anilist_id` donde es NULL (si otro manga ya usa ese id, se salta
+ese manga y el lote sigue), `country_of_origin` si falta y el banner de AniList
+en `manga_media` (`source = anilist`, `priority = 10`) si el manga no tiene
+ningún banner. No toca estado, géneros, títulos ni nada que mande MAL.
+
+Es reanudable como el barrido de manga: el cursor (`afterMalId`) queda en el
+payload tras cada página escrita; un id que AniList no conoce se pasa y no se
+vuelve a preguntar hasta la próxima pasada. Un error GraphQL (aunque sea
+parcial) o HTTP falla la tarea sin mover el cursor. Cada intento procesa 40
+páginas o 180 s (`ANILIST_MANGA_LINK_LIMITS` en
+`src/config/anilistMangaLink.ts`) y, si no terminó, vuelve a `pending` sin
+gastar intento. Al no quedar pendientes el cursor vuelve a 0 y la tarea se
+completa con refresco de 20 h. Se siembra con el inicializador de `anilist`
+(discover) y corre en el grupo hot. Los ids nuevos llegan a `anilistMedia` en
+el siguiente `--discover` (su inicializador corre en cada discover). Primera
+carga: ~16k manga = ~320 requests, unos 13 min de cuota con una IP.
+`bun run db:seed-policy` añade su fila en `task_policy` (sin ella rige la del
+código).
+
 ### Seed de una DB ya ingerida
 
 ```bash

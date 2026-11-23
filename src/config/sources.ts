@@ -96,6 +96,11 @@ export const SOURCES: SourceConfig[] = [
       anime_banner_hydration: { entity: 'animeBanners', needsPayload: true },
       // Backfill en bulk: 1 tarea por año, la fuente pagina (50/request).
       anilist_year_hydration: { entity: 'anilistCatalog', needsPayload: true },
+      // Enlace de manga (S6, L14): tarea única, 50 `idMal` por request.
+      manga_anilist_link_hydration: {
+        entity: 'anilistMangaLink',
+        needsPayload: true,
+      },
     },
   },
   {
@@ -442,6 +447,11 @@ export const REFRESH_POLICY: Record<string, RefreshPolicy> = {
   // Bulks: una tarea por ranking/año, baratas de repetir.
   anime_mal_ranking_hydration: { cold: 7 * 86400, hot: 7 * 86400 },
   anilist_year_hydration: { cold: 30 * 86400, hot: 30 * 86400 },
+  // Enlace AniList de manga (S6, L14): corre en el grupo hot (`anilist`) y
+  // retoma su cursor en cada tick. 20 h y no 24 h por el mismo margen que el
+  // descubrimiento: un tick diario siempre lo encuentra vencido. Barato en
+  // régimen (solo los manga sin id: ~nuevos de la semana).
+  manga_anilist_link_hydration: { cold: 20 * 3600, hot: 20 * 3600 },
   // Descubrimiento (malDiscovery): también corre en el grupo hot, así que las
   // tareas de anime vencen cada 3 h; el discover diario las sigue drenando.
   // Cada 3 h desde el grupo hot: ~15 requests traen estado/episodios/fechas de

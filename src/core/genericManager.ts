@@ -43,8 +43,10 @@ export interface RunSummary {
 /**
  * Una sola puerta de rate para toda la corrida: si se recreara en cada lote, las
  * ventanas se resetearían y la cuota por (host, IP) no se respetaría.
+ * Exportada para los servicios que paginan dentro de una tarea (enlace AniList
+ * de manga): cada página extra paga su cupo en la misma clave.
  */
-const rateGate = new RateGate()
+export const rateGate = new RateGate()
 
 /**
  * Ingesta de una fuente: el proceso padre fetchea y mapea (una tarea por IP,

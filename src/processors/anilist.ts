@@ -200,3 +200,6 @@ export const processAnilistCatalog = (
   }
   return { results }
 }
+
+/** Enlace AniList de manga (S6, L14): el servicio ya escribió cada página. */
+export { processAnilistMangaLink } from './anilistMangaLink.js'
