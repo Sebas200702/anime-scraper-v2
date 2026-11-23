@@ -40,6 +40,8 @@ const MANGA_FIELDS = [
   'theme',
   'popularity',
   'members',
+  'num_list_users',
+  'num_scoring_users',
   'mean',
   'scoring_type',
 ].join(',')

@@ -189,4 +189,29 @@ describe('L12 · el ranking de manga trae la ficha que MAL acepta en listas', ()
     )
     expect([manga.members, manga.scoredBy]).toEqual([42, 7])
   })
+
+  test('members/scored_by: el fallback solo aplica si members falta', () => {
+    const p = (node: object) =>
+      processMalManga({ mangaId: 1, node: { id: 1, ...node } }, task).manga
+    expect([
+      p({ members: 0, num_list_users: 9 }).members,
+      p({ members: null, num_list_users: 9 } as never).members,
+    ]).toEqual([0, 9])
+    expect([p({}).members, p({}).scoredBy]).toEqual([null, null])
+  })
+
+  test('tolera todos los campos de lista en null', () => {
+    const node = {
+      id: 2,
+      title: 'N',
+      main_picture: null,
+      alternative_titles: null,
+      genres: null,
+      start_date: null,
+      num_list_users: null,
+    } as never
+    const { details } = processMalDiscoveryMangaRanking({ nodes: [node] }, task)
+    expect(details[0]?.media).toEqual([])
+    expect(details[0]?.manga.type).toBe('manga')
+  })
 })

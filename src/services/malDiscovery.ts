@@ -17,7 +17,7 @@ import { runMangaSweep, sweepCursor } from './malDiscoveryMangaSweep.js'
  * Descubrimiento de anime nuevos sin Jikan: listas de temporada y rankings
  * `upcoming`/`airing` de la MAL API v2 (500 por request, mismos campos que el
  * ranking bulk). `nsfw=true` como el detalle por-anime. Manga (S6): ranking de
- * manga con los campos mínimos de la fila; la ficha la trae `malManga`.
+ * manga con la ficha que MAL acepta en listas (L12); `malManga` completa el resto.
  */
 const LIMIT = 500
 

@@ -309,8 +309,9 @@ no tiene `members`: `members`/`scored_by` salen de
 En la misma corrida los derivados
 `malManga`, `malMangaCharacters` y `malMangaPage` siembran sus tareas para los
 nuevos. Primera carga en Modo A: discover local y después
-`bun run promote --only=manga --insert-only` (el resto de tablas de manga lo
-llenan los derivados y se promueven como siempre).
+`bun run promote --only=manga,genre,manga_genre,manga_media,manga_title_synonym,manga_external_ids --insert-only`
+(la ficha del ranking ya escribe esas tablas; el resto lo llenan los derivados y
+se promueven como siempre).
 
 ### Seed de una DB ya ingerida
 
