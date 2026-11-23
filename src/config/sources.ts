@@ -121,6 +121,26 @@ export const SOURCES: SourceConfig[] = [
     },
   },
   {
+    name: 'malDiscovery',
+    // Descubrimiento sin Jikan: temporada actual/siguiente y rankings
+    // `upcoming`/`airing` de la MAL API v2 (500 por request). 4 tareas al día;
+    // los ids desconocidos entran como filas mínimas de `anime` (S1).
+    maxWorkers: 4,
+    pageBatch: 50,
+    taskBatchSize: 50,
+    rateLimit: { perSecond: 1, perMinute: 60 },
+    tasks: {
+      anime_mal_discovery_season_hydration: {
+        entity: 'malDiscoverySeason',
+        needsPayload: true,
+      },
+      anime_mal_discovery_ranking_hydration: {
+        entity: 'malDiscoveryRanking',
+        needsPayload: true,
+      },
+    },
+  },
+  {
     name: 'malManga',
     // Ficha completa de las obras impresas (manga, novela, one-shot) en la API
     // v2 de MAL: sinopsis, capítulos, serialización, editorial y relaciones.
@@ -416,6 +436,9 @@ export const REFRESH_POLICY: Record<string, RefreshPolicy> = {
   // Bulks: una tarea por ranking/año, baratas de repetir.
   anime_mal_ranking_hydration: { cold: 7 * 86400, hot: 7 * 86400 },
   anilist_year_hydration: { cold: 30 * 86400, hot: 30 * 86400 },
+  // Descubrimiento (malDiscovery): diario aunque no haya anime hot.
+  anime_mal_discovery_season_hydration: { cold: 86400, hot: 86400 },
+  anime_mal_discovery_ranking_hydration: { cold: 86400, hot: 86400 },
 
   // Reparto profundo, música, manga y personas: no sensibles a emisión.
   media_anilist_details_hydration: { cold: 365 * 86400, hot: null },
@@ -478,6 +501,11 @@ export const SOURCE_HOSTS: Record<
   mal: {
     // Una sola IP en Modo B: 1/s (60/min) es el techo prudente de la API v2.
     // En backfill con proxies la cuota real se multiplica por IP.
+    host: 'api.myanimelist.net',
+    limits: { perSecond: 1, perMinute: 60 },
+  },
+  malDiscovery: {
+    // Misma API y cuota que `mal` (y el mismo ruteo de IP).
     host: 'api.myanimelist.net',
     limits: { perSecond: 1, perMinute: 60 },
   },

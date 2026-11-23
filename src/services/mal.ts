@@ -114,7 +114,7 @@ export const fetchAnimeMalDetails = async (
  * broadcast…). Es lo que hace viable el backfill completo: ~60 requests en vez
  * de 30.000 y sin acercarse al límite por IP.
  */
-const RANKING_FIELDS = [
+export const RANKING_FIELDS = [
   'id',
   'title',
   'main_picture',

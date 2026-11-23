@@ -116,6 +116,7 @@ export const processAnimeMalDetails = (
   const animeStats: NonNullable<AnimeMalDetailsProcessorResult['animeStats']> =
     {
       malId,
+      title: raw.title ?? undefined,
       titleEnglish: raw.alternative_titles?.en ?? undefined,
       titleJapanese: raw.alternative_titles?.ja ?? undefined,
       type: raw.media_type ? TYPE_MAP[raw.media_type] : undefined,

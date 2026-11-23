@@ -1,5 +1,6 @@
 import { sql, type SQL } from 'drizzle-orm'
 import { INCREMENTAL_GROUPS } from '../../config/incremental.js'
+import { MAL_DISCOVERY_SOURCE } from '../../config/malDiscovery.js'
 import { INCONSISTENT_ANIME_WHERE, taskAnimeId } from './animeSets.js'
 
 /**
@@ -105,6 +106,19 @@ export const STALENESS_VIEWS: StalenessView[] = [
       WHERE source IN (${slowSources})
       GROUP BY source, task_type
       ORDER BY source, task_type
+    `,
+  },
+  {
+    // S4: sin MAL_CLIENT_ID las tareas de descubrimiento quedan `skipped`
+    // (missing:MAL_CLIENT_ID); aquí se ve en vez de pasar en silencio.
+    title: 'F · descubrimiento de anime nuevos (malDiscovery)',
+    query: sql`
+      SELECT entity_id, task_type, status, skip_reason,
+             left(last_error, 120) AS last_error, attempts,
+             last_scraped_at, refresh_after
+      FROM ingest.task
+      WHERE source = ${MAL_DISCOVERY_SOURCE}
+      ORDER BY entity_id
     `,
   },
 ]

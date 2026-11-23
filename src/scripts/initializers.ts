@@ -27,6 +27,7 @@ import { initializeAnilistMediaTasks } from './initializeAnilistMediaTasks.js'
 import { initializeMusicMetaTasks } from './initializeMusicMetaTasks.js'
 import { initializeMalMangaPageTasks } from './initializeMalMangaPageTasks.js'
 import { initializeMalProducerTasks } from './initializeMalProducerTasks.js'
+import { initializeMalDiscoveryTasks } from './initializeMalDiscoveryTasks.js'
 
 export type Initializer = () => Promise<void>
 
@@ -52,14 +53,18 @@ export const INITIALIZERS: Record<string, Initializer> = {
   musicMeta: initializeMusicMetaTasks,
   malMangaPage: initializeMalMangaPageTasks,
   malProducer: initializeMalProducerTasks,
+  malDiscovery: initializeMalDiscoveryTasks,
 }
 
-/** Fuentes que dependen de que `anime` ya exista (se siembran después de jikan). */
-export const DERIVED_SOURCES = Object.keys(INITIALIZERS).filter(
-  (source) => source !== 'jikan' && !isRetiredSource(source)
+/**
+ * Fuentes que descubren anime nuevos por listado. Jikan está retirado: el
+ * descubrimiento lo hace `malDiscovery` (temporadas + rankings de MAL API v2).
+ */
+export const LISTING_SOURCES = ['jikan', 'malDiscovery'].filter(
+  (source) => !isRetiredSource(source)
 )
 
-/** Fuentes que descubren entidades nuevas por listado (hoy ninguna activa). */
-export const LISTING_SOURCES = ['jikan'].filter(
-  (source) => !isRetiredSource(source)
+/** Fuentes que dependen de que `anime` ya exista (se siembran después del listado). */
+export const DERIVED_SOURCES = Object.keys(INITIALIZERS).filter(
+  (source) => !LISTING_SOURCES.includes(source) && !isRetiredSource(source)
 )

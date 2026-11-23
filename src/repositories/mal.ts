@@ -13,6 +13,11 @@ import { batchUpsert } from '../shared/batchUpsert.js'
 import { mediaRepository } from './media.js'
 import { chunk, MAX_PARAMS_PER_STATEMENT } from '../utils/chunk.js'
 import { unique } from '../utils/deduplicate.js'
+import {
+  insertUnknownAnimeSql,
+  minimalAnimeRows,
+  type MinimalAnimeRow,
+} from './mal/discoverySql.js'
 import type {
   AnimeMalDetailsProcessorResult,
   ScrapingTask,
@@ -132,7 +137,10 @@ export const malRepository = {
       batchUpsert(animeDemographic, uDemo, 2, 'anime-demographic'),
       batchUpsert(animeTheme, uThemes, 2, 'anime-theme'),
       // La junction tiene `role` en la PK: el upsert no la colapsa.
-      db.insert(animeProducer).values(uProducers).onConflictDoNothing(),
+      // `values([])` lanza en drizzle: un lote sin studios no debe romper.
+      uProducers.length > 0
+        ? db.insert(animeProducer).values(uProducers).onConflictDoNothing()
+        : undefined,
     ])
 
     return (
@@ -152,12 +160,16 @@ export const malRepository = {
    * El ranking de MAL incluye anime que **no** están en nuestro catálogo (la
    * lista se mueve más rápido que el seed): sus junctions romperían la FK de
    * `anime_*` y tumbarían el lote entero (fue lo que dejó a One Piece sin
-   * géneros). Se filtran contra `anime` antes de escribir.
+   * géneros). Los que traen título se insertan antes como fila mínima (S1);
+   * el resto se filtra contra `anime` antes de escribir.
    */
   async saveMalRanking(
     results: { results?: AnimeMalDetailsProcessorResult[] }[]
   ): Promise<number> {
     const flat = results.flatMap((r) => r.results ?? [])
+    // S1: los ids que MAL lista y el catálogo no tiene entran como fila mínima
+    // (sin pisar nada existente) y luego reciben el parche como el resto.
+    const inserted = await insertUnknownAnime(minimalAnimeRows(flat))
     const ids = flat.map((r) => r.animeStats?.malId).filter((id) => !!id)
     const known = new Set<number>()
     for (const batch of chunk(
@@ -173,8 +185,16 @@ export const malRepository = {
     const filtered = flat.filter(
       (r) => !r.animeStats?.malId || known.has(r.animeStats.malId)
     )
-    return await this.saveAnimeMalDetails(filtered)
+    return inserted + (await this.saveAnimeMalDetails(filtered))
   },
 }
 
-// (sin `sql` crudo: todo va por el query builder de drizzle)
+/** 7 parámetros por fila: lotes muy por debajo del límite de Postgres. */
+const insertUnknownAnime = async (rows: MinimalAnimeRow[]): Promise<number> => {
+  let inserted = 0
+  for (const batch of chunk(rows, 1_000)) {
+    const result = await db.execute(insertUnknownAnimeSql(batch))
+    inserted += result.rowCount ?? 0
+  }
+  return inserted
+}
