@@ -41,6 +41,16 @@ export const INCREMENTAL_GROUPS: Record<'hot' | 'slow', string[]> = {
   ],
 }
 
+/**
+ * Fuentes retiradas: su API está caída (api.jikan.moe). El discover no las
+ * lista, no siembra sus tareas y no revive sus dead_letter; sus tareas
+ * completadas quedan como historial.
+ */
+export const RETIRED_SOURCES: readonly string[] = ['jikan', 'jikanRelations']
+
+export const isRetiredSource = (source: string): boolean =>
+  RETIRED_SOURCES.includes(source)
+
 /** Fuentes que corren en una corrida `--drain --group=all`. */
 export const ALL_DRAIN_SOURCES = [
   ...INCREMENTAL_GROUPS.hot,

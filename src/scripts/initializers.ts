@@ -1,3 +1,4 @@
+import { isRetiredSource } from '../config/incremental.js'
 /**
  * Registro único de generadores (initializers) por fuente.
  *
@@ -55,5 +56,10 @@ export const INITIALIZERS: Record<string, Initializer> = {
 
 /** Fuentes que dependen de que `anime` ya exista (se siembran después de jikan). */
 export const DERIVED_SOURCES = Object.keys(INITIALIZERS).filter(
-  (source) => source !== 'jikan'
+  (source) => source !== 'jikan' && !isRetiredSource(source)
+)
+
+/** Fuentes que descubren entidades nuevas por listado (hoy ninguna activa). */
+export const LISTING_SOURCES = ['jikan'].filter(
+  (source) => !isRetiredSource(source)
 )
