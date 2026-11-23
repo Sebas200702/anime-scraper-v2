@@ -269,6 +269,14 @@ la promoción se puede acotar:
 bun run promote --only=manga,manga_staff,music_stream   # diff-upsert de un subconjunto
 ```
 
+Si el origen es más viejo que el destino (p. ej. una carga en Modo A sobre un
+clon de hace días), `--insert-only` inserta solo las filas que faltan y nunca
+actualiza las existentes:
+
+```bash
+bun run promote --only=anime,anime_character,character --insert-only --dry-run
+```
+
 El copy inicial de la cola entre dos Postgres es un `pg_dump --data-only -t
 ingest.task -t ingest.task_policy` + `psql` (incluye el `setval` de la
 secuencia): conserva los ~594k estados de tarea y evita re-ingestar.

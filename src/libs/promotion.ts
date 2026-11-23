@@ -585,6 +585,16 @@ export const resyncSequences = async (
   return resynced
 }
 
+/**
+ * Plan "solo insertar": cada tabla pasa a `insert-missing`, así una DB de
+ * origen más vieja que el destino nunca pisa filas que el destino actualizó
+ * (p. ej. promover solo lo que descubrió una carga en Modo A).
+ */
+export const toInsertOnlyPlan = (
+  plan: readonly PromotionPlan[]
+): PromotionPlan[] =>
+  plan.map((step) => ({ ...step, strategy: 'insert-missing' as const }))
+
 export const promote = async ({
   source,
   target,
