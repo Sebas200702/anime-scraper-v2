@@ -243,6 +243,12 @@ bun run db:seed-policy
 bun src/scripts/incremental.ts --drain --sources=malMangaCharacters --budget=80000 --deadline=86400
 ```
 
+Durante la carga, pausá el cron `incremental:slow`: el límite de 1 req/s es por
+proceso, y otro proceso que consulte `myanimelist.net` desde la misma IP lo
+duplicaría. Si una persona ya existe como personaje solo de AniList en ese
+manga, la carga agrega también al personaje de MAL (no se busca por nombre):
+antes de promover, unificá esos duplicados en la base local.
+
 ## Despliegue (Dokploy)
 
 - `Dockerfile`: Bun 1.4.2, build (`tsc` + `tsc-alias`) y runtime de producción.

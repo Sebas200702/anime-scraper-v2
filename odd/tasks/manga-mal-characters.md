@@ -89,3 +89,4 @@ proxies the gate is per IP and it goes faster, still capped per IP.
   Integration on a throwaway DB (`scraper_manga_scratch`, migrations + pg_trgm +
   `db:ingest-schema`, dropped afterwards): `test:integration` 44 pass, 0 fail.
   `bun test`, `bunx tsc -p tsconfig.test.json`, `bun run build` pass.
+- **L5** — Independent verify: PASS S1–S6 (anime writer SQL byte-identical to main; no re-arm loop; 44 integration tests). Advisories recorded: pause `incremental:slow` during the one-off drain (per-process rate gate shares the IP); MAL rows can duplicate an AniList-only synthetic character of the same manga (by design, no name matching) — unify locally before promoting; saver count includes links skipped for missing manga.
