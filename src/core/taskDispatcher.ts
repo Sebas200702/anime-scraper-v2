@@ -9,6 +9,12 @@
 import type { ProxyState } from 'types/index.js'
 import { FetchError } from '../libs/httpError.js'
 import { SkippedTaskError } from '../libs/skippedTaskError.js'
+import {
+  type BatchOutcome,
+  type BatchResults,
+  resolveBatchEntry,
+  takeGroup,
+} from './batchDispatch.js'
 import { type RateLimits, RateGate, proxyKey } from './rateGate.js'
 
 export interface DispatcherTask {
@@ -19,6 +25,14 @@ export interface DispatcherTask {
 export interface DispatchHooks<T> {
   /** Ejecuta la tarea (fetch + mapeo) usando la IP indicada. */
   run: (task: DispatcherTask, proxyUrl: string | undefined) => Promise<T>
+  /**
+   * Fetch de un grupo (T11): un request para N tareas del mismo tipo, con el
+   * resultado por id de tarea. Solo se usa con `fetchBatchSize`.
+   */
+  runBatch?: (
+    tasks: DispatcherTask[],
+    proxyUrl: string | undefined
+  ) => Promise<BatchResults<T>>
   onDone: (
     task: DispatcherTask,
     data: T,
@@ -82,6 +96,14 @@ export interface TaskDispatcherOptions {
    * no debe quemar el presupuesto ni los intentos de decenas de tareas.
    */
   maxConsecutiveFailures?: number
+  /**
+   * Tareas del mismo tipo por request (T11). Sin valor (o sin `runBatch`), una
+   * tarea por request como siempre. Con valor, el gate se paga una vez por
+   * grupo y cada tarea sigue con su propio onDone/onError.
+   */
+  fetchBatchSize?: number
+  /** Clave de grupo (por defecto `taskType`): solo se agrupan iguales. */
+  batchKeyFor?: (task: DispatcherTask) => string
   onProgress?: (summary: DispatchSummary) => void
 }
 
@@ -107,6 +129,7 @@ export class TaskDispatcher {
       aborted: false,
     }
     const usedProxies = new Set<string>()
+    const batchSize = hooks.runBatch ? (this.options.fetchBatchSize ?? 0) : 0
 
     const runners = Array.from(
       { length: Math.max(1, Math.min(this.options.maxInFlight, queue.length)) },
@@ -115,6 +138,12 @@ export class TaskDispatcher {
           if (this.aborted) return
           if (this.options.deadline && Date.now() >= this.options.deadline) {
             return
+          }
+          if (batchSize > 0) {
+            const group = takeGroup(queue, batchSize, this.options.batchKeyFor)
+            if (group.length === 0) return
+            await this.dispatchGroup(group, hooks, summary, usedProxies)
+            continue
           }
           const task = queue.shift()
           if (!task) return
@@ -130,12 +159,8 @@ export class TaskDispatcher {
     return summary
   }
 
-  private async dispatchOne<T>(
-    task: DispatcherTask,
-    hooks: DispatchHooks<T>,
-    summary: DispatchSummary,
-    usedProxies: Set<string>
-  ): Promise<void> {
+  /** IP de salida, cuota y clave del gate de una tarea. */
+  private route(task: DispatcherTask, usedProxies: Set<string>) {
     const proxy = this.options.acquireProxy()
     const proxyUrl = proxy?.url
     if (proxyUrl) usedProxies.add(proxyUrl)
@@ -144,6 +169,27 @@ export class TaskDispatcher {
     const key = this.options.gateKeyFor
       ? this.options.gateKeyFor(host, proxyUrl)
       : proxyKey(host, proxyUrl)
+    return { proxyUrl, key, limits }
+  }
+
+  /** Conexión del presupuesto global solo durante el fetch del grupo. */
+  private async fetching<R>(fetch: () => Promise<R>): Promise<R> {
+    const budget = this.options.budget
+    if (budget) await budget.acquire()
+    try {
+      return await fetch()
+    } finally {
+      budget?.release()
+    }
+  }
+
+  private async dispatchOne<T>(
+    task: DispatcherTask,
+    hooks: DispatchHooks<T>,
+    summary: DispatchSummary,
+    usedProxies: Set<string>
+  ): Promise<void> {
+    const { proxyUrl, key, limits } = this.route(task, usedProxies)
 
     // Cuota por (host, IP): con una IP por tarea, cada una va a su cuota.
     await this.options.gate.acquire(key, limits)
@@ -164,43 +210,95 @@ export class TaskDispatcher {
       summary.processed++
       this.consecutiveFailures = 0
     } catch (error) {
-      const fetchError = error instanceof FetchError ? error : undefined
-
-      // Solo se penaliza al proxy si el fallo es atribuible a la IP (H-07):
-      // un 404, un 429 o credenciales inválidas son de la fuente.
-      if (fetchError?.proxyFault) {
-        this.options.reportProxy?.(proxyUrl, fetchError)
-      }
-
-      // `Retry-After`: se pausa esa (host, IP) concreta, no todas.
-      if (fetchError?.kind === 'rate_limit' && fetchError.retryAfterMs) {
-        this.options.gate.pause(key, fetchError.retryAfterMs)
-      }
-
-      const kind =
-        error instanceof SkippedTaskError
-          ? 'skipped'
-          : (fetchError?.kind ?? 'unknown')
+      const kind = this.requestFailed(error, proxyUrl, key)
       summary.byKind[kind] = (summary.byKind[kind] ?? 0) + 1
       summary.failed++
-
-      // `not_found` y `skipped` son datos, no una caída: no cortan la fuente.
-      if (kind !== 'not_found' && kind !== 'skipped') {
-        this.consecutiveFailures++
-        const limit = this.options.maxConsecutiveFailures
-        if (limit && this.consecutiveFailures >= limit) {
-          this.aborted = true
-          console.warn(
-            `⚡ Circuit breaker: ${this.consecutiveFailures} fallos transitorios seguidos; se corta la fuente en esta corrida`
-          )
-        }
-      } else {
-        this.consecutiveFailures = 0
-      }
-
       await hooks.onError(task, error, proxyUrl)
     }
 
     this.options.onProgress?.(summary)
   }
+
+  /**
+   * Un request para todo el grupo (T11): gate, proxy y circuit breaker cuentan
+   * **el request**; el resultado (done/error) sigue siendo por tarea.
+   */
+  private async dispatchGroup<T>(
+    group: DispatcherTask[],
+    hooks: DispatchHooks<T>,
+    summary: DispatchSummary,
+    usedProxies: Set<string>
+  ): Promise<void> {
+    const { proxyUrl, key, limits } = this.route(group[0]!, usedProxies)
+    // Un cupo del gate para todo el grupo: es un solo request.
+    await this.options.gate.acquire(key, limits)
+    const outcome: BatchOutcome<T> = {}
+    try {
+      outcome.results = await this.fetching(() =>
+        hooks.runBatch!(group, proxyUrl)
+      )
+      this.options.reportProxy?.(proxyUrl)
+      this.consecutiveFailures = 0
+    } catch (error) {
+      outcome.failure = { error }
+      this.requestFailed(error, proxyUrl, key)
+    }
+
+    for (const task of group) {
+      try {
+        const data = resolveBatchEntry(task, outcome)
+        await hooks.onDone(task, data, proxyUrl)
+        summary.processed++
+      } catch (error) {
+        const kind = kindOf(error)
+        summary.byKind[kind] = (summary.byKind[kind] ?? 0) + 1
+        summary.failed++
+        await hooks.onError(task, error, proxyUrl)
+      }
+      this.options.onProgress?.(summary)
+    }
+  }
+
+  /** Efectos de un request fallido sobre el proxy, el gate y el breaker. */
+  private requestFailed(
+    error: unknown,
+    proxyUrl: string | undefined,
+    key: string
+  ): string {
+    const fetchError = error instanceof FetchError ? error : undefined
+
+    // Solo se penaliza al proxy si el fallo es atribuible a la IP (H-07):
+    // un 404, un 429 o credenciales inválidas son de la fuente.
+    if (fetchError?.proxyFault) {
+      this.options.reportProxy?.(proxyUrl, fetchError)
+    }
+
+    // `Retry-After`: se pausa esa (host, IP) concreta, no todas.
+    if (fetchError?.kind === 'rate_limit' && fetchError.retryAfterMs) {
+      this.options.gate.pause(key, fetchError.retryAfterMs)
+    }
+
+    const kind = kindOf(error)
+    // `not_found` y `skipped` son datos, no una caída: no cortan la fuente.
+    if (kind !== 'not_found' && kind !== 'skipped') {
+      this.consecutiveFailures++
+      const limit = this.options.maxConsecutiveFailures
+      if (limit && this.consecutiveFailures >= limit) {
+        this.aborted = true
+        console.warn(
+          `⚡ Circuit breaker: ${this.consecutiveFailures} fallos transitorios seguidos; se corta la fuente en esta corrida`
+        )
+      }
+    } else {
+      this.consecutiveFailures = 0
+    }
+    return kind
+  }
 }
+
+const kindOf = (error: unknown): string =>
+  error instanceof SkippedTaskError
+    ? 'skipped'
+    : error instanceof FetchError
+      ? error.kind
+      : 'unknown'

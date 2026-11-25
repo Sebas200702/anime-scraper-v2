@@ -359,6 +359,52 @@ carga: ~16k manga = ~320 requests, unos 13 min de cuota con una IP.
 `bun run db:seed-policy` añade su fila en `task_policy` (sin ella rige la del
 código).
 
+### Pase profundo de AniList por lotes (`anilistMedia`)
+
+`anilistMedia` hidrata **25 medios por request** (`fetchBatchSize: 25` en
+`src/config/sources.ts`) con
+`Page(perPage: N) { media(id_in: $ids, type: $type) { … } }`, la misma selección
+que el camino de un medio y la página 1 de reparto y staff. El dispatcher agrupa
+hasta 25 tareas reclamadas del mismo `taskType` **y el mismo tipo de medio**
+(ANIME o MANGA), paga **un** cupo del gate por grupo y luego cada tarea sigue su
+camino de siempre (lease, reintentos y `dead_letter`, `skipped`, refresco por
+política, processor y guardado). Cada medio vuelve a su tarea por su id de
+AniList.
+
+Medido contra AniList (2026-11-23), por qué `Page` y no alias
+(`m0: Media(id:) …`):
+
+- 10 alias se rechazan: HTTP 400 "Max query complexity should be 500 but got
+  590". `Page` con N = 8, 16 y 25 pasa sin error de complejidad.
+- Cada alias cuenta contra el límite de 30 req/min (`x-ratelimit-remaining`
+  baja 8 con 8 alias): no ahorran cuota. Un `Page` cuenta **1**.
+- Un id inexistente en alias da HTTP 404 con todos los alias en `null`; en
+  `Page` ese id solo falta de `media` y el resto llega.
+- Dentro de `Page` el reparto y el staff anidados vuelven **topados a 25** por
+  medio (no 50).
+
+Reglas:
+
+- Id ausente de `media` → `skipped` (`anilist:not_found`), solo esa tarea (en
+  el camino de un medio, un id borrado daba 404 y dead_letter; ahora se re-arma
+  como cualquier `skipped`).
+- Error GraphQL con ruta `Page.media.<i>`: solo ese medio. Error sin datos o sin
+  ruta, o HTTP 5xx/429: falla el grupo y cada tarea pasa por su `onError` (un
+  429 cuenta **un** fallo para el circuit breaker: es un request).
+- HTTP 404/400 del `Page` entero no dice qué medio lo causó: cada tarea vuelve
+  al camino de un medio (con su cupo en el gate) en vez de ir a dead_letter.
+- Medio con 25 o más personajes o staff (o `hasNextPage`): se re-pide entero
+  por el camino de un medio (50 por página desde la 1, más la página vacía que
+  corta), cada request por el gate. Así sus filas son exactamente las de ese
+  camino, sin saltos ni duplicados.
+
+Rendimiento esperado: el gate de `anilistMedia` es 22 req/min por IP, así que
+~22 × 25 ≈ **550 medios/min por IP** (antes ~22), menos los re-pedidos de los
+medios con reparto o staff de 25 o más (este techo es un cálculo, no una
+medición en producción). `--budget` sigue contando **tareas**
+(medios procesados), no requests: un lote de 25 cuenta 25. Las fuentes sin
+`fetchBatchSize` no cambian (una tarea por request).
+
 ### Seed de una DB ya ingerida
 
 ```bash
